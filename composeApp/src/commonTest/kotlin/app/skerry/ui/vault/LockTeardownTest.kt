@@ -28,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import kotlin.test.Test
@@ -171,5 +172,25 @@ class LockTeardownTest {
         advanceUntilIdle()
         assertEquals(listOf("\r"), channel.written, "the saved password survived the vault lock")
         scope.cancel()
+    }
+
+    @Test
+    fun `the lock closes an idle jump host and keeps one a session is using`() = runTest {
+        val idle = FakeSshConnection(FakeShellChannel())
+        val leased = FakeSshConnection(FakeShellChannel())
+        val connections = ArrayDeque(listOf(idle, leased))
+        val transport = object : app.skerry.shared.ssh.SshTransport {
+            override suspend fun connect(target: SshTarget, auth: SshAuth) = connections.removeFirst()
+        }
+        val pool = app.skerry.shared.ssh.SharedConnectionPool(transport, backgroundScope)
+        pool.acquire(SshTarget(host = "jump1", username = "me"), SshAuth.Interactive).disconnect()
+        pool.acquire(SshTarget(host = "jump2", username = "me"), SshAuth.Interactive)
+
+        tearDownForLock(tunnels = null, sessions = null, sync = null, snippets = null, jumpHosts = pool)
+        // Not advanceUntilIdle: that would run out the linger and close the idle one on its own.
+        runCurrent()
+
+        assertTrue(idle.disconnected, "an idle jump host outlived the vault lock")
+        assertFalse(leased.disconnected, "the lock closed a jump host a live session runs on")
     }
 }

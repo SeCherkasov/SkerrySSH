@@ -253,6 +253,7 @@
     <string name="settings_update_status">更新 %1$s</string>
     <string name="settings_terminal_section_local_shell">本地 Shell</string>
     <string name="settings_local_shell_desc">运行本地终端会话所用的 Shell。留空则使用默认 Shell。</string>
+    <string name="settings_experimental_subtitle">测试中的功能。默认关闭，可能会更改或移除。</string>
     <string name="settings_trash_subtitle">已删除的主机、密钥、代码片段和隧道。</string>
     <string name="settings_trash_title">回收站</string>
     <string name="settings_trash_empty">回收站为空</string>
@@ -298,4 +299,6 @@
     <string name="keepalive_vendor_oppo">OPPO / OnePlus / realme</string>
     <string name="keepalive_vendor_vivo">vivo / iQOO</string>
     <string name="keepalive_vendor_samsung">Samsung</string>
+    <string name="settings_experimental_jump_shell">跳板主机 shell</string>
+    <string name="settings_experimental_jump_shell_desc">连接表单提供在跳板主机提示符下输入 ssh 来连接主机的选项——适用于只允许 shell 的堡垒机。登录跳板主机一次即可用于所有此类标签页。关闭时，此类配置在本设备上不会连接。</string>
 </resources>

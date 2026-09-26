@@ -94,6 +94,14 @@ val ConnectionType.carriesSftp: Boolean
     get() = this == ConnectionType.SSH
 
 /**
+ * [carriesSftp] for a live target. A session typed through a jump host's shell
+ * ([SshTarget.jumpShell]) has no channel to its destination: an SFTP channel would open on the
+ * jump host and show its files under the destination's name.
+ */
+val SshTarget.carriesSftp: Boolean
+    get() = connectionType.carriesSftp && !jumpShell
+
+/**
  * Whether a per-profile AI policy applies. The assistant reads a terminal and writes commands into
  * it, so it needs [hasShell]: both connection forms leave the policy picker out rather than store a
  * choice that decides nothing.

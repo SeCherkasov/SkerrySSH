@@ -212,4 +212,15 @@ class HostConnectTest {
         assertEquals(null, shortCipher("   "))
         assertEquals(null, shortCipher("@"))
     }
+
+    @Test
+    fun a_host_typed_through_its_jump_hosts_shell_marks_the_target() {
+        val jump = app.skerry.shared.ssh.SshJump("bastion", 22, "me", SshAuth.Interactive)
+        val shellJump = host(address = "db.internal").copy(jumpHostId = "b", jumpViaShell = true)
+        assertTrue(shellJump.toTarget(jump).jumpShell)
+        // Without the choice, or on a type it does not apply to, the jump is the usual tunnel.
+        assertEquals(false, shellJump.copy(jumpViaShell = false).toTarget(jump).jumpShell)
+        assertEquals(false, shellJump.copy(connectionType = ConnectionType.MOSH).toTarget(jump).jumpShell)
+        assertEquals(false, shellJump.copy(jumpHostId = null).toTarget(null).jumpShell)
+    }
 }

@@ -484,7 +484,7 @@ private fun MobileCursorStylePicker(current: TerminalCursorStyle, onPick: (Termi
  * [app.skerry.ui.settings.SettingToggleRow], which differs only in its type scale.
  */
 @Composable
-private fun MobileToggleRow(title: String, desc: String, on: Boolean, onToggle: () -> Unit) {
+internal fun MobileToggleRow(title: String, desc: String, on: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,

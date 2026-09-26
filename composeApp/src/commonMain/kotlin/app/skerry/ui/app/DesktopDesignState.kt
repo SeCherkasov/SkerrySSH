@@ -95,7 +95,7 @@ fun remoteChromeHidden(immersive: Boolean, desktopSession: Boolean, overlayOpen:
     immersive && desktopSession && !overlayOpen
 
 /** Settings panel tabs. */
-enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Trash, About }
+enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Experimental, Trash, About }
 
 /**
  * Connection AI policy. Aliases the shared enum ([app.skerry.shared.host.Host.aiPolicy]) so the

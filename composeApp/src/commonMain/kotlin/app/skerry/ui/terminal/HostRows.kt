@@ -34,9 +34,9 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.takesCommandsOnOpen
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalConnectHost
-import app.skerry.shared.ssh.hasShell
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.DragFolder
@@ -269,7 +269,8 @@ internal fun HostEntryRow(
     val runSnippetOnHost = LocalRunSnippetOnHost.current
     // Not on a remote desktop: a snippet is a line typed into a shell, and a framebuffer has none —
     // the row would open the desktop and the command would have nowhere to go.
-    val canRunSnippet = host != null && snippets != null && host.connectionType.hasShell
+    // Not through a jump host's shell either: the line would run on the jump host (takesCommandsOnOpen).
+    val canRunSnippet = host != null && snippets != null && host.takesCommandsOnOpen
     val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
     var snippetPickerOpen by remember { mutableStateOf(false) }

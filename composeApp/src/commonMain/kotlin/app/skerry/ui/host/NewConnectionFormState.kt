@@ -182,6 +182,24 @@ class NewConnectionFormState {
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
     var jumpHostId: String? by mutableStateOf(null)
 
+    /**
+     * Type `ssh` at [jumpHostId]'s prompt instead of tunneling through it ([Host.jumpViaShell]). Kept
+     * while the jump host or type changes so the choice survives toggling back; [toDraft] stores it
+     * only where it applies.
+     */
+    var jumpViaShell: Boolean by mutableStateOf(false)
+
+    /** Whether [jumpViaShell] means anything for the profile as it stands now. */
+    val jumpViaShellApplies: Boolean
+        get() = jumpHostId != null && connectionType == ConnectionType.SSH
+
+    /**
+     * [jumpViaShell] in effect: the jump host's own `ssh` logs in to this one, so the profile takes
+     * no secret and an optional user (blank lets that `ssh` pick).
+     */
+    val typesSshOnJumpHost: Boolean
+        get() = jumpViaShell && jumpViaShellApplies
+
     /** Keep-alive cadence for this profile's sessions, seconds (0 = off); see [Host.keepAliveSeconds]. */
     var keepAliveSeconds: Int by mutableStateOf(30)
 
@@ -247,7 +265,8 @@ class NewConnectionFormState {
         get() {
             val base = name.isNotBlank() && address.isNotBlank() && portOrNull != null
             return when (connectionType) {
-                ConnectionType.SSH, ConnectionType.MOSH -> base && username.isNotBlank() && authValid
+                ConnectionType.SSH, ConnectionType.MOSH ->
+                    base && (typesSshOnJumpHost || username.isNotBlank() && authValid)
                 ConnectionType.TELNET, ConnectionType.SERIAL -> base
                 // Container: the SSH requirements of the host running the CLI, plus something to
                 // exec into (a profile without a container would connect to nothing).
@@ -289,6 +308,8 @@ class NewConnectionFormState {
         // Telnet/Serial have no auth, no secret gets attached. VNC and RDP do authenticate (password),
         // so they take the same secret-resolution path as SSH below (the UI just hides the key option).
         !connectionType.usesSshAuth && !connectionType.isVnc && !connectionType.isRdp -> null
+        // Nothing of this profile's own logs in; a secret written here would sit in the vault unused.
+        typesSshOnJumpHost -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
             AuthMode.INTERACTIVE -> null
@@ -316,11 +337,12 @@ class NewConnectionFormState {
         username = qualifiedUsername(),
         group = normalizeGroup(group),
         credentialId = credentialId,
-        interactiveAuth = authMode == AuthMode.INTERACTIVE,
+        interactiveAuth = authMode == AuthMode.INTERACTIVE && !typesSshOnJumpHost,
         tags = tags,
         aiPolicy = aiPolicy,
         connectionType = connectionType,
         jumpHostId = jumpHostId,
+        jumpViaShell = typesSshOnJumpHost,
         keepAliveSeconds = keepAliveSeconds,
         notes = normalizeNotes(notes),
         // Only a container profile stores a spec: on another type the (possibly leftover) fields
@@ -384,6 +406,7 @@ class NewConnectionFormState {
             tags = orderTagsProdFirst(host.tags) // records saved before the rule keep their old order
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
+            jumpViaShell = host.jumpViaShell
             keepAliveSeconds = host.keepAliveSeconds
             host.rdp?.let { spec ->
                 rdpLoadBalanceInfo = spec.loadBalanceInfo

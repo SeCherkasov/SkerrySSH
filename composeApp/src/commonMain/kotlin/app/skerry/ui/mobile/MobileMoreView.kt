@@ -41,6 +41,7 @@ import app.skerry.ui.generated.resources.more_sync_local_only
 import app.skerry.ui.generated.resources.more_sync_synced
 import app.skerry.ui.generated.resources.more_sync_syncing
 import app.skerry.ui.generated.resources.more_team
+import app.skerry.ui.generated.resources.more_experimental
 import app.skerry.ui.generated.resources.more_trash
 import app.skerry.ui.generated.resources.more_title
 import app.skerry.ui.generated.resources.settings_security_title
@@ -144,6 +145,8 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                     onClick = { state.push(MobileRoute.KeepAlive) },
                 )
             }
+            // Experimental: features under test, each off until this device turns it on (desktop parity).
+            MoreRow("science", Skerry.colors.cyanBright, stringResource(Res.string.more_experimental), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Experimental) })
             // Trash: records deleted on any device of the account, restorable within the retention
             // window. Live path only — without a vault there is nothing to list.
             MoreRow("delete", Skerry.colors.cyanBright, stringResource(Res.string.more_trash), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Trash) })

@@ -53,6 +53,12 @@ sealed interface TunnelUnavailable {
     /** The host has no secret bound in the vault. */
     data object NoCredential : TunnelUnavailable
 
+    /**
+     * The host is reached by typing `ssh` on its jump host: there is no channel on the host itself
+     * to forward through, and tunneling past such a bastion is what it refuses.
+     */
+    data object JumpShell : TunnelUnavailable
+
     /** The host's ProxyJump chain didn't resolve. */
     data class Jump(val problem: JumpChainProblem) : TunnelUnavailable
 

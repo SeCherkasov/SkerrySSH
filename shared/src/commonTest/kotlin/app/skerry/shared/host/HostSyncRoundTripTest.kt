@@ -68,6 +68,17 @@ class HostSyncRoundTripTest {
         assertNull(VaultHostStore(b).all().single { it.id == "h1" }.notes)
     }
 
+    @Test
+    fun `typing ssh on the jump host travels with the profile`() = vaultTest {
+        val a = vault("vault-e", "device-1").apply { create("master".toCharArray()) }
+        val b = vault("vault-f", "device-2").apply { createWithDataKey(a.exportDataKey()!!) }
+        VaultHostStore(a).put(
+            Host(id = "h1", label = "db", address = "db.internal", username = "", jumpHostId = "j1", jumpViaShell = true),
+        )
+        b.mergeRemote(a.records())
+        assertTrue(VaultHostStore(b).all().single { it.id == "h1" }.jumpViaShell)
+    }
+
     private companion object {
         const val TS = "2026-06-12T00:00:00Z"
     }

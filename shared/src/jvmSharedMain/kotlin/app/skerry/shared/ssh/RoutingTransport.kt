@@ -16,9 +16,14 @@ import app.skerry.shared.telnet.TelnetTransport
  * exec both bootstrap over that same SSH transport, so host-key trust and ProxyJump behave
  * identically. Telnet/Serial/Local are stateless and default-constructed, but can be swapped in
  * tests too.
+ *
+ * An SSH target with [SshTarget.jumpShell] goes to [jumpShell], which types `ssh` on the jump host
+ * over a connection shared through [SharedConnectionPool]. It has no default: the pool behind it is
+ * the one the vault lock must close, so the caller builds it and keeps hold of it.
  */
 class RoutingTransport(
     private val ssh: SshTransport,
+    private val jumpShell: SshTransport,
     private val telnet: SshTransport = TelnetTransport(),
     private val serial: SshTransport = SerialTransport(),
     private val mosh: SshTransport = MoshTransport(ssh),
@@ -28,7 +33,8 @@ class RoutingTransport(
 
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
         when (target.connectionType) {
-            ConnectionType.SSH -> ssh.connect(target, auth)
+            ConnectionType.SSH ->
+                if (target.jumpShell) jumpShell.connect(target, auth) else ssh.connect(target, auth)
             ConnectionType.MOSH -> mosh.connect(target, auth)
             ConnectionType.TELNET -> telnet.connect(target, auth)
             ConnectionType.SERIAL -> serial.connect(target, auth)

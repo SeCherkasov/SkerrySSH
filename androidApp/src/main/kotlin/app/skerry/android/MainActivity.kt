@@ -269,24 +269,26 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontChange = { writeTerminalFont(dir, it) },
                     initialTerminalFontSize = readTerminalFontSize(dir),
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
-                    initialAllowServerClipboardWrite = readClipboardWrite(dir),
-                    onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
-                    initialOfferSudoPassword = readOfferSudoPassword(dir),
-                    onOfferSudoPasswordChange = { writeOfferSudoPassword(dir, it) },
-                    initialReportTeamSessions = readReportTeamSessions(dir),
-                    onReportTeamSessionsChange = { writeReportTeamSessions(dir, it) },
-                    initialTerminalAutoFit = readTerminalAutoFit(dir),
-                    onTerminalAutoFitChange = { writeTerminalAutoFit(dir, it) },
-                    initialOpenFilePathsInSftp = readOpenFilePaths(dir),
-                    onOpenFilePathsInSftpChange = { writeOpenFilePaths(dir, it) },
-                    initialHighlightCommandLine = readHighlightInput(dir),
-                    onHighlightCommandLineChange = { writeHighlightInput(dir, it) },
-                    initialHighlightOutput = readHighlightOutput(dir),
-                    onHighlightOutputChange = { writeHighlightOutput(dir, it) },
-                    initialConfirmProductionWarnings = readProdWarnings(dir),
-                    onConfirmProductionWarningsChange = { writeProdWarnings(dir, it) },
-                    initialHideSessionSystemBars = readHideSystemBars(dir),
-                    onHideSessionSystemBarsChange = { writeHideSystemBars(dir, it) },
+                    initialAllowServerClipboardWrite = FLAG_CLIPBOARD_WRITE.read(dir),
+                    onAllowServerClipboardWriteChange = { writeFlag(dir, FLAG_CLIPBOARD_WRITE, it) },
+                    initialOfferSudoPassword = FLAG_OFFER_SUDO_PASSWORD.read(dir),
+                    onOfferSudoPasswordChange = { writeFlag(dir, FLAG_OFFER_SUDO_PASSWORD, it) },
+                    initialJumpViaShellOffered = FLAG_JUMP_VIA_SHELL_OFFERED.read(dir),
+                    onJumpViaShellOfferedChange = { writeFlag(dir, FLAG_JUMP_VIA_SHELL_OFFERED, it) },
+                    initialReportTeamSessions = FLAG_REPORT_TEAM_SESSIONS.read(dir),
+                    onReportTeamSessionsChange = { writeFlag(dir, FLAG_REPORT_TEAM_SESSIONS, it) },
+                    initialTerminalAutoFit = FLAG_TERMINAL_AUTO_FIT.read(dir),
+                    onTerminalAutoFitChange = { writeFlag(dir, FLAG_TERMINAL_AUTO_FIT, it) },
+                    initialOpenFilePathsInSftp = FLAG_OPEN_FILE_PATHS.read(dir),
+                    onOpenFilePathsInSftpChange = { writeFlag(dir, FLAG_OPEN_FILE_PATHS, it) },
+                    initialHighlightCommandLine = FLAG_HIGHLIGHT_INPUT.read(dir),
+                    onHighlightCommandLineChange = { writeFlag(dir, FLAG_HIGHLIGHT_INPUT, it) },
+                    initialHighlightOutput = FLAG_HIGHLIGHT_OUTPUT.read(dir),
+                    onHighlightOutputChange = { writeFlag(dir, FLAG_HIGHLIGHT_OUTPUT, it) },
+                    initialConfirmProductionWarnings = FLAG_PROD_WARNINGS.read(dir),
+                    onConfirmProductionWarningsChange = { writeFlag(dir, FLAG_PROD_WARNINGS, it) },
+                    initialHideSessionSystemBars = FLAG_HIDE_SYSTEM_BARS.read(dir),
+                    onHideSessionSystemBarsChange = { writeFlag(dir, FLAG_HIDE_SYSTEM_BARS, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
@@ -297,8 +299,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
                     initialTerminalTheme = readTerminalTheme(dir),
                     onTerminalThemeChange = { writeTerminalTheme(dir, it) },
-                    initialCustomTerminalTheme = readCustomTerminalTheme(dir),
-                    onCustomTerminalThemeChange = { writeCustomTerminalTheme(dir, it) },
+                    initialCustomTerminalTheme = FLAG_CUSTOM_TERMINAL_THEME.read(dir),
+                    onCustomTerminalThemeChange = { writeFlag(dir, FLAG_CUSTOM_TERMINAL_THEME, it) },
                     initialThemeMode = readThemeMode(dir),
                     onThemeModeChange = { writeThemeMode(dir, it) },
                 )
@@ -417,125 +419,6 @@ class MainActivity : FragmentActivity() {
         val id = duration.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "auto_lock").writeText(id) }
-        }
-    }
-
-    /**
-     * OSC 52 server clipboard-write gate (More → Appearance → Terminal): "true"/"false" in
-     * `terminal_clipboard_write`. Missing/unreadable → false (off by default). Best-effort, off the UI thread.
-     */
-    private fun readClipboardWrite(dir: File): Boolean = runCatching {
-        File(dir, "terminal_clipboard_write").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeClipboardWrite(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
-        }
-    }
-
-    /**
-     * Offering the saved password at a sudo prompt (More → Appearance → Terminal): "true"/"false"
-     * in `terminal_sudo_password`. Missing/unreadable → false (off by default, issue #360).
-     */
-    private fun readOfferSudoPassword(dir: File): Boolean = runCatching {
-        File(dir, "terminal_sudo_password").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeOfferSudoPassword(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_sudo_password").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Reporting sessions on team-shared hosts: `teams_report_sessions`, default on. */
-    private fun readReportTeamSessions(dir: File): Boolean = runCatching {
-        File(dir, "teams_report_sessions").readText().trim().toBoolean()
-    }.getOrDefault(true)
-
-    private fun writeReportTeamSessions(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "teams_report_sessions").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Terminal shrink-to-fit: `terminal_autofit`, default off. */
-    private fun readTerminalAutoFit(dir: File): Boolean = runCatching {
-        File(dir, "terminal_autofit").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeTerminalAutoFit(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_autofit").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Clickable file paths in terminal output: `terminal_open_paths`, default on. */
-    private fun readOpenFilePaths(dir: File): Boolean = runCatching {
-        File(dir, "terminal_open_paths").readText().trim().toBoolean()
-    }.getOrDefault(true)
-
-    private fun writeOpenFilePaths(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_open_paths").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Command-line syntax highlighting: `terminal_highlight_input`, default on. */
-    private fun readHighlightInput(dir: File): Boolean = runCatching {
-        File(dir, "terminal_highlight_input").readText().trim().toBoolean()
-    }.getOrDefault(true)
-
-    private fun writeHighlightInput(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_highlight_input").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Log-level highlighting in output: `terminal_highlight_output`, default off. */
-    private fun readHighlightOutput(dir: File): Boolean = runCatching {
-        File(dir, "terminal_highlight_output").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeHighlightOutput(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_highlight_output").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Production guard threshold: `terminal_prod_warnings`, default off (Danger only). */
-    private fun readProdWarnings(dir: File): Boolean = runCatching {
-        File(dir, "terminal_prod_warnings").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeProdWarnings(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "terminal_prod_warnings").writeText(enabled.toString()) }
-        }
-    }
-
-    /**
-     * Hiding the phone's system bars inside a session (More → Appearance → Interface):
-     * `hide_system_bars`, default off — the bars belong to the phone.
-     */
-    private fun readHideSystemBars(dir: File): Boolean = runCatching {
-        File(dir, "hide_system_bars").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeHideSystemBars(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "hide_system_bars").writeText(enabled.toString()) }
-        }
-    }
-
-    /** Separately-picked terminal theme flag (unified theming): `custom_terminal_theme`, default off. */
-    private fun readCustomTerminalTheme(dir: File): Boolean = runCatching {
-        File(dir, "custom_terminal_theme").readText().trim().toBoolean()
-    }.getOrDefault(false)
-
-    private fun writeCustomTerminalTheme(dir: File, enabled: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "custom_terminal_theme").writeText(enabled.toString()) }
         }
     }
 
@@ -692,20 +575,25 @@ class MainActivity : FragmentActivity() {
         // Certificate authorities trusted to vouch for host keys (@cert-authority); see the desktop
         // graph for the wrapping rule.
         val trustedCaStore = VaultTrustedCaStore(vault)
+        val sshTransport = SshjTransport(
+            HostCertificateVerifier(
+                trustedCaStore,
+                TofuHostKeyVerifier(
+                    knownHostsStore,
+                    mismatchStore,
+                    now = { Instant.now().toString() },
+                    trust = hostTrustDecider,
+                ),
+            ) { Instant.now().epochSecond },
+            keyFiles = keyFileResolver,
+            keyboardInteractiveResponder = keyboardInteractive.responder,
+        )
+        // One login per jump host for every session typed through its shell; the lock closes idle ones.
+        val jumpHosts = app.skerry.shared.ssh.SharedConnectionPool(sshTransport)
         val transport = RoutingTransport(
-            ssh = SshjTransport(
-                HostCertificateVerifier(
-                    trustedCaStore,
-                    TofuHostKeyVerifier(
-                        knownHostsStore,
-                        mismatchStore,
-                        now = { Instant.now().toString() },
-                        trust = hostTrustDecider,
-                    ),
-                ) { Instant.now().epochSecond },
-                keyFiles = keyFileResolver,
-                keyboardInteractiveResponder = keyboardInteractive.responder,
-            ),
+            ssh = sshTransport,
+            // Read per connect: the setting is this device's consent to a mode a synced profile can carry.
+            jumpShell = app.skerry.shared.jumpshell.JumpShellTransport(jumpHosts) { FLAG_JUMP_VIA_SHELL_OFFERED.read(dir) },
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         val trustedCas = TrustedCaController(
@@ -917,10 +805,10 @@ class MainActivity : FragmentActivity() {
                 writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
                 writeTerminalTheme(dir, TerminalThemes.DEFAULT)
                 writeThemeMode(dir, ThemeMode.DEFAULT)
-                writeClipboardWrite(dir, false)
-                writeReportTeamSessions(dir, true)
-                writeProdWarnings(dir, false)
-                writeHideSystemBars(dir, false)
+                writeFlag(dir, FLAG_CLIPBOARD_WRITE, false)
+                writeFlag(dir, FLAG_REPORT_TEAM_SESSIONS, true)
+                writeFlag(dir, FLAG_PROD_WARNINGS, false)
+                writeFlag(dir, FLAG_HIDE_SYSTEM_BARS, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }
@@ -944,6 +832,7 @@ class MainActivity : FragmentActivity() {
         )
         return AppDependencies(
             transport = transport,
+            jumpHosts = jumpHosts,
             probeTransport = probeTransport,
             vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
             rdpTransport = app.skerry.shared.rdp.RdpTcpTransport(

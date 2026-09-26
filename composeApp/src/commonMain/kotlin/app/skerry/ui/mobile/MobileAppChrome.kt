@@ -24,8 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.needsOwnCredential
 import app.skerry.shared.ssh.SshAuth
-import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.connection.JumpChainProblem
@@ -200,7 +200,8 @@ internal fun MobileChrome(
                                     when {
                                         // Telnet/Serial have no auth — connect immediately, no password
                                         // prompt. SSH and Mosh resolve a credential or ask for a password.
-                                        !host.connectionType.usesSshAuth ->
+                                        // Nor a host typed through its jump host's shell (needsOwnCredential).
+                                        !host.needsOwnCredential ->
                                             openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
                                         credential != null ->
                                             openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)

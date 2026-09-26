@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.shared.ssh.SharedConnectionPool
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.session.SessionsController
@@ -46,6 +47,10 @@ import kotlinx.coroutines.CancellationException
  * connect form standing where the user's question was, with nothing said about the question being answered
  * for them. Android passes nothing here: its confirmation is a screen, and it releases itself on dispose.
  *
+ * Jump hosts nobody has a session on are closed ([SharedConnectionPool.closeIdle]): each is an
+ * authenticated way into the network, kept for the next tab, and behind a lock screen there is no
+ * next tab. Ones carrying live sessions stay, as the sessions do.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
 fun tearDownForLock(
@@ -57,6 +62,7 @@ fun tearDownForLock(
     keyboardInteractive: KeyboardInteractivePromptController? = null,
     hostTrust: HostTrustPromptController? = null,
     closeSyncSetup: (() -> Unit)? = null,
+    jumpHosts: SharedConnectionPool? = null,
 ) {
     val failures = TeardownFailures()
     failures.run { tunnels?.closeAll() }
@@ -78,6 +84,7 @@ fun tearDownForLock(
     failures.run { keyboardInteractive?.cancelPending() }
     failures.run { hostTrust?.cancelPending() }
     failures.run { closeSyncSetup?.invoke() }
+    failures.run { jumpHosts?.closeIdleInBackground() }
     failures.rethrowFirst()
 }
 

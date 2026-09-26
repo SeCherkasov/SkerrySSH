@@ -1,6 +1,7 @@
 package app.skerry.ui.tunnel
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.reachedThroughJumpShell
 import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.connection.JumpChainResolution
@@ -77,6 +78,7 @@ fun resolveTunnelHost(
     findCredential: (String?) -> Credential?,
 ): TunnelResolution {
     val host = findHost(hostId) ?: return TunnelResolution.Unavailable(TunnelUnavailable.HostNotFound)
+    if (host.reachedThroughJumpShell) return TunnelResolution.Unavailable(TunnelUnavailable.JumpShell)
     val credential = findCredential(host.credentialId)
         ?: return TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
     val jump = when (val chain = resolveJumpChain(host, findHost, findCredential)) {

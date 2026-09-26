@@ -28,7 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.ssh.carriesSftp
+import app.skerry.shared.host.opensFileSessions
 import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.HostSection
@@ -184,12 +184,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            // Only an SSH session carries a file channel ([carriesSftp], the same predicate the
+            // Only an SSH session carries a file channel (`carriesSftp`, the same predicate the
             // terminal's path chip reads). On anything else — a remote desktop, Telnet, serial, a
             // container exec — the card is left out rather than drawn like a working one over a
             // browser that can never list anything (#305 — an action that can do nothing is not
-            // drawn at all).
-            if (host.connectionType.carriesSftp) {
+            // drawn at all). Nor through a jump host's shell, where it would list the jump host.
+            if (host.opensFileSessions) {
                 QuickAction("folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f)) { openSftp(host) }
             }
             QuickAction("lan", stringResource(Res.string.shell_quick_tunnels), Modifier.weight(1f)) { state.push(MobileRoute.Ports) }

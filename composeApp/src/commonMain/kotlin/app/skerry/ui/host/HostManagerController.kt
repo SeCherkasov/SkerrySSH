@@ -38,6 +38,8 @@ data class HostDraft(
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jumpHostId: String? = null,
+    /** Reach the host by typing `ssh` on the jump host (see [Host.jumpViaShell]). */
+    val jumpViaShell: Boolean = false,
     val keepAliveSeconds: Int = 30,
     val notes: String? = null,
     /** Container/pod to exec into; only set for [ConnectionType.CONTAINER] profiles. */
@@ -108,6 +110,7 @@ class HostManagerController(
                 aiPolicy = draft.aiPolicy,
                 connectionType = draft.connectionType,
                 jumpHostId = draft.jumpHostId,
+                jumpViaShell = draft.jumpViaShell,
                 keepAliveSeconds = draft.keepAliveSeconds,
                 notes = draft.notes,
                 container = draft.container,

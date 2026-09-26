@@ -57,6 +57,8 @@ class DesktopSettingsState(
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
     initialOfferSudoPassword: Boolean = false,
     private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
+    initialJumpViaShellOffered: Boolean = false,
+    private val onJumpViaShellOfferedChange: (Boolean) -> Unit = {},
     initialReportTeamSessions: Boolean = true,
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     initialOpenFilePathsInSftp: Boolean = true,
@@ -138,6 +140,14 @@ class DesktopSettingsState(
      * Snapshotted into new sessions - an open one keeps the answer it was born with.
      */
     var offerSudoPassword: Boolean by mutableStateOf(initialOfferSudoPassword); private set
+
+    /**
+     * Experimental: whether the connection form offers "type `ssh` on the jump host" next to the
+     * jump host picker ([app.skerry.shared.host.Host.jumpViaShell]), and whether this device lets
+     * such a profile connect at all — the transport reads the stored value per connect, so a
+     * profile synced from elsewhere is refused here until this is on.
+     */
+    var jumpViaShellOffered: Boolean by mutableStateOf(initialJumpViaShellOffered); private set
 
     /**
      * Whether opening a session on a host **shared with a team** is reported to that team's activity
@@ -330,6 +340,12 @@ class DesktopSettingsState(
     fun toggleOfferSudoPassword() {
         offerSudoPassword = !offerSudoPassword
         onOfferSudoPasswordChange(offerSudoPassword)
+    }
+
+    /** Toggle the experimental jump-host-shell choice in the connection form and report outward. */
+    fun toggleJumpViaShellOffered() {
+        jumpViaShellOffered = !jumpViaShellOffered
+        onJumpViaShellOfferedChange(jumpViaShellOffered)
     }
 
     /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */

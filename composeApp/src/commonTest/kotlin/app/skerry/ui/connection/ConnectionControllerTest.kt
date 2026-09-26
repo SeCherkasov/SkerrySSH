@@ -7,6 +7,7 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.jumpshell.JumpShellRefusedException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.ssh.ConnectionType
@@ -128,6 +129,20 @@ class ConnectionControllerTest {
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
         assertEquals(MoshSetupException.Reason.SERVER_NOT_INSTALLED, state.moshReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a refused jump host shell carries its reason into Error`() = runTest {
+        // The view names the setting to turn on, in the user's language; the transport text is English.
+        val transport = FakeSshTransport(error = JumpShellRefusedException(JumpShellRefusedException.Reason.DISABLED))
+        val (controller, scope) = controllerWith(transport)
+
+        controller.connect(testTarget, SshAuth.Password("pw"))
+
+        val state = controller.uiState
+        assertIs<ConnectionUiState.Error>(state)
+        assertEquals(JumpShellRefusedException.Reason.DISABLED, state.jumpShellRefusal)
         scope.cancel()
     }
 
@@ -505,6 +520,12 @@ class ConnectionControllerTest {
         local.connect(testTarget.copy(connectionType = ConnectionType.LOCAL), SshAuth.Password(""))
         assertFalse(local.supportsSftp)
         localScope.cancel()
+
+        val (shell, shellScope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
+        // Typed through the jump host's shell, an SFTP channel would list the jump host's files.
+        shell.connect(testTarget.copy(jumpShell = true), SshAuth.Password(""))
+        assertFalse(shell.supportsSftp)
+        shellScope.cancel()
     }
 
     @Test

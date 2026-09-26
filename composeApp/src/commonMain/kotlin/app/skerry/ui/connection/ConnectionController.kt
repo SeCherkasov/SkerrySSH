@@ -9,6 +9,7 @@ import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.serial.SerialProblem
 import app.skerry.shared.serial.SerialUnavailableException
+import app.skerry.shared.jumpshell.JumpShellRefusedException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.carriedBySsh
@@ -80,6 +81,7 @@ sealed interface ConnectionUiState {
         val serialDetail: String? = null,
         val hostKeyRefusal: HostKeyRefusal? = null,
         val hostKeyRefusalOnHop: Boolean = false,
+        val jumpShellRefusal: JumpShellRefusedException.Reason? = null,
     ) : ConnectionUiState
 
     /**
@@ -309,7 +311,7 @@ class ConnectionController(
             // Only starts from the form: while a connect is in progress or a session is open, a repeat
             // connect is ignored — otherwise a scope/connection could leak.
             if (uiState !is ConnectionUiState.Form) return
-            supportsSftp = target.connectionType.carriesSftp
+            supportsSftp = target.carriesSftp
             lastTarget = target
             lastAuth = auth
             pendingOnConnected = onConnected
@@ -345,6 +347,7 @@ class ConnectionController(
                         serialDetail = serial?.detail,
                         hostKeyRefusal = (e as? SshHostKeyRejectedException)?.refusal,
                         hostKeyRefusalOnHop = (e as? SshHostKeyRejectedException)?.hop == true,
+                        jumpShellRefusal = (e as? JumpShellRefusedException)?.reason,
                     )
                 }
             }
