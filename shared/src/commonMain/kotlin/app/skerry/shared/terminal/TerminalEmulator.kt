@@ -1086,8 +1086,10 @@ class TerminalEmulator(
     private fun absRow(row: Int): Int =
         if (originMode) (scrollTop + row).coerceIn(scrollTop, scrollBottom) else row.coerceIn(0, rows - 1)
 
-    private fun topLimit() = if (originMode) scrollTop else 0
-    private fun bottomLimit() = if (originMode) scrollBottom else rows - 1
+    // Relative vertical moves stop at a margin whenever the cursor starts inside the region, origin
+    // mode or not (xterm); from outside it they run to the screen edge.
+    private fun topLimit() = if (originMode || cy >= scrollTop) scrollTop else 0
+    private fun bottomLimit() = if (originMode || cy <= scrollBottom) scrollBottom else rows - 1
 
     // --- Scrolling ---------------------------------------------------------
 
@@ -1283,18 +1285,24 @@ class TerminalEmulator(
     }
 
     /**
-     * DECSCUSR (`CSI Ps SP q`): the number sets cursor shape and blink. 0/1 — blinking block (default),
-     * 2 — block, 3 — blinking underline, 4 — underline, 5 — blinking bar, 6 — bar. Odd (and 0) blink,
-     * even don't.
+     * DECSCUSR (`CSI Ps SP q`): the number sets cursor shape and blink. 0 — the user's configured
+     * cursor (what neovim sends on exit), 1 — blinking block, 2 — block, 3 — blinking underline,
+     * 4 — underline, 5 — blinking bar, 6 — bar. Odd blink, even don't.
      */
     private fun setCursorStyle(args: List<Int>) {
         val n = args.getOrNull(0)?.takeIf { it >= 0 } ?: 0
+        if (n == 0) { restoreDefaultCursor(); return }
         cursorShape = when (n) {
             3, 4 -> CursorShape.Underline
             5, 6 -> CursorShape.Bar
             else -> CursorShape.Block
         }
-        cursorBlink = n == 0 || n % 2 == 1
+        cursorBlink = n % 2 == 1
+    }
+
+    private fun restoreDefaultCursor() {
+        cursorShape = defaultCursorShape
+        cursorBlink = defaultCursorBlink
     }
 
     private fun softReset() {
@@ -1304,8 +1312,7 @@ class TerminalEmulator(
         insertMode = false
         autoWrap = true
         cursorVisible = true
-        cursorShape = CursorShape.Block
-        cursorBlink = true
+        restoreDefaultCursor()
         applicationCursorKeys = false
         applicationKeypad = false
         pendingWrap = false
@@ -1335,7 +1342,7 @@ class TerminalEmulator(
         resetRegion()
         tabStops = defaultTabStops(cols)
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
-        cursorShape = defaultCursorShape; cursorBlink = defaultCursorBlink
+        restoreDefaultCursor()
         applicationCursorKeys = false; applicationKeypad = false
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; mousePixels = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false

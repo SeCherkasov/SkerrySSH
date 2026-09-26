@@ -1687,4 +1687,55 @@ class TerminalEmulatorTest {
         emu.feed("${esc}[?1049l".encodeToByteArray())
         assertFalse(alt === emu.lines)
     }
+
+    @Test
+    fun `soft reset returns to the configured cursor, not a blinking block`() {
+        val emu = TerminalEmulator(initialCursorShape = CursorShape.Bar, initialCursorBlink = false)
+        emu.feed("$esc[2 q$esc[!p".encodeToByteArray())
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
+    fun `decscusr zero returns to the configured cursor`() {
+        // neovim sends `CSI 0 SP q` on exit to hand the cursor back.
+        val emu = TerminalEmulator(initialCursorShape = CursorShape.Bar, initialCursorBlink = false)
+        emu.feed("$esc[2 q$esc[0 q".encodeToByteArray())
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
+    fun `cursor up and down stop at the scroll margins without origin mode`() {
+        // Region rows 3..6 (1-based); origin mode off. xterm stops CUU/CUD/CNL/CPL at the margin
+        // when the cursor starts inside the region.
+        val emu = emulate(cols = 10, rows = 10, chunks = arrayOf("$esc[3;6r", "$esc[5;1H", "$esc[9A"))
+        assertEquals(2, emu.cursorRow)
+        emu.feed("$esc[9B".encodeToByteArray())
+        assertEquals(5, emu.cursorRow)
+        emu.feed("$esc[9F".encodeToByteArray())
+        assertEquals(2, emu.cursorRow)
+        emu.feed("$esc[9E".encodeToByteArray())
+        assertEquals(5, emu.cursorRow)
+    }
+
+    @Test
+    fun `cursor beyond a margin moves to the screen edge`() {
+        // xterm: above the top margin CUU runs to row 0, below the bottom margin CUD to the last
+        // row; toward the region it still stops at the margin it meets.
+        val emu = emulate(cols = 10, rows = 10, chunks = arrayOf("$esc[3;6r", "$esc[2;1H", "$esc[9A"))
+        assertEquals(0, emu.cursorRow)
+        emu.feed("$esc[8;1H$esc[9B".encodeToByteArray())
+        assertEquals(9, emu.cursorRow)
+        emu.feed("$esc[2;1H$esc[9B".encodeToByteArray())
+        assertEquals(5, emu.cursorRow)
+        emu.feed("$esc[8;1H$esc[9A".encodeToByteArray())
+        assertEquals(2, emu.cursorRow)
+    }
+
+    @Test
+    fun `erase characters with a huge count clears to the end of the line`() {
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("abcdefghij", "$esc[4G$esc[2147483647X"))
+        assertEquals("abc", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
 }
