@@ -19,6 +19,15 @@ internal fun tooLong(accountId: String, vararg otherIds: String): Boolean =
 internal fun anyTooLong(vararg ids: String): Boolean = ids.any { it.length > MAX_OTHER_ID }
 
 /**
+ * Mirrors `varchar(64)` in `Devices.id`. Exposed refuses a longer value at insert time, which is a
+ * 500 after the route has already spent a one-time code or an SRP challenge, or created an account.
+ */
+internal const val MAX_DEVICE_ID = 64
+
+/** True if a client-supplied device id cannot be stored ([MAX_DEVICE_ID]). */
+internal fun deviceIdTooLong(deviceId: String): Boolean = deviceId.length > MAX_DEVICE_ID
+
+/**
  * Longest SRP field the 2048-bit group can hold, in hex digits. The verifier is `g^x mod N`, so
  * anything past this is not a verifier at all; the salt is a 256-bit client random and fits many
  * times over.

@@ -44,6 +44,12 @@ object Devices : Table("devices") {
     /** Sync cursor the device has read/written up to (plaintext counter). */
     val lastSyncVersion = long("last_sync_version").nullable()
     val revoked = bool("revoked").default(false)
+    /**
+     * Generation every token of this device carries ([app.skerry.server.auth.TokenService]); a token
+     * from an older one is rejected. Bumped by revocation and by a password change, so a re-login that
+     * clears [revoked] reactivates the device without reviving the tokens it held before.
+     */
+    val tokenGeneration = long("token_generation").default(0)
 
     // PK on (accountId, id): deviceId is unique per account, not globally — otherwise a client
     // supplying another account's deviceId could hijack or make un-revocable someone else's
@@ -239,6 +245,8 @@ object Pairing : Table("pairing") {
     val accountId = varchar("account_id", 320).references(Accounts.id)
     /** dataKey encrypted with a one-time transferKey; the server sees only ciphertext. */
     val encryptedDataKey = blob("encrypted_data_key")
+    /** Device that started the pairing; revoking it voids the code. Null for rows from before the column. */
+    val deviceId = varchar("device_id", 64).nullable()
     val expiresAt = long("expires_at")
     val consumed = bool("consumed").default(false)
 

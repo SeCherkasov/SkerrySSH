@@ -14,6 +14,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -102,6 +103,27 @@ class TeamActivityRoutesTest {
         assertEquals("HOST", newest.recordType)
         assertEquals("", newest.scopeId)
         assertEquals("owner@x.io", newest.actorAccountId)
+    }
+
+    @Test
+    fun `a team re-created under a deleted team's id starts with an empty feed`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val owner = client.registerAccount("owner@x.io", pw, deviceId = "d-owner")
+        client.createTeam(owner.accessToken)
+        client.push(owner.accessToken, listOf(host("h-1", 1)))
+        assertEquals(HttpStatusCode.OK, client.delete("/teams/$teamId") { bearerAuth(owner.accessToken) }.status)
+
+        // Team ids are client-chosen, so a stranger can claim the freed one.
+        val next = client.registerAccount("next@x.io", pw, deviceId = "d-next")
+        client.createTeam(next.accessToken)
+
+        assertEquals(
+            listOf("team.create" to "next@x.io"),
+            client.activity(next.accessToken).entries.map { it.event to it.actorAccountId },
+            "the new owner reads the previous team's history",
+        )
     }
 
     @Test

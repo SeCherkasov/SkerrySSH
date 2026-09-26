@@ -3,6 +3,7 @@ package app.skerry.server.routes
 import app.skerry.server.RateLimits
 import app.skerry.server.Services
 import app.skerry.server.accountId
+import app.skerry.server.clientKey
 import app.skerry.server.db.WebSession
 import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
@@ -24,6 +25,7 @@ import app.skerry.sync.wire.VerifyResponse
 import app.skerry.sync.wire.WebAccessResponse
 import app.skerry.sync.wire.WebLoginRequest
 import app.skerry.sync.wire.WebPasswordRequest
+import com.auth0.jwt.interfaces.Payload
 import app.skerry.server.model.unb64
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.ratelimit.rateLimit
@@ -54,7 +56,7 @@ fun Route.authRoutes(services: Services) {
                 return@post
             }
             val req = call.receive<RegisterRequest>()
-            if (tooLong(req.accountId, req.deviceId)) {
+            if (tooLong(req.accountId) || deviceIdTooLong(req.deviceId)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
@@ -97,12 +99,7 @@ fun Route.authRoutes(services: Services) {
             services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.OK)
             services.metrics.tokensIssued(TokenType.ACCESS)
             services.metrics.tokensIssued(TokenType.REFRESH)
-            call.respond(
-                TokenResponse(
-                    accessToken = services.tokens.issueAccess(req.accountId, req.deviceId),
-                    refreshToken = services.tokens.issueRefresh(req.accountId, req.deviceId),
-                ),
-            )
+            call.respond(services.issueTokens(req.accountId, req.deviceId))
         }
     }
 
@@ -138,7 +135,9 @@ fun Route.authRoutes(services: Services) {
             val fakeVerifier = fakeVerifier(req.accountId, services.config.jwtSecret, services.srp.params.N)
             Triple(req.accountId, fakeSalt, fakeVerifier)
         }
-        val challenge = services.srp.startChallenge(id, salt, verifier)
+        val challenge = services.srp.startChallenge(
+            id, salt, verifier, client = call.clientKey(services.config.trustedProxies.toSet()),
+        )
         // Deliberately no "account exists" dimension: it would hand an enumerator exactly the
         // signal the synthesized challenge above is built to withhold.
         services.metrics.authAttempt(AuthKind.SRP_CHALLENGE, AuthOutcome.OK)
@@ -149,7 +148,7 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.SRP_VERIFY) {
         post("/auth/srp/verify") {
         val req = call.receive<VerifyRequest>()
-        if (tooLong(req.deviceId, req.challengeId)) {
+        if (anyTooLong(req.challengeId) || deviceIdTooLong(req.deviceId)) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
             return@post
         }
@@ -178,11 +177,12 @@ fun Route.authRoutes(services: Services) {
         if (reactivated) {
             services.activity.record(verified.accountId, "device.reenrolled", "revoked device re-enrolled", deviceId = req.deviceId)
         }
+        val tokens = services.issueTokens(verified.accountId, req.deviceId)
         call.respond(
             VerifyResponse(
                 m2 = verified.m2,
-                accessToken = services.tokens.issueAccess(verified.accountId, req.deviceId),
-                refreshToken = services.tokens.issueRefresh(verified.accountId, req.deviceId),
+                accessToken = tokens.accessToken,
+                refreshToken = tokens.refreshToken,
                 // Tell the client a revoked device just came back so it re-mirrors the server before pushing.
                 reactivated = reactivated,
             ),
@@ -198,7 +198,7 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.CHANGE_PASSWORD) {
         post("/auth/change-password") {
             val req = call.receive<ChangePasswordRequest>()
-            if (tooLong(req.deviceId, req.challengeId)) {
+            if (anyTooLong(req.challengeId) || deviceIdTooLong(req.deviceId)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
@@ -244,11 +244,13 @@ fun Route.authRoutes(services: Services) {
             // of only on their next server call. The acting device's cursor already equals syncSeq,
             // so it ignores the signal.
             services.notifier.publish(verified.accountId, syncSeq)
+            // Issued after the rotation committed: it retired this device's earlier tokens too.
+            val tokens = services.issueTokens(verified.accountId, req.deviceId)
             call.respond(
                 ChangePasswordResponse(
                     m2 = verified.m2,
-                    accessToken = services.tokens.issueAccess(verified.accountId, req.deviceId),
-                    refreshToken = services.tokens.issueRefresh(verified.accountId, req.deviceId),
+                    accessToken = tokens.accessToken,
+                    refreshToken = tokens.refreshToken,
                 ),
             )
         }
@@ -301,12 +303,7 @@ fun Route.authRoutes(services: Services) {
             services.metrics.authAttempt(AuthKind.WEB_LOGIN, AuthOutcome.OK)
             services.metrics.tokensIssued(TokenType.ACCESS)
             services.metrics.tokensIssued(TokenType.REFRESH)
-            call.respond(
-                TokenResponse(
-                    accessToken = services.tokens.issueAccess(req.accountId, WebSession.DEVICE_ID),
-                    refreshToken = services.tokens.issueRefresh(req.accountId, WebSession.DEVICE_ID),
-                ),
-            )
+            call.respond(services.issueTokens(req.accountId, WebSession.DEVICE_ID))
         }
     }
 
@@ -314,11 +311,14 @@ fun Route.authRoutes(services: Services) {
     post("/auth/refresh") {
         val req = call.receive<RefreshRequest>()
         val decoded = services.tokens.verifyRefresh(req.refreshToken)
-        val deviceId = decoded?.getClaim("did")?.asString()
-        val accountId = decoded?.subject
-        if (decoded == null || deviceId == null || accountId == null ||
-            services.devices.isRevoked(accountId, deviceId)
-        ) {
+        // (account, device, generation) of a refresh token that is still live, or null.
+        val holder = decoded?.let { token ->
+            val did = token.getClaim("did")?.asString() ?: return@let null
+            val sub = token.subject ?: return@let null
+            val generation = services.devices.liveTokenGeneration(sub, did)
+            if (generation != null && generation == services.tokens.generationOf(token)) Triple(sub, did, generation) else null
+        }
+        if (holder == null) {
             services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.DENIED)
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("invalid refresh token"))
             return@post
@@ -326,15 +326,30 @@ fun Route.authRoutes(services: Services) {
         services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.OK)
         services.metrics.tokensIssued(TokenType.ACCESS)
         services.metrics.tokensIssued(TokenType.REFRESH)
-        call.respond(
-            TokenResponse(
-                accessToken = services.tokens.issueAccess(accountId, deviceId),
-                refreshToken = services.tokens.issueRefresh(accountId, deviceId),
-            ),
-        )
+        val (accountId, deviceId, generation) = holder
+        // Under the generation just checked, not a fresh read: a password change committing in
+        // between must leave this pair dead on arrival rather than mint one of the new generation.
+        call.respond(services.issueTokens(accountId, deviceId, generation))
     }
     }
 }
+
+/**
+ * A fresh token pair for the device under its current generation. Called after the write that
+ * registered or rotated the device, so the pair matches what that write committed.
+ */
+internal suspend fun Services.issueTokens(accountId: String, deviceId: String, generation: Long? = null): TokenResponse {
+    // A revoked device reads as null; its tokens are refused on the revocation alone, so 0 is inert.
+    val issuedGeneration = generation ?: devices.liveTokenGeneration(accountId, deviceId) ?: 0L
+    return TokenResponse(
+        accessToken = tokens.issueAccess(accountId, deviceId, issuedGeneration),
+        refreshToken = tokens.issueRefresh(accountId, deviceId, issuedGeneration),
+    )
+}
+
+/** Whether [token] is still honoured: its device is live and the token carries the current generation. */
+internal suspend fun Services.isTokenLive(accountId: String, deviceId: String, token: Payload): Boolean =
+    devices.liveTokenGeneration(accountId, deviceId) == tokens.generationOf(token)
 
 /**
  * Registers the browser as this account's web device. Returns whether a revoked device was

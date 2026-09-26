@@ -90,4 +90,27 @@ class SyncWebSocketTest {
             assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
         }
     }
+
+    @Test
+    fun `a socket opened before its device was revoked and signed back in is closed on the next notification`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+            install(WebSockets)
+        }
+        val tokens: TokenResponse = client.registerAccount(accountId, password, deviceId = "devA")
+
+        client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
+            // The re-login clears the revoked flag; only the token generation still tells this
+            // socket's token from the new one — the same state a password change leaves the
+            // acting device's older sockets in.
+            services.devices.revoke(accountId, "devA")
+            client.srpLogin(accountId, password, deviceId = "devA", deviceName = "Laptop A")
+            services.notifier.publish(accountId, 1)
+            val reason = withTimeout(2_000) { closeReason.await() }
+            assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
+        }
+    }
 }

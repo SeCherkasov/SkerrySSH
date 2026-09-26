@@ -175,7 +175,7 @@ class AdminRepositoryTest {
 
         devices.register("alice@example.com", "devA", "Laptop")
         records.upsert("alice@example.com", listOf(rec("r1", 1)))
-        pairing.create("code1", "alice@example.com", byteArrayOf(9), expiresAt = Long.MAX_VALUE)
+        pairing.create("code1", "alice@example.com", "devA", byteArrayOf(9), expiresAt = Long.MAX_VALUE)
         // a sibling account should be unaffected
         devices.register("bob@example.com", "devC", "Desktop")
         records.upsert("bob@example.com", listOf(rec("b1", 1, deviceId = "devC")))

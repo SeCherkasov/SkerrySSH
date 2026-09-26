@@ -20,14 +20,23 @@ class SrpService(
     private val challengeTtlMillis: Long = 120_000,
     /** Hard cap on pending challenges; safety net against OOM under /auth/srp/challenge flooding. */
     private val maxPending: Int = 10_000,
-    /** Max concurrent pending challenges allowed per accountId. */
+    /**
+     * Max concurrent pending challenges per accountId **from one client**. Per client, because the
+     * challenge route is anonymous: a per-account cap alone lets anyone evict the owner's pending
+     * login by asking for challenges in their name.
+     */
     private val maxPerAccount: Int = 3,
     private val randomId: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
     /** Standard params: 2048-bit RFC 5054 group, SHA-256 hash. */
     val params: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
 
-    private data class Pending(val session: SRP6ServerSession, val accountId: String, val createdAt: Long)
+    private data class Pending(
+        val session: SRP6ServerSession,
+        val accountId: String,
+        val client: String,
+        val createdAt: Long,
+    )
 
     private val pending = ConcurrentHashMap<String, Pending>()
 
@@ -36,8 +45,11 @@ class SrpService(
 
     data class Challenge(val challengeId: String, val salt: String, val b: String)
 
-    /** Step 1: derives an ephemeral `B` from the account's salt/verifier and registers a challenge. */
-    fun startChallenge(accountId: String, salt: String, verifier: String): Challenge {
+    /**
+     * Step 1: derives an ephemeral `B` from the account's salt/verifier and registers a challenge.
+     * [client] is the caller's rate-limit key (its address), which scopes the per-account cap.
+     */
+    fun startChallenge(accountId: String, salt: String, verifier: String, client: String): Challenge {
         // The expensive modexp runs outside the lock; only bookkeeping is guarded.
         val session = SRP6ServerSession(params)
         val b = session.step1(accountId, BigInteger(salt, 16), BigInteger(verifier, 16))
@@ -51,14 +63,14 @@ class SrpService(
                     .take(pending.size - maxPending + 1)
                     .forEach { pending.remove(it.key) }
             }
-            // 2) Per-account cap: keep at most (maxPerAccount-1) older challenges for this account,
-            //    dropping the oldest to free a slot, so one account flooding doesn't starve others
-            //    or grow unbounded.
-            val mine = pending.entries.filter { it.value.accountId == accountId }
+            // 2) Per-account cap, per client: keep at most (maxPerAccount-1) older challenges this
+            //    client holds for this account, dropping the oldest to free a slot, so one client
+            //    flooding an account neither grows unbounded nor evicts anyone else's login.
+            val mine = pending.entries.filter { it.value.accountId == accountId && it.value.client == client }
                 .sortedBy { it.value.createdAt }
             val overflow = mine.size - (maxPerAccount - 1)
             if (overflow > 0) mine.take(overflow).forEach { pending.remove(it.key) }
-            pending[challengeId] = Pending(session, accountId, now)
+            pending[challengeId] = Pending(session, accountId, client, now)
         }
         return Challenge(challengeId, salt.lowercase().padStart(SALT_HEX_DIGITS, '0'), b.toString(16))
     }

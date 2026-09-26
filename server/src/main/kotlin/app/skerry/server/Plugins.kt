@@ -12,6 +12,7 @@ import app.skerry.server.routes.adminHealthRoute
 import app.skerry.server.routes.adminRoutes
 import app.skerry.server.routes.authRoutes
 import app.skerry.server.routes.deviceRoutes
+import app.skerry.server.routes.isTokenLive
 import app.skerry.server.routes.metricsRoutes
 import app.skerry.server.routes.pairingClaimRoute
 import app.skerry.server.routes.pairingStartRoute
@@ -43,13 +44,11 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.metrics.micrometer.MicrometerMetrics
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
-import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.contentLength
-import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.header
@@ -165,13 +164,7 @@ fun Application.configureServer(services: Services) {
         // All buckets are the same shape: N tokens per 60 seconds, keyed by client IP.
         fun perIp(name: RateLimitName, limit: Int) = register(name) {
             rateLimiter(limit = limit, refillPeriod = 60.seconds)
-            requestKey { call ->
-                rateLimitClientKey(
-                    directPeer = call.request.origin.remoteHost,
-                    forwardedFor = call.request.header(HttpHeaders.XForwardedFor),
-                    trustedProxies = trustedProxies,
-                )
-            }
+            requestKey { call -> call.clientKey(trustedProxies) }
         }
         perIp(RateLimits.REGISTER, limit = 5)
         perIp(RateLimits.SRP_CHALLENGE, limit = 10)
@@ -201,11 +194,7 @@ fun Application.configureServer(services: Services) {
         register(RateLimits.TEAM_SESSION_EVENTS) {
             rateLimiter(limit = 60, refillPeriod = 60.seconds)
             requestKey { call ->
-                call.principal<JWTPrincipal>()?.accountId ?: rateLimitClientKey(
-                    directPeer = call.request.origin.remoteHost,
-                    forwardedFor = call.request.header(HttpHeaders.XForwardedFor),
-                    trustedProxies = trustedProxies,
-                )
+                call.principal<JWTPrincipal>()?.accountId ?: call.clientKey(trustedProxies)
             }
         }
     }
@@ -260,7 +249,8 @@ fun Application.configureServer(services: Services) {
                 val type = credential.payload.getClaim(TokenService.CLAIM_TYPE).asString()
                 val account = credential.payload.subject
                 val did = credential.payload.getClaim(TokenService.CLAIM_DEVICE).asString()
-                // Valid only if this is an access token and the device (within the account) isn't revoked.
+                // Valid only if this is an access token, the device (within the account) isn't revoked,
+                // and the token is of the device's current generation.
                 when {
                     account == null || did == null -> {
                         services.metrics.jwtRejected(JwtRejection.MISSING_CLAIMS)
@@ -270,7 +260,7 @@ fun Application.configureServer(services: Services) {
                         services.metrics.jwtRejected(JwtRejection.WRONG_TYPE)
                         null
                     }
-                    services.devices.isRevoked(account, did) -> {
+                    !services.isTokenLive(account, did, credential.payload) -> {
                         services.metrics.jwtRejected(JwtRejection.DEVICE_REVOKED)
                         null
                     }

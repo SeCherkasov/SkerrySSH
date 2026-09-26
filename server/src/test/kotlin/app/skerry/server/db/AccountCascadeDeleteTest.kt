@@ -94,9 +94,12 @@ class AccountCascadeDeleteTest {
             listOf(IncomingRecord("r1", "HOST", 1, "2026-07-26T00:00:00Z", "devA", false, byteArrayOf(1, 2))),
         )
 
+        ActivityRepository(db).record("owner@example.com", "team.create", "t1", teamId = "t1")
+
         AdminRepository(db).deleteAccount("owner@example.com")
 
         assertNull(teams.team("t1"))
+        assertEquals(0L, ActivityRepository(db).countForTeam("t1"), "the deleted team's history outlived it")
         assertEquals(0, countIn(db, "team_records"))
         assertEquals(0, countIn(db, "team_scopes"))
         assertEquals(0, countIn(db, "team_scope_grants"))
@@ -196,7 +199,7 @@ class AccountCascadeDeleteTest {
             "alice@example.com",
             listOf(IncomingRecord("r1", "HOST", 1, "2026-07-26T00:00:00Z", "devA", false, byteArrayOf(1))),
         )
-        PairingRepository(db).create("code1", "alice@example.com", byteArrayOf(9), expiresAt = Long.MAX_VALUE)
+        PairingRepository(db).create("code1", "alice@example.com", "devA", byteArrayOf(9), expiresAt = Long.MAX_VALUE)
         teams.publishKey("alice@example.com", byteArrayOf(1), byteArrayOf(2), now)
         teams.create("t1", "alice@example.com", now)
 

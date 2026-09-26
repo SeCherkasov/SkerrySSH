@@ -12,6 +12,7 @@ import app.skerry.server.share.ShareJoin
 import app.skerry.server.share.ShareOpen
 import app.skerry.sync.wire.ShareDto
 import app.skerry.sync.wire.SharesResponse
+import com.auth0.jwt.interfaces.Payload
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.response.respond
@@ -93,6 +94,8 @@ private class ShareRequest(
     val shareId: String,
     val accountId: String,
     val deviceId: String,
+    /** The handshake token: a later generation bump retires the socket as a revoke does. */
+    val token: Payload,
 )
 
 /**
@@ -113,13 +116,13 @@ private suspend fun DefaultWebSocketServerSession.accept(services: Services): Sh
         close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "bad share address"))
         return null
     }
-    if (!services.hasShareAccess(teamId, principal.accountId, principal.deviceId)) {
+    if (!services.hasShareAccess(teamId, principal.accountId, principal.deviceId, principal.payload)) {
         // Same answer for "not a member", "invite not accepted" and "device revoked": a socket is
         // not the place to explain which, and the HTTP routes already draw that line.
         close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "not an active member"))
         return null
     }
-    return ShareRequest(teamId, shareId, principal.accountId, principal.deviceId)
+    return ShareRequest(teamId, shareId, principal.accountId, principal.deviceId, principal.payload)
 }
 
 /** The host's socket: its binary frames fan out to the viewers; their input and count come back. */
@@ -216,7 +219,7 @@ private suspend fun DefaultWebSocketServerSession.relayGuest(
 private fun DefaultWebSocketServerSession.watchAccess(services: Services, request: ShareRequest): Job = launch {
     while (true) {
         delay(services.shareAccessRecheckMillis)
-        if (!services.hasShareAccess(request.teamId, request.accountId, request.deviceId)) {
+        if (!services.hasShareAccess(request.teamId, request.accountId, request.deviceId, request.token)) {
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "access revoked"))
             return@launch
         }
@@ -224,8 +227,8 @@ private fun DefaultWebSocketServerSession.watchAccess(services: Services, reques
 }
 
 /** Whether [accountId] may be on a share socket of [teamId] from device [deviceId] right now. */
-private suspend fun Services.hasShareAccess(teamId: String, accountId: String, deviceId: String): Boolean {
-    if (devices.isRevoked(accountId, deviceId)) return false
+private suspend fun Services.hasShareAccess(teamId: String, accountId: String, deviceId: String, token: Payload): Boolean {
+    if (!isTokenLive(accountId, deviceId, token)) return false
     val membership = teams.membership(teamId, accountId) ?: return false
     return membership.status == TeamMemberStatus.ACTIVE
 }

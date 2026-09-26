@@ -1,5 +1,10 @@
 package app.skerry.server
 
+import io.ktor.http.HttpHeaders
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.plugins.origin
+import io.ktor.server.request.header
+
 /**
  * Resolves the per-IP rate-limit key for a request, correct behind a reverse proxy.
  *
@@ -30,3 +35,10 @@ fun rateLimitClientKey(
         .orEmpty()
     return chain.lastOrNull { it !in trustedProxies } ?: directPeer
 }
+
+/** [rateLimitClientKey] for a live request: the client address the per-IP buckets key on. */
+fun ApplicationCall.clientKey(trustedProxies: Set<String>): String = rateLimitClientKey(
+    directPeer = request.origin.remoteHost,
+    forwardedFor = request.header(HttpHeaders.XForwardedFor),
+    trustedProxies = trustedProxies,
+)
