@@ -1,7 +1,7 @@
 package app.skerry.shared.terminal
 
 /**
- * Reflow of the main buffer on resize — pure functions over [TermRow] lists, no emulator state:
+ * Reflow of the main buffer on resize — pure functions over row lists, no emulator state:
  * soft-wrapped (`wrapped`) physical rows are joined into logical rows and re-split at the new
  * width, with the cursor following its text. Tested directly and via emulator resize tests.
  */
@@ -23,7 +23,7 @@ internal object TerminalReflow {
      * the resize (blank space under the cursor is content, see step 4).
      */
     fun reflow(
-        src: List<TermRow>,
+        src: List<List<TermCell>>,
         nc: Int,
         nr: Int,
         maxScrollback: Int,
@@ -51,7 +51,7 @@ internal object TerminalReflow {
                         curLogCol = cells.size + cursorCol
                     }
                     cells.addAll(row)
-                    val wrapped = row.wrapped
+                    val wrapped = row.wrapsToNextRow()
                     i++; abs++
                     if (!wrapped || i >= src.size) break
                 }

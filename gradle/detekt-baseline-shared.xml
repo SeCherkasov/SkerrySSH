@@ -39,7 +39,7 @@
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateMode(final: Char, codes: CsiParams)</ID>
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateModeSet(code: Int): Boolean?</ID>
     <ID>CyclomaticComplexMethod:TerminalMouse.kt$fun encodeMouseReport( tracking: MouseTracking, sgr: Boolean, button: MouseButton, type: MouseEventType, col: Int, row: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false, pixels: Boolean = false, pixelX: Int = 0, pixelY: Int = 0, ): ByteArray?</ID>
-    <ID>CyclomaticComplexMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>CyclomaticComplexMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;List&lt;TermCell&gt;&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
     <ID>CyclomaticComplexMethod:TerminalSearch.kt$fun searchTerminal( screen: List&lt;List&lt;TermCell&gt;&gt;, query: String, caseSensitive: Boolean = false, regex: Boolean = false, limit: Int = DEFAULT_SEARCH_MATCH_LIMIT, stepBudget: Int = DEFAULT_REGEX_STEP_BUDGET, fromRow: Int = 0, toRow: Int = screen.size, cancelled: () -&gt; Boolean = { false }, ): TerminalSearchResult</ID>
     <ID>CyclomaticComplexMethod:TerminalSearch.kt$private fun findSubstringInCells( row: List&lt;TermCell&gt;, rowIndex: Int, query: String, caseSensitive: Boolean, remaining: Int, ): List&lt;TerminalMatch&gt;?</ID>
     <ID>CyclomaticComplexMethod:TerminalSearch.kt$private fun rowText(row: List&lt;TermCell&gt;): RowText?</ID>
@@ -64,7 +64,7 @@
     <ID>LongMethod:RfbEncodings.kt$private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
     <ID>LongMethod:SessionShareE2eTest.kt$SessionShareE2eTest$@Test fun `a viewer watches the host's terminal and types back into it`()</ID>
     <ID>LongMethod:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
-    <ID>LongMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>LongMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;List&lt;TermCell&gt;&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
     <ID>LongParameterList:ClearCodecTest.kt$ClearCodecTest$( xStart: Int, xEnd: Int, yStart: Int, yEnd: Int, bkg: Int, vBars: List&lt;ByteArray&gt;, )</ID>
     <ID>LongParameterList:ClearCodecTest.kt$ClearCodecTest$( xStart: Int, yStart: Int, width: Int, height: Int, subCodecId: Int, data: ByteArray, )</ID>
     <ID>LongParameterList:DynamicChannels.kt$DynamicChannels$( command: Int, channelId: Int, idWidth: Int, payload: ByteArray, offset: Int, length: Int, )</ID>
@@ -91,7 +91,7 @@
     <ID>LongParameterList:TeamInvite.kt$TeamInviteCodec$( teamId: String, inviterId: String, inviteeId: String, teamKey: DataKey, teamName: String, epoch: Int, scopeId: String, )</ID>
     <ID>LongParameterList:TeamInvite.kt$TeamInvitePayload$( val teamKey: DataKey, val teamName: String, val teamId: String, val inviterAccountId: String, val inviteeAccountId: String, val epoch: Int, /** Scope this key belongs to; empty for the team-wide key. See [TeamInviteCodec] on why it's signed. */ val scopeId: String = "", /** Detached signature over the canonical binding; checked by [TeamInviteCodec.verify]. */ internal val signature: ByteArray, )</ID>
     <ID>LongParameterList:TerminalMouse.kt$( tracking: MouseTracking, sgr: Boolean, button: MouseButton, type: MouseEventType, col: Int, row: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false, pixels: Boolean = false, pixelX: Int = 0, pixelY: Int = 0, )</ID>
-    <ID>LongParameterList:TerminalReflow.kt$TerminalReflow$( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, )</ID>
+    <ID>LongParameterList:TerminalReflow.kt$TerminalReflow$( src: List&lt;List&lt;TermCell&gt;&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, )</ID>
     <ID>NestedBlockDepth:ClearCodec.kt$ClearCodec$private fun bands(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
     <ID>NestedBlockDepth:ClearCodec.kt$ClearCodec$private fun subcodecs(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
     <ID>NestedBlockDepth:MoshCompression.kt$fun moshInflate(data: ByteArray, maxSize: Int = 8 * 1024 * 1024): ByteArray?</ID>
@@ -104,7 +104,7 @@
     <ID>NestedBlockDepth:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
     <ID>NestedBlockDepth:TelnetCodec.kt$TelnetCodec$fun consume(input: ByteArray): Decoded</ID>
     <ID>NestedBlockDepth:TelnetCodec.kt$TelnetCodec$private fun negotiate(cmd: Int, option: Int, reply: ArrayList&lt;Byte&gt;)</ID>
-    <ID>NestedBlockDepth:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>NestedBlockDepth:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;List&lt;TermCell&gt;&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
     <ID>NestedBlockDepth:TerminalSearch.kt$fun searchTerminal( screen: List&lt;List&lt;TermCell&gt;&gt;, query: String, caseSensitive: Boolean = false, regex: Boolean = false, limit: Int = DEFAULT_SEARCH_MATCH_LIMIT, stepBudget: Int = DEFAULT_REGEX_STEP_BUDGET, fromRow: Int = 0, toRow: Int = screen.size, cancelled: () -&gt; Boolean = { false }, ): TerminalSearchResult</ID>
     <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: AEADBadTagException</ID>
     <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: Exception</ID>
