@@ -430,6 +430,7 @@ class TerminalScreenState(
             nowMillis = nowMillis,
             apply = ::applyCommand,
             publish = ::publishSnapshot,
+            heldFor = ::synchronizedHoldMillis,
         ).run()
     }
 
@@ -486,6 +487,24 @@ class TerminalScreenState(
         }
     }
 
+    // Mode 2026 hold: when the current hold began (NOT_HOLDING since the last publish), and the
+    // frame a publish already showed torn — that one is not held again.
+    private var holdSince = NOT_HOLDING
+    private var releasedFrame = -1
+
+    /**
+     * How much longer an open synchronized-output frame (mode 2026) holds publishing; 0 when none
+     * is open or the hold ran out. The budget runs from the first held moment since the last
+     * publish, not per frame: an application that closes one frame and opens the next in the same
+     * write would otherwise restart it forever and never be drawn. Owner coroutine only.
+     */
+    private fun synchronizedHoldMillis(): Long {
+        if (!emulator.synchronizedOutput || emulator.synchronizedFrame == releasedFrame) return 0
+        val now = nowMillis()
+        if (holdSince == NOT_HOLDING) holdSince = now
+        return (SYNCHRONIZED_OUTPUT_TIMEOUT_MS - (now - holdSince)).coerceAtLeast(0)
+    }
+
     /** Feeds one PTY chunk to the parser, recording it first when a recording is running. */
     private fun feed(chunk: ByteArray) {
         recorder?.let {
@@ -528,6 +547,10 @@ class TerminalScreenState(
      * on no suspension point ever existing here.
      */
     private fun publishSnapshot() {
+        // A frame still open here is drawn torn (its hold ran out): holding it any longer gains
+        // nothing, so what follows it is drawn at the usual pace until the next frame opens.
+        holdSince = NOT_HOLDING
+        if (emulator.synchronizedOutput) releasedFrame = emulator.synchronizedFrame
         // The grid and the cursor apply as one atomic group: auto-fit reads them as a tuple under
         // snapshotFlow, and individual writes from this (session) thread could pair a fresh screen
         // with a stale cursor there — counting the user's own wrapped command line as wide output.
@@ -1428,6 +1451,16 @@ internal const val FEED_BACKLOG_CHUNKS = 64
  */
 internal const val PUBLISH_MIN_INTERVAL_MS = 16L
 
+/**
+ * Longest a synchronized-output frame (mode 2026) holds the screen. An application that opens a
+ * frame and dies, or a stream cut mid-frame, must not leave the terminal frozen; 150ms is past any
+ * real redraw and short of what reads as a hang.
+ */
+internal const val SYNCHRONIZED_OUTPUT_TIMEOUT_MS = 150L
+
+/** [TerminalScreenState]'s hold start while nothing is held. */
+private const val NOT_HOLDING = -1L
+
 /** Numpad Enter in application-keypad mode (DECKPAM), as `keypadSequence` in TerminalInput.kt sends it. */
 private const val NUMPAD_ENTER_SS3 = "\u001bOM"
 
@@ -1448,6 +1481,8 @@ private class EmulatorOwnerLoop(
     private val nowMillis: () -> Long,
     private val apply: suspend (TerminalCommand) -> Unit,
     private val publish: () -> Unit,
+    /** How long the application still holds the screen mid-frame (mode 2026); 0 when it does not. */
+    private val heldFor: () -> Long,
 ) {
     private var lastPublishAt = Long.MIN_VALUE / 2
     private var dirty = false
@@ -1480,6 +1515,14 @@ private class EmulatorOwnerLoop(
         // already applied - the finally's guarantee covers the whole batch, not just its tail.
         dirty = true
         val windowSpentParsing = drainWithinWindow(entered)
+        val held = heldFor()
+        if (held > 0) {
+            if (windowSpentParsing) yield()
+            // The frame closes with a later command; if none comes, the hold expiring draws it.
+            val next = awaitCommand(held)
+            if (next == null) publishNow(nowMillis())
+            return next
+        }
         val now = nowMillis()
         if (now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
             publishNow(now)
@@ -1488,7 +1531,7 @@ private class EmulatorOwnerLoop(
             if (windowSpentParsing) yield()
             return null
         }
-        val next = awaitWindowEdge(now - lastPublishAt)
+        val next = awaitCommand(PUBLISH_MIN_INTERVAL_MS - (now - lastPublishAt))
         if (next == null) publishNow(nowMillis())
         return next
     }
@@ -1511,15 +1554,15 @@ private class EmulatorOwnerLoop(
     }
 
     /**
-     * Waits for the next command or the window edge, whichever comes first; null means the edge.
-     * Runs once per drained batch during a sub-window burst — its per-call allocation is bounded
-     * by burst cadence, not by the publish window.
+     * Waits for the next command or [timeoutMs], whichever comes first; null means the timeout —
+     * the window edge, or the end of a synchronized-output hold. Runs once per drained batch during
+     * a sub-window burst — its per-call allocation is bounded by burst cadence, not by the window.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun awaitWindowEdge(elapsed: Long): ChannelResult<TerminalCommand>? =
+    private suspend fun awaitCommand(timeoutMs: Long): ChannelResult<TerminalCommand>? =
         select {
             commands.onReceiveCatching { it }
-            onTimeout(PUBLISH_MIN_INTERVAL_MS - elapsed) { null }
+            onTimeout(timeoutMs) { null }
         }
 
     private fun publishNow(at: Long) {

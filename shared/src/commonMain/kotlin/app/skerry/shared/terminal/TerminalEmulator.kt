@@ -222,7 +222,7 @@ const val DEFAULT_MAX_SCROLLBACK = 5000
  * insert/delete (ICH/DCH/ECH/IL/DL/SU/SD);
  * scroll region (DECSTBM); insert mode (IRM); full SGR (attributes + 16/256/truecolor);
  * private modes (DECCKM/DECOM/DECAWM/?25/alt-screen 47/1047/1049/mouse 1000-1006/bracketed
- * paste 2004); tab stops; DSR/DA replies and window title (OSC 0/1/2). Unknown sequences are
+ * paste 2004/synchronized output 2026); tab stops; DSR/DA replies and window title (OSC 0/1/2). Unknown sequences are
  * safely absorbed.
  *
  * NOT thread-safe: [feed] and state reads run on the same output-collecting coroutine
@@ -410,6 +410,19 @@ class TerminalEmulator(
     var mouseSgr: Boolean = false
         private set
     var mousePixels: Boolean = false
+        private set
+
+    /**
+     * Synchronized output (DEC 2026): the application is in the middle of drawing a frame, and the
+     * UI holds the screen until it closes the frame — a redraw spread over several writes is then
+     * never shown half old, half new. The UI bounds the hold itself: a frame an application never
+     * closes must not freeze the screen.
+     */
+    var synchronizedOutput: Boolean = false
+        private set
+
+    /** Bumped each time a frame opens, so a close and a reopen inside one batch still read as a new frame. */
+    var synchronizedFrame: Int = 0
         private set
 
     /** Focus reporting (DEC 1004): when enabled, the UI sends ESC[I on window focus and ESC[O on blur. */
@@ -1045,6 +1058,12 @@ class TerminalEmulator(
         }
     }
 
+    /** Mode 2026: opening a frame that is not already open starts a new one. */
+    private fun setSynchronizedOutput(on: Boolean) {
+        if (on && !synchronizedOutput) synchronizedFrame++
+        synchronizedOutput = on
+    }
+
     private fun privateMode(final: Char, codes: CsiParams) {
         if (final != 'h' && final != 'l') return
         val on = final == 'h'
@@ -1061,6 +1080,7 @@ class TerminalEmulator(
             1006 -> mouseSgr = on
             1016 -> mousePixels = on
             2004 -> bracketedPaste = on
+            2026 -> setSynchronizedOutput(on)
             47, 1047 -> setAltScreen(on, saveRestore = false)
             1049 -> setAltScreen(on, saveRestore = true)
         }
@@ -1091,6 +1111,7 @@ class TerminalEmulator(
         1006 -> mouseSgr
         1016 -> mousePixels
         2004 -> bracketedPaste
+        2026 -> synchronizedOutput
         47, 1047, 1049 -> altScreen
         else -> null
     }
@@ -1471,6 +1492,7 @@ class TerminalEmulator(
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
         restoreDefaultCursor()
         applicationCursorKeys = false; applicationKeypad = false
+        synchronizedOutput = false
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; mousePixels = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
