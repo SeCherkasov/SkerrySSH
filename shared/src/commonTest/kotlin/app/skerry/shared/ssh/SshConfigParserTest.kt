@@ -342,4 +342,30 @@ class SshConfigParserTest {
         assertEquals(listOf("real"), result.hosts.map { it.alias })
         assertEquals("10.0.0.2", result.hosts.single().hostName)
     }
+
+    @Test
+    fun `HostName expands the alias token and a literal percent`() {
+        // OpenSSH accepts %h (the name typed on the command line) and %% in HostName; stored
+        // literally, `%h.corp` is a DNS name nobody has.
+        val result = parse(
+            """
+            Host web db
+                HostName %h.corp
+            Host odd
+                HostName odd%%1.example
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf("web.corp", "db.corp", "odd%1.example"),
+            result.hosts.map { it.hostName },
+        )
+    }
+
+    @Test
+    fun `a HostName token OpenSSH does not define there is left as written`() {
+        val host = parse("Host web\n    HostName %p.%x.example").hosts.single()
+
+        assertEquals("%p.%x.example", host.hostName)
+    }
 }

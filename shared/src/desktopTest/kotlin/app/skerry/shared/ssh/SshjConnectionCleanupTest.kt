@@ -4,12 +4,16 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.nio.charset.Charset
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.LoggerFactory
 import net.schmizz.sshj.common.Message
 import net.schmizz.sshj.common.SSHException
@@ -52,6 +56,32 @@ class SshjConnectionCleanupTest {
         }
     }
 
+    /**
+     * The graceful disconnect writes SSH_MSG_DISCONNECT, and a write into a dead peer's full TCP
+     * buffer neither finishes nor answers an interrupt — `runInterruptible` then waits for it as long
+     * as it takes, and the timeout around it never fires. Only closing the socket ends that write.
+     */
+    @Test
+    fun `disconnect returns within its bound when the graceful disconnect is stuck`() = runBlocking<Unit> {
+        val target = StuckDisconnectClient()
+        val hop = StuckDisconnectClient()
+        val connection = SshjConnection(
+            target,
+            cipher = null,
+            serverVersion = null,
+            upstream = listOf(hop),
+            disconnectTimeoutMillis = 200,
+        )
+
+        val started = System.nanoTime()
+        connection.disconnect()
+        val millis = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue(millis < 3_000, "disconnect took ${millis}ms")
+        assertTrue(target.socketClosed, "the target's socket was never closed")
+        assertTrue(hop.socketClosed, "the jump host's socket was never closed")
+    }
+
     @Test
     fun `a rejected pty closes the session channel`() {
         val session = PtyRejectingSession()
@@ -61,6 +91,35 @@ class SshjConnectionCleanupTest {
         }
 
         assertTrue(session.closed)
+    }
+}
+
+/**
+ * A client whose graceful disconnect behaves like a write into a full send buffer: interrupts do not
+ * end it, closing the socket does. Capped so a regression fails the test instead of hanging it.
+ */
+private class StuckDisconnectClient : SSHClient() {
+    private val released = CountDownLatch(1)
+    private val socket = object : Socket() {
+        override fun close() {
+            released.countDown()
+            super.close()
+        }
+    }
+
+    val socketClosed: Boolean get() = released.count == 0L
+
+    override fun getSocket(): Socket = socket
+
+    override fun disconnect() {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (released.count > 0 && System.nanoTime() < deadline) {
+            try {
+                released.await(50, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                // A blocked socket write does not answer an interrupt either.
+            }
+        }
     }
 }
 

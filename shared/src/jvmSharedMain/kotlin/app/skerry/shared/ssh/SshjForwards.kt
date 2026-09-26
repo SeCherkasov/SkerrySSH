@@ -77,6 +77,19 @@ internal class ForwardState {
     val down = AtomicLong(0)
     val live: MutableSet<Closeable> = ConcurrentHashMap.newKeySet()
 
+    private val lock = Any()
+
+    /**
+     * Adds [resource] to [live] unless the forward is already shut down; false means the caller
+     * closes it and goes no further. Checked under the same lock [deactivate] takes: a connection
+     * accepted a moment before close() reaches its handler a moment after it, when [closeAll] has
+     * already run, and nothing would ever close what it registered then.
+     */
+    fun admit(resource: Closeable): Boolean = synchronized(lock) { active.get() && live.add(resource) }
+
+    /** Marks the forward shut down; true for the one caller that now owns the teardown. */
+    fun deactivate(): Boolean = synchronized(lock) { active.compareAndSet(true, false) }
+
     /** Closes all live resources (already-open tunnels/channels); close errors are swallowed. */
     fun closeAll() {
         live.toList().forEach { runCatching { it.close() } }
@@ -119,7 +132,7 @@ internal abstract class AcceptingForward(
                     // is being accepted, so take it down explicitly and let isActive report it.
                     // compareAndSet, not get-then-set: close() may be running concurrently, and
                     // exactly one of the two owns the teardown.
-                    if (!serverSocket.isClosed && state.active.compareAndSet(true, false)) {
+                    if (!serverSocket.isClosed && state.deactivate()) {
                         runCatching { serverSocket.close() }
                         state.closeAll()
                     }
@@ -127,12 +140,16 @@ internal abstract class AcceptingForward(
                 }
                 // Paused: keep the port bound but drop the connection immediately, no tunnel raised.
                 if (state.paused.get()) { runCatching { socket.close() }; continue }
+                if (!state.admit(socket)) { runCatching { socket.close() }; break }
                 thread(isDaemon = true, name = "$threadName-conn-$boundPort") { handle(socket) }
             }
         }
     }
 
-    /** Serves an accepted connection: opens an SSH channel to the destination and pumps bytes via [tunnel]. */
+    /**
+     * Serves an accepted connection, already in `state.live`: opens an SSH channel to the destination
+     * and pumps bytes via [tunnel]. The channel goes through [ForwardState.admit] too.
+     */
     protected abstract fun handle(socket: Socket)
 
     final override suspend fun pause() = withContext(Dispatchers.IO) { state.paused.set(true) }
@@ -143,7 +160,7 @@ internal abstract class AcceptingForward(
         // race only means its work is already being done. The join still has to happen either way:
         // close() returning is the caller's signal that the listener is down and every live tunnel
         // is settled, and that guarantee must not hold only on the path where nothing went wrong.
-        if (state.active.compareAndSet(true, false)) {
+        if (state.deactivate()) {
             runCatching { serverSocket.close() } // breaks accept
             state.closeAll() // tear down already-open tunnels
         }
@@ -173,12 +190,11 @@ internal class SshjLocalForward(
 
     override fun handle(socket: Socket) {
         var channel: DirectConnection? = null
-        state.live.add(socket)
         try {
             socket.tcpNoDelay = true
             channel = client.newDirectConnection(destHost, destPort)
             val ch = channel
-            state.live.add(ch)
+            if (!state.admit(ch)) return
             tunnel(socket, ch, state.up, state.down, "skerry-local-$boundPort")
         } catch (e: Exception) {
             // Connection/channel drop — normal tunnel termination.
@@ -204,7 +220,6 @@ internal class SshjDynamicForward(
 
     override fun handle(socket: Socket) {
         var channel: DirectConnection? = null
-        state.live.add(socket)
         try {
             socket.tcpNoDelay = true
             val input = socket.getInputStream()
@@ -217,7 +232,7 @@ internal class SshjDynamicForward(
                 return
             }
             val ch = channel
-            state.live.add(ch)
+            if (!state.admit(ch)) return
             Socks5.replySuccess(output)
             tunnel(socket, ch, state.up, state.down, "skerry-socks-$boundPort")
         } catch (e: Exception) {
@@ -256,15 +271,15 @@ internal class SshjRemoteForward private constructor(
 
     private fun gotConnect(channel: Channel.Forwarded) {
         // Paused/torn down: reject the incoming channel (server sees a refusal) instead of silently closing it.
-        if (!state.active.get() || state.paused.get()) {
+        if (state.paused.get() || !state.admit(channel)) {
             runCatching { channel.reject(OpenFailException.Reason.ADMINISTRATIVELY_PROHIBITED, "tunnel paused") }
             return
         }
         thread(isDaemon = true, name = "skerry-remote-conn-$boundPort") { handle(channel) }
     }
 
+    /** Serves an incoming channel [gotConnect] already put in `state.live`. */
     private fun handle(channel: Channel.Forwarded) {
-        state.live.add(channel)
         // Connect to the local destination first; on failure, reject the channel and bail.
         val socket = try {
             Socket(destHost, destPort).apply { tcpNoDelay = true }
@@ -274,8 +289,8 @@ internal class SshjRemoteForward private constructor(
             runCatching { channel.close() }
             return
         }
-        state.live.add(socket)
         try {
+            if (!state.admit(socket)) return
             // Confirm the forwarded channel open — without this the server won't start sending data.
             channel.confirm()
             // near = local destination socket, far = channel from the server: up = destination's
@@ -296,7 +311,7 @@ internal class SshjRemoteForward private constructor(
     override suspend fun resume() = withContext(Dispatchers.IO) { state.paused.set(false) }
 
     override suspend fun close() = withContext(Dispatchers.IO) {
-        if (!state.active.compareAndSet(true, false)) return@withContext
+        if (!state.deactivate()) return@withContext
         runCatching { forwarder.cancel(forward) }
         state.closeAll()
         Unit

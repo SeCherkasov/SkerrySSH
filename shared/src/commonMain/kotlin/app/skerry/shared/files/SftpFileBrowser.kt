@@ -61,7 +61,7 @@ class SftpFileBrowser(
     /**
      * Traversal worker for [delete]. Called only from [delete] and relies on its [guard]: all SFTP
      * calls here throw [SftpException], caught by the outer [guard] (the whole recursion runs inside
-     * its single try). Before descending into a child, verifies its path is actually nested under
+     * its single try). Before descending into a child, verifies its path is one segment (not `.`/`..`) under
      * [path] — otherwise a server returning a listing entry outside the directory (by bug or by
      * intent) could cause deletion of something the user didn't select. That check passes at every
      * level of a directory listed as its own child, because the path only grows: [refuseTooDeep] is
@@ -99,7 +99,11 @@ class SftpFileBrowser(
         refuseOversizedListing(path, children.size, hold)
         val childHold = hold - children.size
         children.forEach { child ->
-            if (!child.path.startsWith(prefix)) {
+            // One path segment below [path], and not `.` or `..`: a prefix alone lets `/d/../..`
+            // through, and the walk would then empty whatever that resolves to on the server.
+            val segment = child.path.removePrefix(prefix)
+            val oneLevelDown = segment.isNotEmpty() && '/' !in segment && segment != "." && segment != ".."
+            if (!child.path.startsWith(prefix) || !oneLevelDown) {
                 throw SftpException("Listing $path returned a path outside the directory: ${child.path}")
             }
             deleteTree(child.path, child.type == SftpEntryType.Directory, depth + 1, childHold)

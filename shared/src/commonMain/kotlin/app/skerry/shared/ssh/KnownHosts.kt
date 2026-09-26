@@ -247,7 +247,8 @@ enum class UnknownHost {
  * for a real session ([TofuHostKeyVerifier]).
  *
  * A matching stored key is accepted; a mismatch for an already-known host is rejected (MITM
- * protection); a host with no entry is decided by [unknownHost], which every call site states
+ * protection), and so is a key under an algorithm the host has no record for when it has one under
+ * another; a host with no entry at all is decided by [unknownHost], which every call site states
  * explicitly because the two answers are not interchangeable — see [UnknownHost]. An unreadable store
  * rejects everything — fail closed, the same rule as [TofuHostKeyVerifier], since a locked vault must
  * not read as "host never seen".
@@ -264,6 +265,10 @@ class ReadOnlyHostKeyVerifier(
             it.host == bare.host && it.port == bare.port && it.keyType == bare.keyType
         }
         return when {
+            // Known under another algorithm: not a first contact, for the reason given in
+            // [TofuHostKeyVerifier.check]. Only a real session may put that key to the user.
+            existing == null && known.any { it.host == bare.host && it.port == bare.port } ->
+                HostKeyRefusal.NotTrustedYet
             existing == null -> HostKeyRefusal.NotTrustedYet.takeIf { unknownHost == UnknownHost.Refuse }
             existing.fingerprint == bare.fingerprint -> null
             else -> HostKeyRefusal.KeyChanged

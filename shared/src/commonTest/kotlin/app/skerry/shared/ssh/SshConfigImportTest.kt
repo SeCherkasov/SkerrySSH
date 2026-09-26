@@ -244,4 +244,61 @@ class SshConfigImportTest {
 
         assertEquals(listOf("a"), plan.credentials.map { it.label })
     }
+
+    @Test
+    fun `key and certificate paths expand the tokens known at import`() {
+        // What OpenSSH would expand when it connects: %h the resolved host, %n the alias, %p the port,
+        // %r the remote user, %u the local user, %d the local home (left to the file reader as ~).
+        val plan = SshConfigImport.plan(
+            hosts = listOf(
+                host(
+                    "web",
+                    hostName = "web.corp",
+                    port = 2222,
+                    user = "deploy",
+                    identityFile = "%d/.ssh/%n/%h-%p-%r-%u%%",
+                    certificateFile = "~/.ssh/%h-cert.pub",
+                ),
+            ),
+            selected = setOf("web"),
+            defaultUser = "alice",
+            newId = ids(),
+        )
+
+        val secret = plan.credentials.single().secret as CredentialSecret.KeyFile
+        assertEquals("~/.ssh/web/web.corp-2222-deploy-alice%", secret.privateKeyRef)
+        assertEquals("~/.ssh/web.corp-cert.pub", secret.certificateRef)
+    }
+
+    @Test
+    fun `one templated key path is one credential per host it expands to`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(
+                host("a", identityFile = "~/.ssh/%h"),
+                host("b", identityFile = "~/.ssh/%h"),
+            ),
+            selected = setOf("a", "b"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals(
+            listOf("~/.ssh/a", "~/.ssh/b"),
+            plan.credentials.map { (it.secret as CredentialSecret.KeyFile).privateKeyRef },
+        )
+    }
+
+    @Test
+    fun `a token that cannot be known at import is left as written`() {
+        // %u without a local user, %C (a connection hash) and %l (the local host name) are not
+        // guessed: a wrong path is worse than one the user can see is unexpanded.
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/%u-%C-%l")),
+            selected = setOf("web"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals("~/.ssh/%u-%C-%l", (plan.credentials.single().secret as CredentialSecret.KeyFile).privateKeyRef)
+    }
 }

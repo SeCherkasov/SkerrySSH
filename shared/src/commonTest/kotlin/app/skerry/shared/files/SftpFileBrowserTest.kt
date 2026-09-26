@@ -268,6 +268,39 @@ class SftpFileBrowserTest {
     }
 
     @Test
+    fun `delete refuses a listing entry that climbs out through dot-dot`() = runTest {
+        // `/d/sub/../..` starts with `/d/sub/`, so a prefix check alone lets the walk recurse into
+        // `/` — the server names the entry, and the name can be anything but `.` and `..` exactly.
+        client.listings["/d/sub"] = listOf(
+            SftpEntry("../..", "/d/sub/../..", SftpEntryType.Directory, 0, 0, 0),
+        )
+        client.listings["/d/sub/../.."] = listOf(
+            SftpEntry("etc", "/d/sub/../../etc", SftpEntryType.File, 0, 0, 0),
+        )
+
+        assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("sub", "/d/sub", FileItemType.Directory, 0, 0))
+        }
+        assertTrue(
+            client.calls.none { it.startsWith("remove:") || it.startsWith("rmdir:") || it == "list:/d/sub/../.." },
+            "the walk left the directory: ${client.calls}",
+        )
+    }
+
+    @Test
+    fun `delete refuses a listing entry naming the directory itself or a nested path`() = runTest {
+        for (child in listOf("/d/sub/.", "/d/sub/..", "/d/sub/a/b", "/d/sub/")) {
+            client.calls.clear()
+            client.listings["/d/sub"] = listOf(SftpEntry(child.substringAfter("/d/sub/"), child, SftpEntryType.File, 0, 0, 0))
+
+            assertFailsWith<FileBrowserException>(child) {
+                browser().delete(FileItem("sub", "/d/sub", FileItemType.Directory, 0, 0))
+            }
+            assertTrue(client.calls.none { it.startsWith("remove:") || it.startsWith("rmdir:") }, "$child: ${client.calls}")
+        }
+    }
+
+    @Test
     fun `delete of a non-empty directory clears contents recursively then rmdir`() = runTest {
         // /d/sub: a file, a symlink, and a nested non-empty directory.
         client.listings["/d/sub"] = listOf(

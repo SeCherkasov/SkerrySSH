@@ -31,8 +31,8 @@ object SshConfigImport {
      * against the ids of the hosts in this same batch — a jump target that isn't selected leaves
      * [Host.jumpHostId] `null` rather than a dangling reference.
      *
-     * Hosts naming the same (key, certificate) pair — compared literally, as OpenSSH itself compares
-     * `IdentityFile` values — share one credential. Labels are derived
+     * Hosts naming the same (key, certificate) pair — compared literally after `%` token expansion
+     * ([keyRefs]), as OpenSSH itself compares `IdentityFile` values — share one credential. Labels are derived
      * from the file name and made unique against each other and [existingLabels] — snippets address
      * secrets by label (`${{vault:…}}`), so a collision would silently retarget them.
      */
@@ -51,8 +51,8 @@ object SshConfigImport {
         val credentials = LinkedHashMap<KeyRefs, Credential>()
         val takenLabels = existingLabels.toMutableSet()
         for (entry in chosen) {
-            val key = entry.identityFile?.takeIf { it.isNotBlank() } ?: continue
-            val refs = KeyRefs(key, entry.certificateFile?.takeIf { it.isNotBlank() })
+            val refs = keyRefs(entry, defaultUser) ?: continue
+            val key = refs.key
             credentials.getOrPut(refs) {
                 Credential(
                     id = newId(),
@@ -63,8 +63,7 @@ object SshConfigImport {
         }
 
         val planned = chosen.map { entry ->
-            val refs = entry.identityFile?.takeIf { it.isNotBlank() }
-                ?.let { KeyRefs(it, entry.certificateFile?.takeIf { c -> c.isNotBlank() }) }
+            val refs = keyRefs(entry, defaultUser)
             Host(
                 id = idByAlias.getValue(entry.alias),
                 label = entry.alias,
@@ -84,6 +83,28 @@ object SshConfigImport {
 
     /** Key and certificate locations together — the identity of a credential within one import. */
     private data class KeyRefs(val key: String, val certificate: String?)
+
+    /**
+     * [entry]'s key and certificate locations with the `%` tokens OpenSSH would expand at connect
+     * time and that are already known here: `%h` the resolved host, `%n` the alias, `%p` the port,
+     * `%r` the remote user, `%u` the local user ([localUser]), and `%d` the local home as `~`, which
+     * the file reader resolves on the device that reads the key. Null when there is no key.
+     */
+    private fun keyRefs(entry: SshConfigHost, localUser: String?): KeyRefs? {
+        val key = entry.identityFile?.takeIf { it.isNotBlank() } ?: return null
+        val tokens = buildMap {
+            put('h', entry.hostName)
+            put('n', entry.alias)
+            put('p', entry.port.toString())
+            put('d', "~")
+            (entry.user ?: localUser)?.let { put('r', it) }
+            localUser?.let { put('u', it) }
+        }
+        return KeyRefs(
+            expandSshTokens(key, tokens),
+            entry.certificateFile?.takeIf { it.isNotBlank() }?.let { expandSshTokens(it, tokens) },
+        )
+    }
 
     /** File name of a ref, without directories: `~/.ssh/id_ed25519` → `id_ed25519`. */
     private fun labelFor(ref: String): String =
