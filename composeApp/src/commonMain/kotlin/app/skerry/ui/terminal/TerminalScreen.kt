@@ -809,7 +809,8 @@ fun TerminalScreen(
                       if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
                   }
                   // 4) Hyperlinks (OSC 8) are underlined in a separate pass — runs of adjacent cells with
-                  // one URI; skip those already underlined by the app (SGR) to avoid duplicating.
+                  // one URI; skip those already underlined by the app (SGR) to avoid duplicating. Only
+                  // a URI Ctrl+click would open: a file:// link is a path, underlined on hover (pass 6).
                   var h = 0
                   while (h < row.size) {
                       val uri = row[h].hyperlink
@@ -817,6 +818,7 @@ fun TerminalScreen(
                       val from = h
                       while (h < row.size && row[h].hyperlink == uri) h++
                       val to = h
+                      if (!isSafeLinkUri(uri)) continue
                       // blocksLinkUnderline skips concealed cells (SGR 8) in all three link passes:
                       // LINK_UNDERLINE_STYLE carries its own color and hidden=false, so it bypasses
                       // underlineDrawColor's hidden gate and would trace the hidden run's position.
@@ -1157,9 +1159,9 @@ fun TerminalScreen(
                                 down.consume()
                                 return@awaitEachGesture
                             }
-                            // No URL here: a bare file path opens in this session's file panel. The
-                            // path is server-controlled text, so it goes to the SFTP pane (which
-                            // only ever lists it), never to the platform URI handler.
+                            // No URL here: a file path (bare, or a file:// link) opens in this
+                            // session's file panel. The path is server-controlled text, so it goes to
+                            // the SFTP pane (which only ever lists it), never to the platform URI handler.
                             val path = filePathUnderPos(pos)
                             if (path != null && onOpenPath != null) {
                                 onOpenPath(path.uri)
