@@ -94,8 +94,11 @@ object RunbookMarker {
         // dangling `&&`/`;;` the appended `;` is a syntax error that makes the shell drop the WHOLE
         // line — in both cases no mark is ever emitted and the run waits forever.
         if (endsInComment(trimmed) || endsInDanglingOperator(trimmed)) return "\n$probe"
+        // An escaped `\;` is an argument (`find … -exec rm {} \;`), not a separator: it still
+        // needs one of its own, or the probe becomes more arguments to the command.
         val last = trimmed.last()
-        return if (last == ';' || last == '&') " $probe" else "; $probe"
+        val separated = (last == ';' || last == '&') && !endsInLineContinuation(trimmed.dropLast(1))
+        return if (separated) " $probe" else "; $probe"
     }
 
     /**
@@ -114,12 +117,15 @@ object RunbookMarker {
                 c == '\\' && !single -> i++ // the next character is literal
                 c == '\'' && !double -> single = !single
                 c == '"' && !single -> double = !double
-                c == '#' && !single && !double && (i == 0 || line[i - 1].isWhitespace()) -> return true
+                c == '#' && !single && !double && (i == 0 || startsWord(line[i - 1])) -> return true
             }
             i++
         }
         return false
     }
+
+    /** Whether a `#` after [previous] starts a word: after a blank or a shell operator. */
+    private fun startsWord(previous: Char): Boolean = previous.isWhitespace() || previous in WORD_BREAKS
 
     /** Whether [line] ends on an operator that still expects a command after it. */
     private fun endsInDanglingOperator(line: String): Boolean =
@@ -141,6 +147,8 @@ object RunbookMarker {
     }
 
     private val DANGLING_OPERATORS = listOf("&&", "||", "|", ";;")
+
+    private const val WORD_BREAKS = ";&|()<>"
 
     // Written as printf's own escapes (`\033`, `\a`), not as bytes: an invisible control character
     // in a Kotlin source file is unreadable in a diff and silently lost on edit.

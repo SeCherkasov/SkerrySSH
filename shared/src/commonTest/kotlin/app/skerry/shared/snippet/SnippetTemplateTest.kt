@@ -273,8 +273,9 @@ class SnippetTemplateTest {
         // The generated value is spliced unquoted into the confirmed line, so no character may be
         // a shell metacharacter, a quote, whitespace, or a glob/expansion trigger — nor `#` (word
         // -start comment truncates the confirmed line), `^` (history substitution at line start)
-        // or `=` (a first-word splice would parse as a variable assignment).
-        val unsafe = " \t\"'`\\${'$'}|&;()<>*?[]{}!~#^="
+        // or `=` (a first-word splice would parse as a variable assignment), nor `-`/`+` (a value
+        // starting with one, spliced as an argument, is read as an option: `touch -rX…`).
+        val unsafe = " \t\"'`\\${'$'}|&;()<>*?[]{}!~#^=-+"
         for (alphabet in listOf(
             SnippetRandomAlphabets.DEFAULT,
             SnippetRandomAlphabets.ALNUM,

@@ -72,10 +72,11 @@ object SnippetRandomAlphabets {
 
     // No `#` (starts a shell comment at word start — the confirmed line would run truncated),
     // no `^` (bash history substitution at line start), no `=` (a draw containing it, spliced as
-    // the line's first word, parses as a variable assignment; zsh aborts on word-initial `=`).
+    // the line's first word, parses as a variable assignment; zsh aborts on word-initial `=`),
+    // no `-`/`+` (a draw starting with one, spliced as an argument, is parsed as an option).
     // Position-dependent, so a per-draw check can't save them: a value must be inert wherever
     // the template splices it.
-    const val SPECIAL = "$ALNUM@%_+-:,./"
+    const val SPECIAL = "$ALNUM@%_:,./"
 
     /** Alphabet for a `${'$'}{{random:…}}` charset token, or `null` if the token names none. */
     fun forName(name: String): String? = when (name) {
