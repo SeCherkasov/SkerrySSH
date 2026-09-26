@@ -128,7 +128,7 @@ class TerminalScreenState(
         // hang. Called synchronously from feed() (owner coroutine): must only write to the PTY
         // (send -> session.send) and never start a new feed/resize, or the emulator's single-thread
         // contract breaks.
-        respond = { reply -> if (answersQueries) send(reply) },
+        respond = { reply -> if (answersQueries) outbound.reply(reply.encodeToByteArray()) },
         // OSC 52 write is also called synchronously from feed(); publish to the flow, UI thread
         // writes to the system clipboard. Gated in the emulator by [clipboardWriteEnabled].
         onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
@@ -388,10 +388,9 @@ class TerminalScreenState(
      */
     internal var emulatorResizeInterceptor: (() -> Unit)? = null
 
-    // Outbound byte queue to the PTY (input, mouse reports, DSR/DA responses). The single consumer
-    // in init serializes writes, preserving order across sends from different coroutines. UNLIMITED
-    // means trySend never blocks or drops (fire-and-forget).
-    private val outbound = Channel<ByteArray>(Channel.UNLIMITED)
+    // Outbound byte queue to the PTY (input, mouse reports, DSR/DA responses). The single writer
+    // in init serializes writes, preserving order across sends from different coroutines.
+    private val outbound = TerminalOutbound()
 
     // Last size sent to the PTY: duplicates are suppressed to avoid spamming resize on relayout.
     // @Volatile because resize() can be called from different coroutines (LaunchedEffect/gestures).
@@ -1144,7 +1143,7 @@ class TerminalScreenState(
 
     /** Send typed text to the PTY (fire-and-forget via the [outbound] queue, FIFO order). */
     fun send(text: String) {
-        outbound.trySend(text.encodeToByteArray())
+        outbound.send(text.encodeToByteArray())
     }
 
     /**
@@ -1189,7 +1188,7 @@ class TerminalScreenState(
      * can exceed 0x7f and must not be run through UTF-8 like [send] does.
      */
     fun sendBytes(bytes: ByteArray) {
-        outbound.trySend(bytes)
+        outbound.send(bytes)
     }
 
     /**
@@ -1421,7 +1420,7 @@ class TerminalScreenState(
         // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
         // many coroutines call send/sendBytes. All sends go through [outbound].
         scope.launch {
-            for (bytes in outbound) session.send(bytes)
+            outbound.drainTo { session.send(it) }
         }
     }
 }
