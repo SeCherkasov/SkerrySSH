@@ -2,6 +2,10 @@ package app.skerry.ui.terminal
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -12,6 +16,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.shared.ssh.PtySize
@@ -66,6 +71,9 @@ class TerminalHighlightRenderTest {
     }
 
     private val theme = TerminalThemes.NightSea
+
+    private fun TerminalScreenState.text(row: Int): String =
+        screen.getOrNull(row)?.joinToString("") { it.text }?.trimEnd().orEmpty()
 
     /** Frames spent on layout before the first emit — nothing is asserted about them. */
     private val layoutFrames = 3
@@ -504,6 +512,91 @@ class TerminalHighlightRenderTest {
                 // New content really does re-segment.
                 session.emit("!")
                 frames.awaitFrame("new content to re-segment its rows") { glyphRunSegmentations > segmentations }
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aPublishReworksOnlyTheRowThatChanged() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides theme,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = true),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                val frames = SceneFrames(scene)
+                frames.settle(layoutFrames)
+                session.emit("ERROR one\r\nWARN two\r\nplain three\r\nlast")
+                frames.awaitFrame("the rows to be drawn") { glyphRunSegmentations > 0 && state.text(3) == "last" }
+                frames.settle(settleFrames)
+                val segmentations = glyphRunSegmentations
+                val layouts = glyphLayoutMeasures
+                val scans = outputHighlightScans
+
+                // A status-line style update: one row rewritten, every other row untouched.
+                session.emit("!")
+                frames.awaitFrame("the changed row to be re-segmented") { glyphRunSegmentations > segmentations }
+                frames.settle(settleFrames)
+                assertEquals(1, glyphRunSegmentations - segmentations, "only the changed row is re-segmented")
+                assertEquals(1, glyphLayoutMeasures - layouts, "only the changed row's run is laid out again")
+                assertEquals(1, outputHighlightScans - scans, "only the changed row is rescanned for output highlights")
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aThemeOrDensitySwitchLaysEveryRowOutAgain() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        var activeTheme by mutableStateOf(theme)
+        var density by mutableStateOf(Density(1f))
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides activeTheme,
+                            LocalDensity provides density,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = false),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                val frames = SceneFrames(scene)
+                frames.settle(layoutFrames)
+                session.emit("one\r\ntwo\r\nthree\r\nfour")
+                frames.awaitFrame("the rows to be drawn") { state.text(3) == "four" && glyphLayoutMeasures > 0 }
+                frames.settle(settleFrames)
+
+                // Cached layouts carry the old colors and pixel sizes: each switch must rebuild them.
+                val beforeTheme = glyphLayoutMeasures
+                activeTheme = theme.copy(foreground = Color(0x12, 0x34, 0x56))
+                frames.awaitFrame("the theme switch to relayout the rows") { glyphLayoutMeasures - beforeTheme >= 4 }
+
+                frames.settle(settleFrames)
+                // The window moves to a 2x monitor: twice the pixels, the same grid — so the rows
+                // stay the same instances and only the generation can tell their layouts are stale.
+                val beforeDensity = glyphLayoutMeasures
+                scene.constraints = Constraints.fixed(840, 480)
+                density = Density(2f)
+                frames.awaitFrame("the density switch to relayout the rows") { glyphLayoutMeasures - beforeDensity >= 4 }
             }
         } finally {
             scope.cancel()

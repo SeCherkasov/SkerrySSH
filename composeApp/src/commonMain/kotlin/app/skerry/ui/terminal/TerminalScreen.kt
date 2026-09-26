@@ -127,6 +127,12 @@ private fun TermCell.blocksLinkUnderline(): Boolean = style.underline || style.h
 /** Rows the glyph-run cache may hold - several draw windows; see the cache's comment. */
 private const val GLYPH_RUN_CACHE_ROWS = 512
 
+/**
+ * Glyph runs the cache may hold across all rows. A row of alternating colors is a run per cell, so
+ * the row cap alone would let a wide screen of them keep hundreds of thousands of runs and layouts.
+ */
+private const val GLYPH_RUN_CACHE_RUNS = 16_384
+
 // Test-only counter of TerminalScreen body executions (single-threaded: composition or the
 // sequential test JVM; revisit before enabling parallel test execution). Pins that the cursor
 // blink repaints its overlay without recomposing the screen.
@@ -502,7 +508,9 @@ fun TerminalScreen(
     // memoize. Reset on a base style or palette (OSC 4/104) change — the result depends on them.
     // Keyed by TermStyle, then by highlight category: looking up a highlighted run must not build a
     // derived TermStyle first, or every frame of a drag would allocate one per run just to hit the cache.
-    val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, Array<TextStyle?>>() }
+    // Its instance is also the generation of the glyph layouts cached per row (RowRenderCache), so
+    // density is in the keys: a layout is measured in pixels.
+    val glyphStyleCache = remember(textStyle, state.palette, termTheme, density) { HashMap<TermStyle, Array<TextStyle?>>() }
 
     // textStyle-derived styles are computed once per font/theme change, not in the draw phase: the
     // cursor overlay repaints every blink half-period, where copy() would allocate a new TextStyle per
@@ -725,21 +733,12 @@ fun TerminalScreen(
               linkScanPasses++
               linkSpansByRow(screen, searchWindow)
           }
-          // Glyph runs per visible row: segmentation is O(row) with a per-run allocation, and the
-          // draw lambda re-executes on every repaint (selection drag, scroll) while rows and
-          // highlights are unchanged. Keyed by row INDEX: the remember drops the map on every
-          // publish (screenVersion, like the sibling caches above), so within its lifetime the
-          // snapshot is fixed and an index can never alias a changed row - while a content-keyed
-          // map would pay an O(cols) structural hash per lookup and alias content-equal duplicate
-          // rows (retry-loop logs) into one entry that their distinct highlight instances then
-          // evict from each other every frame. The highlight instance rides in the value: a
-          // rebuilt highlight (cursor move through the live line) must re-segment its row. Filled
-          // lazily from the draw phase - single (UI) thread, like glyphStyleCache - and capped so
-          // paging through deep history in an idle session cannot retain runs for the whole
-          // scrollback (the wholesale clear costs one window's re-segmentation).
-          val glyphRunCache = remember(state, screenVersion) {
-              HashMap<Int, Pair<RowHighlight?, List<GlyphRun>>>()
-          }
+          // Glyph runs and layouts per row, kept across publishes for the rows that did not change
+          // (see RowRenderCache): segmentation is O(row) with a per-run allocation, and laying out
+          // every run of every row again on each publish is most of what a streaming frame costs.
+          // The highlight instance is part of an entry's validity — a rebuilt highlight (cursor
+          // move through the live line) must re-segment its row.
+          val rowRenderCache = remember(state) { RowRenderCache(GLYPH_RUN_CACHE_ROWS, GLYPH_RUN_CACHE_RUNS) }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -752,6 +751,7 @@ fun TerminalScreen(
               // whenever output streams while the user sits scrolled up in history. The search
               // highlight above derives its window from the same helper.
               val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
+              rowRenderCache.fitWindow((drawWindow.last - drawWindow.first + 1) * (screen.firstOrNull()?.size ?: 0))
               for (r in drawWindow) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
@@ -791,22 +791,19 @@ fun TerminalScreen(
                   // (mc box-drawing, CJK, symbols) is drawn at its own column separately: a fallback font
                   // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
                   // horizontals, colored rows sliding). A wide cell — span=2.
-                  val rowHighlight = highlightByRow[r]
-                  val cachedRuns = glyphRunCache[r]
-                  val runs = if (cachedRuns != null && cachedRuns.first === rowHighlight) {
-                      cachedRuns.second
-                  } else {
-                      if (glyphRunCache.size >= GLYPH_RUN_CACHE_ROWS) glyphRunCache.clear()
-                      glyphRuns(row, rowHighlight).also { glyphRunCache[r] = rowHighlight to it }
-                  }
-                  for (run in runs) {
+                  val rowEntry = rowRenderCache.entry(r, row, highlightByRow[r])
+                  val runs = rowEntry.runs
+                  for (i in runs.indices) {
+                      val run = runs[i]
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
                           val byKind = glyphStyleCache.getOrPut(run.style) { arrayOfNulls(HIGHLIGHT_KIND_COUNT) }
                           val style = byKind[run.kind.ordinal]
                               ?: run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
                                   .also { byKind[run.kind.ordinal] = it }
-                          drawGlyphText(measurer, run.text, Offset(x, top), style)
+                          val layout = rowEntry.layout(i, glyphStyleCache)
+                              ?: measureGlyphText(measurer, run.text, style).also { rowEntry.storeLayout(i, it) }
+                          drawText(layout, color = style.color, topLeft = Offset(x, top))
                       }
                       // Draw the underline across the full run width, including under spaces (like xterm).
                       if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
