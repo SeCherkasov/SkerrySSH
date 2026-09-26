@@ -159,6 +159,51 @@ class SessionShareHostTest {
         assertContentEquals("ls\n".encodeToByteArray(), typed.last())
     }
 
+    /**
+     * Who is watching is the relay's word, and so is the frame it replays: a viewer list that drops
+     * an account must not wipe the replay window of the sockets that account typed from.
+     */
+    @Test
+    fun `a keystroke frame replayed after the relay reports its viewer gone is not typed again`() = cryptoTest {
+        val key = crypto.newDataKey()
+        val channel = FakeChannel()
+        val typed = mutableListOf<ByteArray>()
+        val session = host(channel, key, allowInput = { true }, toShell = { typed += it })
+
+        val job = launch { session.run() }
+        val frame = "reboot\n".encodeToByteArray().sealedInput(key, sender = 5, seq = 1, from = "mate@x.io")
+        channel.events.send(ShareEvent.Viewers(1, listOf("mate@x.io")))
+        channel.events.send(frame)
+        channel.events.send(ShareEvent.Viewers(0, emptyList()))
+        channel.events.send(ShareEvent.Viewers(1, listOf("mate@x.io")))
+        channel.events.send(frame)
+        // Each join is answered with the host's geometry; let both land before the socket closes.
+        repeat(2) { channel.nextFrame(key) }
+        channel.close()
+        job.join()
+
+        assertEquals(listOf("reboot\n"), typed.map { it.decodeToString() }, "a replayed keystroke frame reached the shell")
+    }
+
+    /** An account's budget evicting its oldest socket must not reopen that socket to a replay. */
+    @Test
+    fun `a keystroke frame from a socket evicted by the per-account budget is not typed again`() = cryptoTest {
+        val key = crypto.newDataKey()
+        val channel = FakeChannel()
+        val typed = mutableListOf<ByteArray>()
+        val session = host(channel, key, allowInput = { true }, toShell = { typed += it })
+
+        val job = launch { session.run() }
+        val first = "reboot\n".encodeToByteArray().sealedInput(key, sender = 500, seq = 1, from = "mate@x.io")
+        channel.events.send(first)
+        repeat(8) { channel.events.send("x".encodeToByteArray().sealedInput(key, sender = 501L + it, seq = 1, from = "mate@x.io")) }
+        channel.events.send(first)
+        channel.close()
+        job.join()
+
+        assertEquals(1, typed.count { it.decodeToString() == "reboot\n" }, "a replayed keystroke frame reached the shell")
+    }
+
     @Test
     fun `frames the host cannot authenticate are dropped and the session keeps running`() = cryptoTest {
         val key = crypto.newDataKey()

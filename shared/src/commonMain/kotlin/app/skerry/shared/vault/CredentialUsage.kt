@@ -125,7 +125,7 @@ class FileCredentialUsageLog(
     }
 
     override fun forget(credentialId: String): Unit = synchronized(lock) {
-        val entries = read()
+        val entries = readForRewrite()
         if (entries.none { it.credentialId == credentialId }) return
         write(entries.filterNot { it.credentialId == credentialId })
     }
@@ -141,7 +141,7 @@ class FileCredentialUsageLog(
      */
     private fun update(credentialId: String, edit: (CredentialUsage) -> CredentialUsage): CredentialUsage =
         synchronized(lock) {
-            val entries = read()
+            val entries = readForRewrite()
             val current = entries.firstOrNull { it.credentialId == credentialId } ?: CredentialUsage(credentialId)
             val updated = edit(current)
             if (updated == current && entries.contains(current)) return updated
@@ -149,11 +149,18 @@ class FileCredentialUsageLog(
             updated
         }
 
-    /** Any error (missing file / corrupt JSON) reads as an empty log. */
-    private fun read(): List<CredentialUsage> = runCatching {
+    /** Any error (missing file / corrupt JSON / unreadable file) reads as an empty log. */
+    private fun read(): List<CredentialUsage> = runCatching { readForRewrite() }.getOrDefault(emptyList())
+
+    /**
+     * [read] for a caller about to replace the file: one that exists but cannot be read throws, since
+     * writing over it would erase every other secret's trail. Corrupt contents still read as empty.
+     */
+    private fun readForRewrite(): List<CredentialUsage> {
         if (!fileSystem.exists(path)) return emptyList()
-        json.decodeFromString<List<CredentialUsage>>(fileSystem.read(path) { readUtf8() })
-    }.getOrDefault(emptyList())
+        val text = fileSystem.read(path) { readUtf8() }
+        return runCatching { json.decodeFromString<List<CredentialUsage>>(text) }.getOrDefault(emptyList())
+    }
 
     private fun write(entries: List<CredentialUsage>) {
         atomicWriteUtf8(fileSystem, path, json.encodeToString(entries), harden)

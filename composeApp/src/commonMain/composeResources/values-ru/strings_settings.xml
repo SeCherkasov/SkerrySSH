@@ -175,6 +175,7 @@
     <string name="settings_event_device_paired">Привязано новое устройство</string>
     <string name="settings_event_key_exported">Ключ экспортирован в файл</string>
     <string name="settings_event_lock_incomplete">Автоблокировка завершилась не полностью</string>
+    <string name="settings_event_sync_rejected">Sync отклонил записи с сервера</string>
     <string name="settings_event_with_detail">%1$s: %2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">сегодня %1$s</string>

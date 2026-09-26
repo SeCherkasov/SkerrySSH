@@ -1,10 +1,15 @@
 package app.skerry.shared.vault
 
+import okio.ForwardingFileSystem
+import okio.IOException
+import okio.Path
 import okio.Path.Companion.toPath
+import okio.Source
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -131,5 +136,31 @@ class FileSecurityLogTest {
         // Writing over a corrupt file restores a valid state.
         clock = 1; l.record(SecurityEventType.VaultCreated)
         assertEquals(1, l.recent().size)
+    }
+
+    /**
+     * A log that exists but cannot be read (a permission flip, an I/O error) is not an empty log:
+     * treating it as one made the next [FileSecurityLog.record] replace the whole audit trail with a
+     * single event. The record is refused like a failed write, and the file stays as it was.
+     */
+    @Test
+    fun aLogThatCannotBeReadIsNotOverwrittenByTheNextRecord() {
+        clock = 1; log().record(SecurityEventType.VaultCreated)
+        clock = 2; log().record(SecurityEventType.BiometricEnabled)
+        var failReads = true
+        val flaky = object : ForwardingFileSystem(fs) {
+            override fun source(file: Path): Source =
+                if (failReads && file == path) throw IOException("read refused") else super.source(file)
+        }
+        val l = FileSecurityLog(path, flaky) { "2026-01-01T00:00:03Z" }
+
+        assertFailsWith<IOException> { l.record(SecurityEventType.UnlockedBiometric) }
+
+        failReads = false
+        assertEquals(
+            listOf(SecurityEventType.BiometricEnabled, SecurityEventType.VaultCreated),
+            l.recent().map { it.type },
+            "the audit trail was replaced by the event recorded over an unreadable file",
+        )
     }
 }

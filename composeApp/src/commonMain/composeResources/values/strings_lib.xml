@@ -280,6 +280,7 @@
     <string name="lib_teams_err_pin_not_recorded">The confirmed fingerprint couldn't be stored on this device — nothing was sent to that key</string>
     <string name="lib_teams_err_pin_moved">What is on record for this account changed while its fingerprint was on screen — nothing was confirmed. Check it again</string>
     <string name="lib_teams_err_identity_unreadable">This device can't read its team identity, so the invite can't be opened here</string>
+    <string name="lib_teams_err_identity_kept">This device can't read its team identity — it was kept, not replaced</string>
     <!-- Teams screen: header, member table, summary cards (see TeamsView) -->
     <string name="lib_teams_header_title">Team</string>
     <!-- %1$s — team name, %2$d — member count -->

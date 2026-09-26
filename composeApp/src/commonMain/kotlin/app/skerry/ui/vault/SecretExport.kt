@@ -168,7 +168,8 @@ internal fun keyExportAudit(
     credentialId: String,
 ): () -> Unit = {
     credentials.recordExported(credentialId)
-    securityLog?.record(SecurityEventType.KeyExported, credentialId)
+    // Best-effort, like the usage trail: the key has already left the vault by the time this runs.
+    runCatching { securityLog?.record(SecurityEventType.KeyExported, credentialId) }
 }
 
 /**

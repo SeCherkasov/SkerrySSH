@@ -1,10 +1,15 @@
 package app.skerry.shared.vault
 
+import okio.ForwardingFileSystem
+import okio.IOException
+import okio.Path
 import okio.Path.Companion.toPath
+import okio.Source
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -175,5 +180,32 @@ class FileCredentialUsageLogTest {
         clock = 1
         l.recordAdded("cred-1")
         assertTrue(l.of("cred-1") != null)
+    }
+
+    /**
+     * A trail that exists but cannot be read is not an empty trail: treating it as one made the next
+     * stamp replace every secret's history with that one entry. Neither a stamp nor a forget writes
+     * over a file it could not read.
+     */
+    @Test
+    fun aTrailThatCannotBeReadIsNotOverwrittenByTheNextStamp() {
+        clock = 1; log().recordAdded("cred-1")
+        clock = 2; log().recordAdded("cred-2")
+        var failReads = true
+        val flaky = object : ForwardingFileSystem(fs) {
+            override fun source(file: Path): Source =
+                if (failReads && file == path) throw IOException("read refused") else super.source(file)
+        }
+        val l = FileCredentialUsageLog(path, flaky) { "2026-01-01T00:00:03Z" }
+
+        assertFailsWith<IOException> { l.recordCopied("cred-3") }
+        assertFailsWith<IOException> { l.forget("cred-1") }
+
+        failReads = false
+        assertEquals(
+            listOf("cred-1", "cred-2"),
+            l.all().map { it.credentialId },
+            "the trail was replaced by a stamp recorded over an unreadable file",
+        )
     }
 }

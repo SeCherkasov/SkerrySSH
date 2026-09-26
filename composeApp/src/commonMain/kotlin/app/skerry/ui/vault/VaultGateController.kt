@@ -251,7 +251,7 @@ class VaultGateController(
                             return@launch
                         }
                         // Baseline for the "last password change" caption in the Security section.
-                        securityLog?.record(SecurityEventType.VaultCreated)
+                        audit(SecurityEventType.VaultCreated)
                         // New vault is open. First (if the platform provided a form) offer to connect
                         // sync — it may adopt the account dataKey, and biometrics must be wrapped under
                         // the final key. Otherwise go straight to biometrics / into the app.
@@ -321,7 +321,7 @@ class VaultGateController(
     fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
         try {
             val changed = vault.changePassword(oldPassword, newPassword)
-            if (changed) securityLog?.record(SecurityEventType.MasterPasswordChanged)
+            if (changed) audit(SecurityEventType.MasterPasswordChanged)
             return changed
         } finally {
             oldPassword.fill(' ')
@@ -399,7 +399,7 @@ class VaultGateController(
         try {
             when (bio.unlock(prompt)) {
                 BiometricUnlockResult.Unlocked -> {
-                    securityLog?.record(SecurityEventType.UnlockedBiometric)
+                    audit(SecurityEventType.UnlockedBiometric)
                     state = VaultGateState.Unlocked
                 }
                 BiometricUnlockResult.Invalidated -> {
@@ -445,7 +445,7 @@ class VaultGateController(
                 biometricUnsupported = bio.isUnsupported()
                 biometricReducedBinding = bio.reducedBinding()
             }
-            if (result == BiometricEnableResult.Enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
+            if (result == BiometricEnableResult.Enabled) audit(SecurityEventType.BiometricEnabled)
             result == BiometricEnableResult.Enabled
         } finally {
             biometricInFlight = false
@@ -478,7 +478,7 @@ class VaultGateController(
         biometricEnabled = bio.isEnabled()
         biometricReducedBinding = false
         // Record the event only if biometrics was actually enabled (disable is idempotent).
-        if (wasEnabled && !biometricEnabled) securityLog?.record(SecurityEventType.BiometricDisabled)
+        if (wasEnabled && !biometricEnabled) audit(SecurityEventType.BiometricDisabled)
     }
 
     /**
@@ -506,7 +506,7 @@ class VaultGateController(
         // coordinator already created/unlocked the vault and adopted the account key, and the form waited
         // for the Online transition). Record the event here, not in the coordinator: all join paths
         // (desktop and mobile, via the shared gate) converge here, exactly where pairing succeeded.
-        securityLog?.record(SecurityEventType.DevicePaired)
+        audit(SecurityEventType.DevicePaired)
         state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 
@@ -516,6 +516,15 @@ class VaultGateController(
      */
     fun dismissBiometricOffer() {
         if (state == VaultGateState.OfferBiometric) state = VaultGateState.Unlocked
+    }
+
+    /**
+     * Best-effort: the log refuses a write it cannot make safely (an unreadable file it would
+     * otherwise overwrite), and the vault step being recorded has already happened by then — losing
+     * the entry beats stranding the gate on the step before it.
+     */
+    private fun audit(type: SecurityEventType) {
+        runCatching { securityLog?.record(type) }
     }
 }
 

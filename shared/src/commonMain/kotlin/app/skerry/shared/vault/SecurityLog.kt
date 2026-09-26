@@ -47,6 +47,13 @@ enum class SecurityEventType {
      * plaintext on disk.
      */
     LockIncomplete,
+
+    /**
+     * A sync cycle refused records the server handed back — they did not authenticate under the
+     * account key, or would have re-typed a record holding their id. [SecurityEvent.detail] carries
+     * the count.
+     */
+    SyncRecordsRejected,
 }
 
 /**
@@ -110,7 +117,7 @@ class FileSecurityLog(
     private val lock = SynchronizedObject()
 
     override fun record(type: SecurityEventType, detail: String?): Unit = synchronized(lock) {
-        val events = (read() + SecurityEvent(type, clock(), detail)).takeLast(max)
+        val events = (readForRewrite() + SecurityEvent(type, clock(), detail)).takeLast(max)
         write(events)
     }
 
@@ -137,13 +144,22 @@ class FileSecurityLog(
      * is then overwritten by the next [record] — the device's audit trail destroyed by a downgrade,
      * looking exactly like a wipe someone did on purpose. One unrecognised entry is dropped instead.
      */
-    private fun read(): List<SecurityEvent> = runCatching {
+    private fun read(): List<SecurityEvent> = runCatching { readForRewrite() }.getOrDefault(emptyList())
+
+    /**
+     * [read] for a caller about to replace the file: a file that exists but cannot be read throws
+     * instead of reading as empty, since writing "empty plus one event" over it would erase the trail.
+     * Corrupt contents still read as empty — those are lost either way.
+     */
+    private fun readForRewrite(): List<SecurityEvent> {
         if (!fileSystem.exists(path)) return emptyList()
         val text = fileSystem.read(path) { readUtf8() }
-        json.decodeFromString<JsonArray>(text).mapNotNull { entry ->
-            runCatching { json.decodeFromJsonElement<SecurityEvent>(entry) }.getOrNull()
-        }
-    }.getOrDefault(emptyList())
+        return runCatching {
+            json.decodeFromString<JsonArray>(text).mapNotNull { entry ->
+                runCatching { json.decodeFromJsonElement<SecurityEvent>(entry) }.getOrNull()
+            }
+        }.getOrDefault(emptyList())
+    }
 
     // Atomic write + harden on tmp before move — see [atomicWriteUtf8].
     private fun write(events: List<SecurityEvent>) {

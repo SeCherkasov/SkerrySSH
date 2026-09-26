@@ -3,6 +3,7 @@ package app.skerry.android
 import app.skerry.shared.io.PrivateConfig
 import app.skerry.ui.sync.ReconcileDebtStore
 import app.skerry.ui.sync.ServerLink
+import app.skerry.ui.sync.UnreadReconcileDebts
 import java.io.File
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -19,22 +20,25 @@ import java.nio.file.Files
  */
 class AndroidReconcileDebtStore(private val file: File) : ReconcileDebtStore {
 
-    override fun load(): Set<ServerLink> {
+    private val unread = UnreadReconcileDebts(::read)
+
+    override fun load(): Set<ServerLink> = unread.load()
+
+    private fun read(): Set<ServerLink> {
         if (!file.exists()) return emptySet()
-        return runCatching {
-            // Per line, so one unparseable entry (a truncated percent escape) costs its own debt and no
-            // more. Losing that one is already a silent resurrection for its link; letting it take every
-            // intact line with it is the same failure on every link at once.
-            file.readLines().mapNotNull { line -> runCatching { parse(line) }.getOrNull() }.toSet()
-        }.getOrDefault(emptySet())
+        // Per line, so one unparseable entry (a truncated percent escape) costs its own debt and no
+        // more. Losing that one is already a silent resurrection for its link; letting it take every
+        // intact line with it is the same failure on every link at once.
+        return file.readLines().mapNotNull { line -> runCatching { parse(line) }.getOrNull() }.toSet()
     }
 
     override fun save(debts: Set<ServerLink>) {
-        if (debts.isEmpty()) {
+        val all = unread.toWrite(debts)
+        if (all.isEmpty()) {
             Files.deleteIfExists(file.toPath()) // throws on a real I/O failure — a retired debt must land
             return
         }
-        val text = debts.joinToString(separator = "") {
+        val text = all.joinToString(separator = "") {
             "${URLEncoder.encode(it.serverUrl, "UTF-8")}=${URLEncoder.encode(it.accountId, "UTF-8")}\n"
         }
         PrivateConfig.atomicWrite(file.toPath(), text.encodeToByteArray())
