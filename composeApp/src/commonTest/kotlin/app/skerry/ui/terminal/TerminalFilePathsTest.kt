@@ -3,6 +3,8 @@ package app.skerry.ui.terminal
 import app.skerry.shared.terminal.CellWidth
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermStyle
+import app.skerry.shared.terminal.TerminalPos
+import app.skerry.shared.terminal.TerminalSelection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -227,5 +229,97 @@ class TerminalFilePathsTest {
         assertNull(filePathFromSelection("just text"))
         assertNull(filePathFromSelection(null))
         assertNull(filePathFromSelection(""))
+    }
+
+    // --- file:// hyperlinks (OSC 8, `ls --hyperlink`) ---
+
+    @Test
+    fun `a file URI names its path whatever the host`() {
+        assertEquals("/etc/hosts", fileUriPath("file://web-01/etc/hosts"))
+        assertEquals("/etc/hosts", fileUriPath("file:///etc/hosts"))
+        assertEquals("/etc/hosts", fileUriPath("FILE://web-01/etc/hosts"))
+        assertEquals("/etc/hosts", fileUriPath("file://user@web-01/etc/hosts"))
+    }
+
+    @Test
+    fun `a file URI is percent-decoded as UTF-8`() {
+        assertEquals("/home/u/my notes/отчёт.txt", fileUriPath("file://h/home/u/my%20notes/%D0%BE%D1%82%D1%87%D1%91%D1%82.txt"))
+        assertEquals("/tmp/a%b", fileUriPath("file://h/tmp/a%25b"))
+        // A literal character outside the BMP next to an escape stays one character.
+        assertEquals("/tmp/😀 x", fileUriPath("file://h/tmp/😀%20x"))
+        assertEquals("/", fileUriPath("file://h/"))
+    }
+
+    @Test
+    fun `a path carrying format or C1 characters is not offered`() {
+        // Arabic letter mark, word joiner, soft hyphen, CSI (C1): invisible, and able to reorder or pad
+        // what the chip shows.
+        for (hidden in listOf("%D8%9C", "%E2%81%A0", "%C2%AD", "%C2%9B")) {
+            assertNull(fileUriPath("file://h/srv/a${hidden}b"), hidden)
+        }
+        assertNull(normalizeFilePath("/srv/a\u2060b"))
+        // Format characters outside the BMP (Unicode tags) arrive as surrogate pairs.
+        assertNull(fileUriPath("file://h/etc/pass%F3%A0%80%A0wd"))
+        assertNull(normalizeFilePath("/etc/pass\uDB40\uDC20wd"))
+        // Variation selectors, Mongolian free variation selectors and the grapheme joiner are marks, not
+        // format characters, yet render as nothing on their own.
+        for (hidden in listOf("%EF%B8%8F", "%E1%A0%8B", "%CD%8F")) {
+            assertNull(fileUriPath("file://h/etc/pass${hidden}wd"), hidden)
+        }
+    }
+
+    @Test
+    fun `a malformed or hostile file URI names nothing`() {
+        assertNull(fileUriPath("https://example.com/etc/hosts"))
+        assertNull(fileUriPath("file://host"))
+        assertNull(fileUriPath("file://h/tmp/%zz"))
+        assertNull(fileUriPath("file://h/tmp/%4"))
+        assertNull(fileUriPath("file://h/tmp/%FF%FE"))
+        assertNull(fileUriPath("file://h/tmp/a%0Ab"))
+        assertNull(fileUriPath("file://h/tmp/a%00b"))
+        assertNull(fileUriPath("file://h/tmp/%E2%80%AEtxt.sh"))
+        assertNull(fileUriPath("file://h/tmp/a?b"))
+        assertNull(fileUriPath("file://h/tmp/a#b"))
+        assertNull(fileUriPath("file://h/" + "a".repeat(5000)))
+    }
+
+    private fun linkRow(prefix: String, uri: String, text: String, suffix: String = ""): List<TermCell> =
+        row(prefix) + text.map { TermCell(it.toString(), hyperlink = uri) } + row(suffix)
+
+    @Test
+    fun `a file hyperlink is a path over its whole run`() {
+        val row = linkRow("-rw ", "file://h/etc/hosts", "hosts", " x")
+        val hit = filePathSpanAt(row, 6)!!
+        assertEquals("/etc/hosts", hit.uri)
+        assertEquals(4, hit.start)
+        assertEquals(9, hit.endExclusive)
+        assertNull(filePathSpanAt(row, 3))
+    }
+
+    @Test
+    fun `a web or concealed hyperlink is not a path`() {
+        assertNull(filePathSpanAt(linkRow("", "https://example.com/etc/hosts", "hosts"), 1))
+        val hidden = List(5) { TermCell("h", style = TermStyle(hidden = true), hyperlink = "file://h/etc/hosts") }
+        assertNull(filePathSpanAt(hidden, 1))
+    }
+
+    @Test
+    fun `a selection inside one file hyperlink names its path`() {
+        val screen = listOf(linkRow("-rw ", "file://h/etc/hosts", "hosts", " x"))
+        assertEquals("/etc/hosts", fileLinkPathOfSelection(screen, TerminalSelection(TerminalPos(0, 4), TerminalPos(0, 9))))
+        assertEquals("/etc/hosts", fileLinkPathOfSelection(screen, TerminalSelection(TerminalPos(0, 5), TerminalPos(0, 7))))
+        // Starting before the link, reaching past its end, spanning rows, or empty: nothing.
+        assertNull(fileLinkPathOfSelection(screen, TerminalSelection(TerminalPos(0, 3), TerminalPos(0, 9))))
+        assertNull(fileLinkPathOfSelection(screen, TerminalSelection(TerminalPos(0, 5), TerminalPos(0, 11))))
+        assertNull(fileLinkPathOfSelection(screen + screen, TerminalSelection(TerminalPos(0, 5), TerminalPos(1, 6))))
+        assertNull(fileLinkPathOfSelection(screen, TerminalSelection(TerminalPos(0, 5), TerminalPos(0, 5))))
+    }
+
+    @Test
+    fun `a selection over a concealed part of a file hyperlink names nothing`() {
+        val uri = "file://h/etc/hosts"
+        val row = List(5) { i -> TermCell("h", style = TermStyle(hidden = i == 3), hyperlink = uri) }
+        assertEquals("/etc/hosts", fileLinkPathOfSelection(listOf(row), TerminalSelection(TerminalPos(0, 0), TerminalPos(0, 3))))
+        assertNull(fileLinkPathOfSelection(listOf(row), TerminalSelection(TerminalPos(0, 0), TerminalPos(0, 5))))
     }
 }

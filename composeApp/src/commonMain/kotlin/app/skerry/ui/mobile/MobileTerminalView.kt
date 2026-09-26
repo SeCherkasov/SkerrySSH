@@ -77,7 +77,6 @@ import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
 import app.skerry.ui.app.mobileTabBarUnderRoute
 import app.skerry.ui.design.Txt
-import app.skerry.ui.terminal.filePathFromSelection
 import app.skerry.ui.session.broadcastTargets
 import kotlinx.coroutines.launch
 import app.skerry.shared.terminal.castFileName
@@ -265,14 +264,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     }
                     // Desktop opens a path on Ctrl+click; touch has no such chord, so the affordance is
                     // a chip: long-press picks the path (word selection stops at whitespace, so a path
-                    // comes out whole), the chip reveals it in Files. derivedStateOf keeps streaming
+                    // comes out whole; a name inside a file:// link stands for the link's full path),
+                    // the chip reveals it in Files. derivedStateOf keeps streaming
                     // output from recomposing the row while the selection hasn't changed.
                     // Gated on supportsSftp for the same reason as desktop: a Mosh/Telnet/serial/
                     // local/container session has no SFTP channel to reveal anything in.
                     val selectedPath by remember(st.terminal, active.controller) {
                         derivedStateOf {
                             if (!state.openFilePathsInSftp || !active.controller.supportsSftp) null
-                            else filePathFromSelection(st.terminal.selectedText())
+                            else st.terminal.selectedPath()
                         }
                     }
                     selectedPath?.let { path ->

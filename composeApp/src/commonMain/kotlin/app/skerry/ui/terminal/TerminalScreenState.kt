@@ -658,6 +658,15 @@ class TerminalScreenState(
         ?.extract(screen)
         ?.takeIf { it.isNotEmpty() }
 
+    /** The path of the `file://` hyperlink the selection lies inside, or `null` (see [fileLinkPathOfSelection]). */
+    fun selectedFileLinkPath(): String? = selection?.let { fileLinkPathOfSelection(screen, it) }
+
+    /**
+     * The path the selection stands for: a `file://` link's target first - its text is only what the
+     * server chose to print - then the selected text itself when it reads as a path.
+     */
+    fun selectedPath(): String? = selectedFileLinkPath() ?: filePathFromSelection(selectedText())
+
     /**
      * Best-effort text of the last command and its output — for "explain this output" when nothing is
      * selected, so the AI sees the recent result rather than the whole screen (a long login banner

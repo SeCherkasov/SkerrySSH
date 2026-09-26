@@ -2029,6 +2029,40 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `a word selected inside a file link stands for the link's path`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        // `ls --hyperlink`: the name is printed, the full path rides in the link.
+        session.emit("-rw \u001b]8;;file://web-01/etc/hosts\u001b\\hosts\u001b]8;;\u001b\\ x".encodeToByteArray())
+        state.selectWordAt(TerminalPos(0, 6))
+
+        assertEquals("hosts", state.selectedText())
+        assertEquals("/etc/hosts", state.selectedFileLinkPath())
+        state.selectWordAt(TerminalPos(0, 1))
+        assertEquals(null, state.selectedFileLinkPath())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a file link's target wins over the path its text reads as`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        session.emit("\u001b]8;;file://h/srv/real\u001b\\/tmp/shown\u001b]8;;\u001b\\ /var/log".encodeToByteArray())
+        state.selectWordAt(TerminalPos(0, 3))
+        assertEquals("/srv/real", state.selectedPath())
+        // Outside any link the selected text still counts as a path.
+        state.selectWordAt(TerminalPos(0, 13))
+        assertEquals("/var/log", state.selectedPath())
+        scope.cancel()
+    }
+
+    @Test
     fun `selecting a word from its first char still grabs the whole word`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

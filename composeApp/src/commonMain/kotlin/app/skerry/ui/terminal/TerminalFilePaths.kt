@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TerminalSelection
 
 /**
  * Detection of file paths printed in terminal output, so Ctrl+click (touch: the selection chip) can
@@ -24,11 +25,39 @@ private const val PATH_TRAILING_PUNCT = ".,;:!?]}>\"'`"
 
 /**
  * Invisible characters a hostile server could hide in a path so the glyphs under the pointer read as
- * one directory while the string handed to SFTP is another: bidi overrides/isolates and zero-width
- * marks. A real path never needs them, so anything carrying one is not offered.
+ * one directory while the string handed to SFTP is another: format characters (bidi overrides and
+ * isolates, zero-width marks, the soft hyphen), C1 controls, and the marks that render as nothing on
+ * their own (variation selectors, Mongolian free variation selectors, the grapheme joiner). A real
+ * path never needs them, so anything carrying one is not offered.
  */
 private fun isInvisibleChar(ch: Char): Boolean =
-    ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' || ch in '\u200B'..'\u200F' || ch == '\uFEFF'
+    ch.category == CharCategory.FORMAT || ch in '\u0080'..'\u009F' ||
+        ch in '\uFE00'..'\uFE0F' || ch in '\u180B'..'\u180F' || ch == '\u034F'
+
+/**
+ * Whether [s] carries a control byte or an invisible character, walked by code point: a format
+ * character outside the BMP (Unicode tags, U+E0001 and U+E0020..E007F) arrives as a surrogate
+ * pair, which [Char.category] reports as two surrogates.
+ */
+private fun hasHiddenChar(s: String): Boolean {
+    var i = 0
+    while (i < s.length) {
+        val ch = s[i]
+        if (ch.isHighSurrogate() && i + 1 < s.length && s[i + 1].isLowSurrogate()) {
+            val cp = 0x10000 + ((ch.code - 0xD800) shl 10) + (s[i + 1].code - 0xDC00)
+            if (isInvisibleSupplementary(cp)) return true
+            i += 2
+            continue
+        }
+        if (ch.code < 0x20 || ch.code == 0x7F || isInvisibleChar(ch)) return true
+        i++
+    }
+    return false
+}
+
+/** The format characters outside the BMP, plus the variation selectors beside the tags: all render as nothing. */
+private fun isInvisibleSupplementary(cp: Int): Boolean =
+    cp in 0x13430..0x1343F || cp in 0x1BCA0..0x1BCA3 || cp in 0x1D173..0x1D17A || cp in 0xE0000..0xE0FFF
 
 /** First character of the first segment: rules out `//` and other slash runs that aren't paths. */
 private fun isPathStartChar(ch: Char): Boolean =
@@ -69,7 +98,7 @@ internal fun normalizeFilePath(token: String): String? {
     val path = trimTrailingPunct(cutLineSuffix(token), PATH_TRAILING_PUNCT)
     if (path.isEmpty()) return null
     // Control bytes would corrupt whatever consumes the path downstream; the output is untrusted.
-    if (path.any { it.code < 0x20 || it.code == 0x7F || isInvisibleChar(it) }) return null
+    if (hasHiddenChar(path)) return null
     return when (path[0]) {
         // `~` (home) or `~/…`. `~user/…` is not supported: only the session's own home is known.
         '~' -> path.takeIf { it.length == 1 || it[1] == '/' }
@@ -138,7 +167,8 @@ internal fun rowFilePathSpans(row: List<TermCell>): List<TextLinkSpan> {
 internal fun filePathSpanAt(row: List<TermCell>, col: Int): TextLinkSpan? {
     // A concealed cell (SGR 8) is not a click target: the user cannot read what would open.
     if (row.getOrNull(col)?.style?.hidden == true) return null
-    return rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }
+    return fileHyperlinkSpanAt(row, col)
+        ?: rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }
 }
 
 /**
@@ -151,4 +181,85 @@ internal fun filePathFromSelection(text: String?): String? {
     if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() }) return null
     if (trimmed[0] != '/' && trimmed[0] != '~') return null
     return normalizeFilePath(trimmed)
+}
+
+private const val FILE_SCHEME = "file://"
+
+/**
+ * The path a `file://` OSC 8 link names (`ls --hyperlink` writes `file://<hostname>/<path>`), or
+ * `null`. The host is not compared: it is the server's own hostname, which rarely matches the address
+ * the session dialled, and the path only ever reaches this session's file panel, which lists it -
+ * nothing is opened locally. The decoded path passes the same checks as a detected one.
+ */
+internal fun fileUriPath(uri: String): String? {
+    if (!uri.startsWith(FILE_SCHEME, ignoreCase = true)) return null
+    val slash = uri.indexOf('/', FILE_SCHEME.length)
+    if (slash < 0) return null
+    val raw = uri.substring(slash)
+    // `?` and `#` would start a query or fragment; `ls` escapes them in names, so a raw one is not a path.
+    if (raw.any { it == '?' || it == '#' }) return null
+    val path = percentDecodeUtf8(raw) ?: return null
+    if (path.length > MAX_PATH_LENGTH) return null
+    if (hasHiddenChar(path)) return null
+    return path
+}
+
+/** `%XX` escapes decoded as UTF-8; `null` on a broken escape or on bytes that are not UTF-8. */
+private fun percentDecodeUtf8(s: String): String? {
+    if ('%' !in s) return s
+    val bytes = ByteArray(s.length * 3)
+    var n = 0
+    var i = 0
+    while (i < s.length) {
+        val ch = s[i]
+        if (ch == '%') {
+            if (i + 2 >= s.length) return null
+            val hi = s[i + 1].digitToIntOrNull(16) ?: return null
+            val lo = s[i + 2].digitToIntOrNull(16) ?: return null
+            bytes[n++] = (hi * 16 + lo).toByte()
+            i += 3
+        } else {
+            // A literal run is encoded whole: one Char at a time would split a surrogate pair.
+            var runEnd = s.indexOf('%', i)
+            if (runEnd < 0) runEnd = s.length
+            for (b in s.substring(i, runEnd).encodeToByteArray()) bytes[n++] = b
+            i = runEnd
+        }
+    }
+    return try {
+        bytes.decodeToString(0, n, throwOnInvalidSequence = true)
+    } catch (_: CharacterCodingException) {
+        null
+    }
+}
+
+/**
+ * The span of the `file://` hyperlink under column [col] - the run of cells carrying the same URI -
+ * with the path it names, or `null`. A concealed cell is not a target, as with detected paths.
+ */
+private fun fileHyperlinkSpanAt(row: List<TermCell>, col: Int): TextLinkSpan? {
+    val cell = row.getOrNull(col) ?: return null
+    val uri = cell.hyperlink ?: return null
+    val path = fileUriPath(uri) ?: return null
+    var start = col
+    while (start > 0 && row[start - 1].hyperlink == uri) start--
+    var end = col + 1
+    while (end < row.size && row[end].hyperlink == uri) end++
+    return TextLinkSpan(start, end, path)
+}
+
+/**
+ * The path a touch selection stands for when it lies inside one `file://` hyperlink - long-press on
+ * a name in `ls --hyperlink` output selects the name, while the link carries the full path.
+ */
+internal fun fileLinkPathOfSelection(screen: List<List<TermCell>>, selection: TerminalSelection): String? {
+    if (selection.isEmpty) return null
+    val start = selection.start
+    val end = selection.end
+    if (start.row != end.row) return null
+    val row = screen.getOrNull(start.row) ?: return null
+    val span = fileHyperlinkSpanAt(row, start.col) ?: return null
+    if (end.col > span.endExclusive) return null
+    if ((start.col until end.col).any { row[it].style.hidden }) return null
+    return span.uri
 }

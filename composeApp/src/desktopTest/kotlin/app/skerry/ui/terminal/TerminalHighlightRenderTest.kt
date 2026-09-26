@@ -400,6 +400,23 @@ class TerminalHighlightRenderTest {
     }
 
     @Test
+    fun hyperlinkThatCannotOpenDrawsNoLinkUnderline() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frames ->
+            session.emit("\u001b]8;;https://example.com\u0007link\u001b]8;;\u0007\r\n\r\n")
+            frames.awaitFrame("a visible OSC 8 hyperlink to get the link underline") {
+                it.regionHasColor(linkCyan, hyperlinkBandX, urlUnderlineY, tolerance = 90)
+            }
+            // `ls --hyperlink` writes file:// links, and a server can write any scheme: an underline
+            // there promises a Ctrl+click that the URI gate then refuses.
+            session.emit("\u001b[2J\u001b[H\u001b]8;;file://host/etc/hosts\u0007link\u001b]8;;\u0007\r\n\r\n")
+            assertFalse(
+                frames.settle(settleFrames).regionHasColor(linkCyan, hyperlinkBandX, urlUnderlineY, tolerance = 90),
+                "a hyperlink the platform will not open must not draw the link underline",
+            )
+        }
+    }
+
+    @Test
     fun concealedTextStaysHiddenUnderTheBlockCursor() {
         withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frames ->
             // SGR 8 conceals X; CUB puts the block cursor onto it. The text pass renders the
