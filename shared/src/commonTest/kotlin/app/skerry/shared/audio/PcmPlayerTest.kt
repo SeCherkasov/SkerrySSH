@@ -215,6 +215,48 @@ class PcmPlayerTest {
         assertEquals(listOf("open#1 $stereo", "write#1 320", "flush#1"), devices.events)
     }
 
+    /**
+     * RDPSND does not promise whole frames per block. A device handed a partial frame either throws
+     * (the desktop line — read as a dead device) or drops the tail quietly (Android's `AudioTrack`),
+     * and every later sample then sits off its frame boundary: channels swap, or samples turn to
+     * noise, for the rest of the session. The odd bytes wait for the next block.
+     */
+    @Test
+    fun `a block that ends mid-frame reaches the device up to the frame and the rest goes with the next`() {
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+
+        player.play(stereo, ByteArray(6) { it.toByte() })
+        player.play(stereo, ByteArray(6) { (6 + it).toByte() })
+
+        assertEquals(listOf("open#1 $stereo", "write#1 4", "write#1 8"), devices.events)
+        assertEquals((0 until 12).map { it.toByte() }, devices.written)
+    }
+
+    @Test
+    fun `a flush drops the held tail along with the device buffer`() {
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+
+        player.play(stereo, ByteArray(6) { it.toByte() })
+        player.flush()
+        player.play(stereo, ByteArray(4) { (10 + it).toByte() })
+
+        assertEquals(listOf("open#1 $stereo", "write#1 4", "flush#1", "write#1 4"), devices.events)
+        assertEquals(listOf<Byte>(0, 1, 2, 3, 10, 11, 12, 13), devices.written, "the tail outlived the flush")
+    }
+
+    @Test
+    fun `a format change drops the tail of the old format`() {
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+
+        player.play(stereo, ByteArray(6))
+        player.play(notification, ByteArray(3))
+
+        assertEquals(listOf("open#1 $stereo", "write#1 4", "close#1", "open#2 $notification", "write#2 3"), devices.events)
+    }
+
     @Test
     fun `flushing before anything played touches no device`() {
         val devices = FakeSinks()
@@ -279,6 +321,7 @@ private class FakeSinks(
 ) : PcmSinkOpener {
 
     val events = mutableListOf<String>()
+    val written = mutableListOf<Byte>()
     var failWrite = false
 
     /** Runs while the device is opening — where a teardown from another thread lands. */
@@ -297,6 +340,7 @@ private class FakeSinks(
         return object : PcmSink {
             override fun write(pcm: ByteArray) {
                 events += "write#$no ${pcm.size}"
+                written += pcm.toList()
                 if (failWrite) error("the device is gone")
             }
 

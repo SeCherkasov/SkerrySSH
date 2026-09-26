@@ -211,7 +211,8 @@ class RfbCodec(
             val w = readU16()
             val h = readU16()
             when (val encoding = readS32()) {
-                ENC_DESKTOP_SIZE -> {
+                // Same size: reallocating would wipe the picture, and nothing may repaint it.
+                ENC_DESKTOP_SIZE -> if (w != fb.width || h != fb.height) {
                     boundedResize(w, h)
                     pseudo += VncUpdate.Resize(w, h)
                 }
