@@ -75,21 +75,13 @@ actual class FramebufferImage actual constructor(
     actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
         val target = surface
         val pixels = target.pixels
-        val capacity = target.width * target.height
-        for (r in rects) {
-            // A hostile server can declare right < left; a negative width passes the bounds sums
-            // below and only blows up inside IntBuffer.put. Skip it, as the Android bridge does.
-            if (r.width <= 0 || r.height <= 0) continue
+        for (rect in rects) {
+            // Also drops a hostile right < left, whose negative width would blow up in IntBuffer.put.
+            val r = clipToBoth(rect, target.width, target.height, srcWidth, src.size) ?: continue
             var row = 0
             while (row < r.height) {
-                val srcOff = (r.y + row) * srcWidth + r.x
-                val dstOff = (r.y + row) * target.width + r.x
-                val inSource = srcOff >= 0 && srcOff + r.width <= src.size
-                val inTarget = dstOff >= 0 && dstOff + r.width <= capacity
-                if (inSource && inTarget) {
-                    pixels.position(dstOff)
-                    writeRow(pixels, src, srcOff, r.width)
-                }
+                pixels.position((r.y + row) * target.width + r.x)
+                writeRow(pixels, src, (r.y + row) * srcWidth + r.x, r.width)
                 row++
             }
         }

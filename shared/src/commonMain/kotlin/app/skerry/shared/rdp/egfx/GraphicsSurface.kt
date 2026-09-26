@@ -38,9 +38,19 @@ class GraphicsSurface(val id: Int, val width: Int, val height: Int) {
         return RdpRect(left, top, (right - left).coerceAtLeast(0), (bottom - top).coerceAtLeast(0))
     }
 
-    /** Copy [source] ([sourceWidth] wide) into the surface at ([x], [y]), clipped to the surface. */
-    fun blit(x: Int, y: Int, sourceWidth: Int, sourceHeight: Int, source: IntArray) {
-        val rect = clip(RdpRect(x, y, sourceWidth, sourceHeight))
+    /**
+     * Copy [source] ([sourceWidth] wide) into the surface at ([x], [y]), clipped to the surface. Only
+     * [part] of the source is copied, in source coordinates; it must lie within the source.
+     */
+    fun blit(
+        x: Int,
+        y: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        source: IntArray,
+        part: RdpRect = RdpRect(0, 0, sourceWidth, sourceHeight),
+    ) {
+        val rect = clip(RdpRect(x + part.x, y + part.y, part.width, part.height))
         if (rect.width == 0 || rect.height == 0) return
         for (row in 0 until rect.height) {
             val sourceRow = (rect.y - y) + row

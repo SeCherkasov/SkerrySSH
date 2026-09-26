@@ -242,8 +242,14 @@ object BitmapUpdate {
                 diagnostics.droppedRect()
                 return@repeat
             }
-            blit(framebuffer, pixels, left, top, width, height)
-            rects += RdpRect(left, top, width, height)
+            // The inclusive destination rectangle is what shows; the bitmap may be wider (Windows
+            // pads its width to a multiple of four) and its padding must not be painted.
+            val visibleWidth = (right - left + 1).coerceIn(0, width)
+            val visibleHeight = (bottom - top + 1).coerceIn(0, height)
+            if (visibleWidth == 0 || visibleHeight == 0) return@repeat
+            val visible = RdpRect(left, top, visibleWidth, visibleHeight)
+            blit(framebuffer, pixels, visible, stride = width)
+            rects += visible
         }
         return RdpUpdate.Region(rects)
     }
@@ -332,9 +338,9 @@ object BitmapUpdate {
         return out
     }
 
-    private fun blit(framebuffer: RemoteFramebuffer, pixels: IntArray, x: Int, y: Int, width: Int, height: Int) {
-        for (row in 0 until height) {
-            framebuffer.blitRow(x, y + row, width, pixels, row * width)
+    private fun blit(framebuffer: RemoteFramebuffer, pixels: IntArray, rect: RdpRect, stride: Int) {
+        for (row in 0 until rect.height) {
+            framebuffer.blitRow(rect.x, rect.y + row, rect.width, pixels, row * stride)
         }
     }
 }

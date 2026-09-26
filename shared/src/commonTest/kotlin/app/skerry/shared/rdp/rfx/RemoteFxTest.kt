@@ -1,7 +1,15 @@
 package app.skerry.shared.rdp.rfx
 
+import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.ClientCapabilities
+import app.skerry.shared.rdp.RdpCodecs
 import app.skerry.shared.rdp.RdpProtocolException
+import app.skerry.shared.rdp.RdpReader
+import app.skerry.shared.rdp.RdpRect
+import app.skerry.shared.rdp.RdpUpdate
 import app.skerry.shared.rdp.RdpWriter
+import app.skerry.shared.rdp.SurfaceDecoder
+import app.skerry.shared.rdp.rfx.RfxTestStreams.GREY
 import app.skerry.shared.rdp.hex
 import kotlin.math.abs
 import kotlin.test.Test
@@ -246,6 +254,14 @@ class RemoteFxTest {
     }
 
     @Test
+    fun `a region claiming more rectangles than its block holds is refused`() {
+        val region = RfxTestStreams.region(listOf(RdpRect(0, 0, 64, 64)))
+        region[9] = 0x10 // numRects low byte: 16 rectangles in a block that carries one
+
+        assertFailsWith<RdpProtocolException> { RemoteFx().decode(region, 64, 64) }
+    }
+
+    @Test
     fun `framing blocks carry no pixels and are skipped`() {
         val stream = RdpWriter(32).apply {
             u16le(0xCCC0) // WBT_SYNC
@@ -259,10 +275,97 @@ class RemoteFxTest {
             u16le(1) // numRegions
         }.toByteArray()
 
-        val pixels = RemoteFx().decode(stream, 2, 2)
+        val image = RemoteFx().decode(stream, 2, 2)
 
-        assertContentEquals(IntArray(4), pixels)
+        assertTrue(image.painted.isEmpty(), "no tile, nothing painted: ${image.painted}")
     }
+
+    // ---- region ----
+
+    @Test
+    fun `surface bits leave the pixels no tile covers as they were`() {
+        // xrdp names the region's bounding box as the destination: the part of it no tile covers
+        // must keep what the screen showed, not turn transparent black.
+        val framebuffer = RemoteFramebuffer(128, 64).apply { fillRect(0, 0, 128, 64, OLD) }
+        val message = RfxTestStreams.message(listOf(RdpRect(0, 0, 64, 64)), listOf(RfxTestStreams.greyTile(0, 0)))
+
+        val updates = SurfaceDecoder(RdpCodecs(RemoteFx())).decode(RdpReader(surfaceBits(128, 64, message)), framebuffer)
+
+        assertEquals(GREY, framebuffer.pixels[10 * 128 + 10], "the tile lands")
+        assertEquals(OLD, framebuffer.pixels[10 * 128 + 100], "a pixel no tile covers keeps its colour")
+        assertEquals(listOf(RdpRect(0, 0, 64, 64)), (updates.single() as RdpUpdate.Region).rects)
+    }
+
+    @Test
+    fun `a tile is clipped to the region's rectangles`() {
+        val framebuffer = RemoteFramebuffer(128, 64).apply { fillRect(0, 0, 128, 64, OLD) }
+        val message = RfxTestStreams.message(listOf(RdpRect(0, 0, 32, 32)), listOf(RfxTestStreams.greyTile(0, 0)))
+
+        val updates = SurfaceDecoder(RdpCodecs(RemoteFx())).decode(RdpReader(surfaceBits(128, 64, message)), framebuffer)
+
+        assertEquals(GREY, framebuffer.pixels[10 * 128 + 10])
+        assertEquals(OLD, framebuffer.pixels[10 * 128 + 40], "tile pixels outside the region are not painted")
+        assertEquals(OLD, framebuffer.pixels[40 * 128 + 10], "tile pixels outside the region are not painted")
+        assertEquals(listOf(RdpRect(0, 0, 32, 32)), (updates.single() as RdpUpdate.Region).rects)
+    }
+
+    @Test
+    fun `a region with no rectangles stands for the whole destination`() {
+        // MS-RDPRFX 2.2.2.3.3: numRects of zero means one rectangle covering the destination.
+        val message = RfxTestStreams.message(emptyList(), listOf(RfxTestStreams.greyTile(1, 0)))
+
+        val image = RemoteFx().decode(message, 128, 64)
+
+        assertEquals(listOf(RdpRect(64, 0, 64, 64)), image.painted)
+        assertEquals(GREY, image.pixels[10 * 128 + 100])
+    }
+
+    @Test
+    fun `adjacent tiles in one row are reported as one rectangle`() {
+        val message = RfxTestStreams.message(
+            listOf(RdpRect(0, 0, 128, 64)),
+            listOf(RfxTestStreams.greyTile(0, 0), RfxTestStreams.greyTile(1, 0)),
+        )
+
+        assertEquals(listOf(RdpRect(0, 0, 128, 64)), RemoteFx().decode(message, 128, 64).painted)
+    }
+
+    @Test
+    fun `a region too fragmented to clip against every tile is clipped to its bounds`() {
+        // Tiles × rectangles is the server's to choose — a u16 each, and a tile index may repeat — so
+        // clipping every pair lets one message pin the decoder on billions of intersections. Past a
+        // bound the tiles are clipped to the region's bounding box instead.
+        val tiles = (0 until 16).flatMap { x -> (0 until 16).map { y -> RfxTestStreams.greyTile(x, y) } }
+        val rects = (0 until 5000).map { RdpRect(it % 7, it / 7 % 5, 1000 - it % 11, 1000 - it % 13) }
+        val message = RfxTestStreams.message(rects, tiles)
+
+        val image = RemoteFx().decode(message, 1024, 1024)
+
+        val right = rects.maxOf { it.x + it.width }
+        val bottom = rects.maxOf { it.y + it.height }
+        val bands = (0 until 16).map { row -> RdpRect(0, row * 64, right, minOf(64, bottom - row * 64)) }
+        assertEquals(bands.filter { it.height > 0 }, image.painted)
+    }
+
+    @Test
+    fun `a repeated tile counts once against the clipping bound`() {
+        // 1025 copies of one tile against 1024 rectangles crosses the bound; one distinct tile does not,
+        // so the region is still honoured pixel by pixel instead of widening to its bounding box.
+        val rects = (0 until 1024).map { RdpRect(2 * (it % 32), 2 * (it / 32), 1, 1) }
+        val message = RfxTestStreams.message(rects, List(1025) { RfxTestStreams.greyTile(0, 0) })
+
+        assertEquals(rects, RemoteFx().decode(message, 128, 64).painted)
+    }
+
+    /** A SET_SURFACE_BITS in RemoteFX whose destination is the whole [width]×[height] screen. */
+    private fun surfaceBits(width: Int, height: Int, message: ByteArray): ByteArray = RdpWriter(message.size + 32).apply {
+        u16le(0x0001) // SET_SURFACE_BITS
+        u16le(0).u16le(0).u16le(width).u16le(height)
+        u8(32).u8(0).u8(0).u8(ClientCapabilities.CODEC_ID_REMOTEFX)
+        u16le(width).u16le(height)
+        u32le(message.size)
+        bytes(message)
+    }.toByteArray()
 
     /** A minimal RemoteFX stream containing one tile set. */
     private fun rfxStream(tileSize: Int, quantCount: Int, tiles: Int, tileBytes: ByteArray = ByteArray(0)): ByteArray {
@@ -288,5 +391,6 @@ class RemoteFxTest {
 
     private companion object {
         const val ROUND_TRIP_TOLERANCE = 12
+        const val OLD = 0xFF123456.toInt()
     }
 }

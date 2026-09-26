@@ -30,3 +30,17 @@ expect class FramebufferImage(width: Int, height: Int, straightAlpha: Boolean = 
     /** The current image for drawing. May be re-created on [resize]. */
     val bitmap: ImageBitmap
 }
+
+/**
+ * [rect] clipped to what both the bitmap ([targetWidth]×[targetHeight]) and the source ([srcWidth]
+ * wide, [srcSize] pixels) still hold, or null when nothing is left. Regions queue behind the UI, so
+ * one can be named against a size that either side no longer has.
+ */
+internal fun clipToBoth(rect: RemoteRect, targetWidth: Int, targetHeight: Int, srcWidth: Int, srcSize: Int): RemoteRect? {
+    if (srcWidth <= 0) return null
+    val left = maxOf(rect.x, 0)
+    val top = maxOf(rect.y, 0)
+    val right = minOf(rect.x + rect.width, targetWidth, srcWidth)
+    val bottom = minOf(rect.y + rect.height, targetHeight, srcSize / srcWidth)
+    return if (right > left && bottom > top) RemoteRect(left, top, right - left, bottom - top) else null
+}

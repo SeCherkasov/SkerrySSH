@@ -9,31 +9,25 @@ package app.skerry.shared.graphics
  * buffer is deliberately platform-neutral (`IntArray`, no Compose `ImageBitmap`) so it lives in
  * `commonMain`; the pixel→bitmap bridge is an expect/actual on the UI side.
  *
- * Not thread-safe by construction: all mutation happens on the single read-loop coroutine, and the
- * UI reads after the loop has emitted the region for the frame. [pixels]/[width]/[height] are
- * `@Volatile` so a [resize] (which swaps the array) publishes safely to the reader; a one-pixel tear
- * on a dirty rect is harmless and self-corrects on the next update (same reasoning as the
- * `@Volatile` window size in `TelnetCodec`).
+ * Not thread-safe by construction: all mutation happens on the single read-loop coroutine. The UI
+ * reads on another thread, possibly several updates behind the loop, so it reads [snapshot] — the
+ * size and the array of that size, published together by [resize] — never [width] and [pixels]
+ * one after the other, which a resize in between turns into a stride that overruns the array. A
+ * one-pixel tear inside a dirty rect is harmless and self-corrects on the next update.
  */
 class RemoteFramebuffer(width: Int, height: Int) {
     @Volatile
-    var width: Int = width
+    var snapshot: FramebufferSnapshot = FramebufferSnapshot(width, height, IntArray(width * height))
         private set
 
-    @Volatile
-    var height: Int = height
-        private set
-
-    @Volatile
-    var pixels: IntArray = IntArray(width * height)
-        private set
+    val width: Int get() = snapshot.width
+    val height: Int get() = snapshot.height
+    val pixels: IntArray get() = snapshot.pixels
 
     /** Reallocate for a new desktop size (server resize / DesktopSize pseudo-encoding). Contents are cleared. */
     fun resize(newWidth: Int, newHeight: Int) {
         require(newWidth >= 0 && newHeight >= 0) { "negative framebuffer size ${newWidth}x$newHeight" }
-        width = newWidth
-        height = newHeight
-        pixels = IntArray(newWidth * newHeight)
+        snapshot = FramebufferSnapshot(newWidth, newHeight, IntArray(newWidth * newHeight))
     }
 
     /** Set a single ARGB pixel. Out-of-bounds coordinates are ignored (defensive against malformed rects). */
@@ -109,3 +103,6 @@ class RemoteFramebuffer(width: Int, height: Int) {
         }
     }
 }
+
+/** One size of a [RemoteFramebuffer] and its pixels, `pixels.size == width * height`. */
+class FramebufferSnapshot(val width: Int, val height: Int, val pixels: IntArray)

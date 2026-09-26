@@ -38,15 +38,12 @@ actual class FramebufferImage actual constructor(
     }
 
     actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
-        val bw = bmp.width
-        val bh = bmp.height
-        for (r in rects) {
-            val x = r.x.coerceIn(0, bw)
-            val y = r.y.coerceIn(0, bh)
-            val rw = minOf(r.width, bw - x, srcWidth - x)
-            val rh = minOf(r.height, bh - y)
-            if (rw <= 0 || rh <= 0) continue
-            bmp.setPixels(src, y * srcWidth + x, srcWidth, x, y, rw, rh)
+        val target = bmp
+        for (rect in rects) {
+            // Clipped to the source's rows too: setPixels throws rather than clips when a region
+            // from before a shrink reaches past the end of the new, smaller array.
+            val r = clipToBoth(rect, target.width, target.height, srcWidth, src.size) ?: continue
+            target.setPixels(src, r.y * srcWidth + r.x, srcWidth, r.x, r.y, r.width, r.height)
         }
     }
 
