@@ -61,7 +61,7 @@ data class TerminalStepMark(val token: String, val exitCode: Int, val output: St
  * [lastCol] where the closing one found it, so the fragment starts and ends exactly at the command's
  * own bytes rather than at a row boundary.
  *
- * Soft-wrapped rows are joined back into one line ([TermRow.wrapped]), trailing blanks go, and the
+ * Soft-wrapped rows are joined back into one line ([wrapsToNextRow]), trailing blanks go, and the
  * result is cut to its last [limit] characters *at a row boundary*: the end of a noisy step is the
  * part worth reading, and half a first line reads as corruption. Rows are walked from the end for
  * that reason — a step that printed a hundred thousand lines costs the kept tail, not the whole run.
@@ -72,7 +72,7 @@ internal fun stepMarkOutput(
     last: Int,
     lastCol: Int,
     limit: Int = STEP_MARK_OUTPUT_LIMIT,
-    rowAt: (Int) -> TermRow,
+    rowAt: (Int) -> List<TermCell>,
 ): String {
     if (last < first) return ""
     val kept = ArrayDeque<StepMarkRow>()
@@ -85,10 +85,11 @@ internal fun stepMarkOutput(
         // A wrapped row continues into the next one, so its trailing blanks are part of the line —
         // trimming them would glue the halves of a word together.
         val raw = buildString(until - from) { for (c in from until until) append(row[c].text) }
-        val text = if (row.wrapped) raw else raw.trimEnd()
+        val wrapped = row.wrapsToNextRow()
+        val text = if (wrapped) raw else raw.trimEnd()
         val cost = text.length + if (kept.isEmpty()) 0 else 1
         if (length + cost > limit && kept.isNotEmpty()) break
-        kept.addFirst(StepMarkRow(text, row.wrapped))
+        kept.addFirst(StepMarkRow(text, wrapped))
         length += cost
         index--
     }

@@ -98,13 +98,60 @@ data class TermCell(
  * One grid row: cells + the [wrapped] flag. `wrapped == true` means a soft line break — auto-wrap
  * (DECAWM) cut the line and it logically continues on the next row; an honest `\n` leaves it `false`.
  * Reflow on resize joins adjacent wrapped rows into one logical line and re-splits it at the new
- * width. Delegates to [MutableList], so all grid code treats a row as a list of cells without
- * knowing about the flag.
+ * width.
+ *
+ * Mutable only through its own methods, so every write drops the row's [snapshot]: an unchanged row
+ * publishes the same immutable instance frame after frame, and the render layer can skip it by
+ * identity. Not a [MutableList] on purpose — a leaked mutable iterator or sub-list would write
+ * around that invalidation.
  */
 class TermRow(
     private val cells: MutableList<TermCell>,
-    var wrapped: Boolean = false,
-) : MutableList<TermCell> by cells
+    wrapped: Boolean = false,
+) : AbstractList<TermCell>() {
+    private var frozen: TermSnapshotRow? = null
+
+    var wrapped: Boolean = wrapped
+        set(value) {
+            if (field != value) frozen = null
+            field = value
+        }
+
+    override val size: Int get() = cells.size
+
+    override fun get(index: Int): TermCell = cells[index]
+
+    operator fun set(index: Int, element: TermCell) {
+        frozen = null
+        cells[index] = element
+    }
+
+    fun add(element: TermCell) {
+        frozen = null
+        cells.add(element)
+    }
+
+    fun add(index: Int, element: TermCell) {
+        frozen = null
+        cells.add(index, element)
+    }
+
+    fun removeAt(index: Int): TermCell {
+        frozen = null
+        return cells.removeAt(index)
+    }
+
+    /** This row as a render snapshot: copied once per change, shared until the next write. */
+    internal fun snapshot(): TermSnapshotRow =
+        frozen ?: TermSnapshotRow(cells.toList(), wrapped).also { frozen = it }
+
+    /**
+     * This row leaving the grid for good — into history, where nothing writes to it again. The
+     * snapshot a frame already published keeps its identity; otherwise the cells are wrapped rather
+     * than copied, since no later write can reach them.
+     */
+    internal fun retire(): TermSnapshotRow = frozen ?: TermSnapshotRow(cells, wrapped)
+}
 
 /**
  * A row as published in a render snapshot ([TerminalEmulator.lines]): immutable cells plus the
@@ -120,10 +167,14 @@ class TermSnapshotRow(private val cells: List<TermCell>, val wrapped: Boolean) :
 
 /**
  * Whether this row soft-wraps into the next one — an auto-wrap (DECAWM) cut the logical line here,
- * an honest `\n` did not (see [TermRow]). Rows outside a render snapshot (hand-built lists in tests,
- * selection fragments) carry no flag and answer `false`.
+ * an honest `\n` did not (see [TermRow]). Hand-built lists (tests, selection fragments) carry no
+ * flag and answer `false`.
  */
-fun List<TermCell>.wrapsToNextRow(): Boolean = this is TermSnapshotRow && wrapped
+fun List<TermCell>.wrapsToNextRow(): Boolean = when (this) {
+    is TermSnapshotRow -> wrapped
+    is TermRow -> wrapped
+    else -> false
+}
 
 /** Mouse reporting mode to the application (DEC private modes). Encoding is chosen by [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
@@ -224,17 +275,17 @@ class TerminalEmulator(
     val cursorCol: Int get() = cx
 
     /**
-     * Snapshot for rendering: scrollback (main buffer only) + current screen rows. Screen rows are
-     * copied into immutable lists (the grid's rows are live, mutated in place); the history part
-     * reuses the [ScrollbackBuffer]'s frozen rows, shared with prior snapshots — publishing costs
-     * O(screen + history/chunk), not O(history). The snapshot safely survives subsequent [feed]
+     * Snapshot for rendering: scrollback (main buffer only) + current screen rows. A screen row is
+     * copied into an immutable list only when it changed since the last snapshot ([TermRow.snapshot]),
+     * and keeps that instance when it scrolls into history; the history part reuses the
+     * [ScrollbackBuffer]'s frozen rows, shared with prior snapshots — publishing costs
+     * O(changed rows + history/chunk), not O(screen + history). The snapshot safely survives subsequent [feed]
      * calls and is safe to hand to another thread.
      */
     val lines: List<List<TermCell>>
         get() {
             snapshotCache?.takeIf { snapshotVersion == contentVersion }?.let { return it }
-            val screenRows = ArrayList<List<TermCell>>(grid.size)
-                .apply { grid.forEach { add(TermSnapshotRow(it.toList(), it.wrapped)) } }
+            val screenRows = ArrayList<List<TermCell>>(grid.size).apply { grid.forEach { add(it.snapshot()) } }
             val built = if (altScreen) screenRows else SnapshotLines(scrollback.frozen(), screenRows)
             snapshotCache = built
             snapshotVersion = contentVersion
@@ -676,7 +727,7 @@ class TerminalEmulator(
             null // the rows are gone (or were never this step's): lost, which is not the same as empty
         } else {
             stepMarkOutput(first = start, firstCol = stepMarkCol, last = scrollback.size + cy, lastCol = cx) {
-                if (it < scrollback.size) scrollback.rows[it] else grid[it - scrollback.size]
+                if (it < scrollback.size) scrollback[it] else grid[it - scrollback.size]
             }
         }
         onStepMark(TerminalStepMark(token, exitCode, output))
@@ -1449,8 +1500,8 @@ class TerminalEmulator(
      */
     // Caller must markDirty() first (resize does): this writer relies on its entry frame.
     private fun reflowPrimary(nc: Int, nr: Int, cursorRow: Int, cursorCol: Int): Pair<Int, Int> {
-        val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
-            addAll(scrollback.rows); addAll(primaryGrid)
+        val src = ArrayList<List<TermCell>>(scrollback.size + primaryGrid.size).apply {
+            addAll(scrollback.frozen()); addAll(primaryGrid)
         }
         val result = TerminalReflow.reflow(
             src = src,
@@ -1610,40 +1661,44 @@ private data class SavedCursor(
 private const val SCROLLBACK_CHUNK = 256
 
 /**
- * Scrollback storage keeping two representations in lockstep behind one API, so no call site can
- * desync them: [rows] — the mutable [TermRow]s reflow reads — and a frozen immutable copy of each
- * row for render snapshots (a row is copied exactly once, when it leaves the grid).
+ * Scrollback storage: each row is kept once, as the immutable snapshot it retired into
+ * ([TermRow.retire]) — reflow, step capture and render snapshots all read the same rows.
  *
- * Frozen rows live in sealed [SCROLLBACK_CHUNK]-sized chunks shared by reference between
- * snapshots: [frozen] costs O(history/chunk + chunk), not O(history), per publish. A sealed chunk
- * is never mutated again, so a snapshot stays valid — and safe for another thread after safe
- * publication — while the emulator keeps feeding; trimming the head only advances [headOffset]
- * until a whole chunk is dead.
+ * Rows live in sealed [SCROLLBACK_CHUNK]-sized chunks shared by reference between snapshots:
+ * [frozen] costs O(history/chunk + chunk), not O(history), per publish. A sealed chunk is never
+ * mutated again, so a snapshot stays valid — and safe for another thread after safe publication —
+ * while the emulator keeps feeding; trimming the head only advances [headOffset] until a whole chunk
+ * is dead.
  */
 private class ScrollbackBuffer {
-    /** Mutable rows for reflow, oldest first. Read-only for callers; mutate via this class only. */
-    val rows = ArrayDeque<TermRow>()
-
     private var sealed = ArrayDeque<List<List<TermCell>>>()
     private var tail = ArrayList<List<TermCell>>(SCROLLBACK_CHUNK)
     private var headOffset = 0 // rows of sealed.first() already trimmed away
 
-    val size: Int get() = rows.size
+    var size: Int = 0
+        private set
 
     fun push(row: TermRow) {
-        rows.addLast(row)
-        tail.add(TermSnapshotRow(row.toList(), row.wrapped))
+        tail.add(row.retire())
+        size++
         if (tail.size == SCROLLBACK_CHUNK) {
             sealed.addLast(tail)
             tail = ArrayList(SCROLLBACK_CHUNK)
         }
     }
 
+    operator fun get(index: Int): List<TermCell> {
+        val sealedCount = sealed.size * SCROLLBACK_CHUNK - headOffset
+        if (index >= sealedCount) return tail[index - sealedCount]
+        val j = index + headOffset
+        return sealed[j / SCROLLBACK_CHUNK][j % SCROLLBACK_CHUNK]
+    }
+
     /** Drops the oldest rows down to [max] and answers how many went — see [TerminalEmulator.trimScrollback]. */
     fun trimTo(max: Int): Int {
-        val before = rows.size
-        while (rows.size > max) {
-            rows.removeFirst()
+        val before = size
+        while (size > max) {
+            size--
             if (sealed.isNotEmpty()) {
                 if (++headOffset == SCROLLBACK_CHUNK) {
                     sealed.removeFirst()
@@ -1654,11 +1709,11 @@ private class ScrollbackBuffer {
                 tail.removeAt(0)
             }
         }
-        return before - rows.size
+        return before - size
     }
 
     fun clear() {
-        rows.clear()
+        size = 0
         // Fresh containers, not clear(): prior snapshots may still reference the old ones.
         sealed = ArrayDeque()
         tail = ArrayList(SCROLLBACK_CHUNK)
