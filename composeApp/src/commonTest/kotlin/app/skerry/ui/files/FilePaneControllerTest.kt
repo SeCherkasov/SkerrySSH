@@ -1324,4 +1324,22 @@ class FilePaneControllerTest {
         assertEquals("", c.nameFilter)
         assertEquals("readme.txt", c.cursoredItem()?.name)
     }
+
+    @Test
+    fun `restoring a selection snapshot puts back the marks, less rows that left the listing`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        c.selectOnly(c.entry("readme.txt"))
+        c.toggle(c.entry("build.log"))
+        val before = c.selectionSnapshot()
+
+        c.selectOnly(c.entry("zeta"))
+        c.delete(c.entry("build.log"))
+        advanceUntilIdle()
+        c.restoreSelection(before)
+
+        assertEquals(setOf(c.entry("readme.txt").path), c.selection)
+    }
 }

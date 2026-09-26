@@ -308,6 +308,16 @@ class FilePaneController(
         anchor = item.path
     }
 
+    /** The current marks and range anchor, to put back with [restoreSelection]. */
+    fun selectionSnapshot(): SelectionSnapshot = SelectionSnapshot(selection, anchor)
+
+    /** Puts back marks taken by [selectionSnapshot], less the rows that have left the listing since. */
+    fun restoreSelection(snapshot: SelectionSnapshot) {
+        selection = snapshot.paths
+        anchor = snapshot.anchor
+        pruneSelection()
+    }
+
     /** Ctrl-click: toggles [item] in the selection, setting it as the anchor. */
     fun toggle(item: FileItem) {
         selection = if (item.path in selection) selection - item.path else selection + item.path
@@ -702,3 +712,6 @@ private fun List<FileItem>.sortedForPane(): List<FileItem> =
             { it.name.lowercase() },
         ),
     )
+
+/** A pane's marks at one moment; opaque outside [FilePaneController]. */
+class SelectionSnapshot internal constructor(internal val paths: Set<String>, internal val anchor: String?)

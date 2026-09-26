@@ -54,8 +54,11 @@
     <!-- Copy / move dialogs -->
     <string name="sftp_what_single">“%1$s”</string>
     <string name="sftp_items_count">%1$d items</string>
-    <string name="sftp_copy_to_q">Copy to %1$s?</string>
-    <string name="sftp_move_to_q">Move to %1$s?</string>
+    <string name="sftp_drag_shift_move">Shift: move</string>
+    <string name="sftp_copy_to_remote_q">Copy to the server?</string>
+    <string name="sftp_copy_to_local_q">Copy to this computer?</string>
+    <string name="sftp_move_to_remote_q">Move to the server?</string>
+    <string name="sftp_move_to_local_q">Move to this computer?</string>
     <string name="sftp_transfer_body">%1$s → %2$s</string>
 
     <!-- Transfer error (name: message) -->

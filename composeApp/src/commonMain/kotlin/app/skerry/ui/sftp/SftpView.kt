@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -27,6 +28,9 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,7 +52,6 @@ import app.skerry.ui.generated.resources.sftp_create
 import app.skerry.ui.generated.resources.sftp_new_folder
 import app.skerry.ui.generated.resources.sftp_opening
 import app.skerry.ui.generated.resources.sftp_pane_local
-import app.skerry.ui.generated.resources.sftp_pane_remote
 import app.skerry.ui.generated.resources.sftp_rename
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.session.SessionView
@@ -117,12 +120,11 @@ private fun LiveSftpView(
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var active by remember(controller) { mutableStateOf(ActivePane.Local) }
-    // F8 Delete / F6 Move targets — the active pane at call time (the dialog reads its operands() for
+    // F8 Delete target — the active pane at call time (the dialog reads its operands() for
     // text/execution). null — dialog closed.
     var deleteTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
-    var moveTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
-    // F5 Copy target — the active pane at call time (source; destination is the opposite pane).
-    var copyTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
+    // F5 Copy / F6 Move request — the source pane at call time; the destination is the opposite pane.
+    var transferRequest by remember(controller) { mutableStateOf<PaneTransferRequest?>(null) }
     // F2 Rename target — a (pane, cursored row) pair at press time. null — dialog closed.
     var renameTarget by remember(controller) { mutableStateOf<Pair<FilePaneController, FileItem>?>(null) }
     // F3 View / F4 Edit — the open file editor. null — no editor. The controller comes from the
@@ -142,6 +144,15 @@ private fun LiveSftpView(
     // Persistent show-hidden setting (Ctrl+H) — single source of truth for both panes.
     val sftpPrefs = LocalSftpPrefs.current
     val focus = remember(controller) { FocusRequester() }
+    // A row dragged from one pane to the other (desktop mouse): copy, or move with Shift held.
+    val drag = remember(controller) { FileDragState() }
+    // Window position of the view, so the drag chip can place the window-space pointer inside it.
+    var viewOrigin by remember(controller) { mutableStateOf(Offset.Zero) }
+    // The Escape press that cancelled a drag, until its key-up.
+    var escapeSpent by remember(controller) { mutableStateOf(false) }
+    // A key-up that happens in another window never arrives here: losing focus ends the press too.
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused) { if (!windowFocused) escapeSpent = false }
     // UI scope only for showing the native file picker (Upload fallback); the transfer itself lives on
     // the session scope inside the coordinator and survives the view leaving composition.
     val uiScope = rememberCoroutineScope()
@@ -195,11 +206,11 @@ private fun LiveSftpView(
             4 -> openEditor(false) // Edit
             5 -> { // Copy: active pane's selection/cursor to the other (upload/download), with confirmation
                 ensureOperandSelection(pane)
-                if (pane.operands().isNotEmpty()) copyTarget = pane
+                if (pane.operands().isNotEmpty()) transferRequest = PaneTransferRequest(pane, move = false)
             }
             6 -> { // Move: copy + delete the source, with confirmation
                 ensureOperandSelection(pane)
-                if (pane.operands().isNotEmpty()) moveTarget = pane
+                if (pane.operands().isNotEmpty()) transferRequest = PaneTransferRequest(pane, move = true)
             }
             7 -> creatingFolder = true // MkDir
             8 -> { // Delete on the active pane, with confirmation
@@ -212,148 +223,190 @@ private fun LiveSftpView(
         }
     } }
 
-    Column(
+    // A drop opens the same confirmation F5/F6 would, which reads the source pane's marks: a row
+    // picked up unmarked becomes the only mark now, and not before, so an abandoned drag keeps them.
+    val dragBindings = remember(c) {
+        ActivePane.entries.associateWith { side ->
+            FileDragBinding(drag, side) { dropped ->
+                val coord = c ?: return@FileDragBinding
+                val source = if (dropped.source == ActivePane.Local) coord.local else coord.remote
+                source.transferRequestFor(dropped)?.let { transferRequest = it }
+            }
+        }
+    }
+
+    Box(
         Modifier
             .fillMaxSize()
-            .background(Skerry.colors.bg)
-            .focusRequester(focus)
-            .onPreviewKeyEvent { event ->
-                if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                // Path bar or filter field has focus: let its own handler take arrows/Enter/Esc.
-                if (editingPath || editingFilter) return@onPreviewKeyEvent false
-                // The editor is open: it owns every key, including the F-keys it redefines.
-                if (editor != null) return@onPreviewKeyEvent false
-                // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
-                // LaunchedEffect below applies it to both panes (single source of truth).
-                if (event.isCtrlPressed && event.key == Key.H) {
-                    sftpPrefs.setShowHidden(!sftpPrefs.showHidden)
-                    return@onPreviewKeyEvent true
-                }
-                // Ctrl+F — quick name filter for the active pane (open the row and focus its field).
-                if (event.isCtrlPressed && event.key == Key.F) {
-                    if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++
-                    return@onPreviewKeyEvent true
-                }
-                val pane = if (active == ActivePane.Local) c.local else c.remote
-                val listState = if (active == ActivePane.Local) localList else remoteList
-                val page = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
-                when (event.key) {
-                    Key.DirectionUp -> pane.moveCursor(-1)
-                    Key.DirectionDown -> pane.moveCursor(1)
-                    Key.PageUp -> pane.moveCursor(-page)
-                    Key.PageDown -> pane.moveCursor(page)
-                    Key.MoveHome -> pane.cursorToFirst()
-                    Key.MoveEnd -> pane.cursorToLast()
-                    Key.Enter, Key.NumPadEnter -> pane.enterCursored()
-                    Key.DirectionRight -> pane.cursoredItem()?.let(pane::open)
-                    Key.DirectionLeft, Key.Backspace -> pane.goUp()
-                    Key.Insert -> pane.markCursoredAndAdvance()
-                    Key.Spacebar -> pane.markCursored()
-                    Key.Escape -> pane.clearSelection()
-                    Key.Tab -> active = if (active == ActivePane.Local) ActivePane.Remote else ActivePane.Local
-                    Key.F2 -> fKey(2)
-                    Key.F3 -> fKey(3)
-                    Key.F4 -> fKey(4)
-                    Key.F5 -> fKey(5)
-                    Key.F6 -> fKey(6)
-                    Key.F7 -> fKey(7)
-                    Key.F8 -> fKey(8)
-                    Key.F9 -> fKey(9)
-                    Key.F10 -> fKey(10)
-                    else -> return@onPreviewKeyEvent false
-                }
-                true
-            }
-            .focusable(),
+            .onGloballyPositioned { viewOrigin = it.positionInWindow() }
+            .fileDragModifiers(drag),
     ) {
-        // The bar's actions are the panel's own (refresh/mkdir/filter/columns/transfer) and mean
-        // nothing over an open file — the editor brings its own header and key bar, so the bar
-        // keeps only the title while it is up.
-        SftpWorkBar(
-            onBack = onQuit,
-            // Until the coordinator opens (or when it failed to) there is no remote path to name,
-            // and "SFTP ·" with nothing after it reads as a truncated title — the session's own
-            // address stands in.
-            label = WorkBarLabel.Solo(
-                hostName,
-                c?.remote?.path?.let { stringResource(Res.string.sftp_wbar_subtitle, fileDisplayPath(it)) } ?: hostLabel,
-                status,
-            ),
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(Skerry.colors.bg)
+                .focusRequester(focus)
+                .onPreviewKeyEvent { event ->
+                    // Shift decides copy or move while a drag is held, and pressing it without moving
+                    // the mouse sends no pointer event to read it from.
+                    if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) {
+                        drag.setShift(event.type == KeyEventType.KeyDown)
+                        return@onPreviewKeyEvent false
+                    }
+                    // Escape cancels a drag, and the rest of that press — auto-repeat included — is spent:
+                    // falling through to the pane's own Escape would clear the marks it was carrying.
+                    if (event.key == Key.Escape && (drag.active || escapeSpent)) {
+                        if (drag.active) drag.cancel()
+                        escapeSpent = event.type == KeyEventType.KeyDown
+                        return@onPreviewKeyEvent true
+                    }
+                    // The panel's keys wait for the drag to end: a delete or a re-mark mid-drag would
+                    // change what the drop is about to carry.
+                    if (drag.active) return@onPreviewKeyEvent true
+                    if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // Path bar or filter field has focus: let its own handler take arrows/Enter/Esc.
+                    if (editingPath || editingFilter) return@onPreviewKeyEvent false
+                    // The editor is open: it owns every key, including the F-keys it redefines.
+                    if (editor != null) return@onPreviewKeyEvent false
+                    // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
+                    // LaunchedEffect below applies it to both panes (single source of truth).
+                    if (event.isCtrlPressed && event.key == Key.H) {
+                        sftpPrefs.setShowHidden(!sftpPrefs.showHidden)
+                        return@onPreviewKeyEvent true
+                    }
+                    // Ctrl+F — quick name filter for the active pane (open the row and focus its field).
+                    if (event.isCtrlPressed && event.key == Key.F) {
+                        if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++
+                        return@onPreviewKeyEvent true
+                    }
+                    val pane = if (active == ActivePane.Local) c.local else c.remote
+                    val listState = if (active == ActivePane.Local) localList else remoteList
+                    val page = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
+                    when (event.key) {
+                        Key.DirectionUp -> pane.moveCursor(-1)
+                        Key.DirectionDown -> pane.moveCursor(1)
+                        Key.PageUp -> pane.moveCursor(-page)
+                        Key.PageDown -> pane.moveCursor(page)
+                        Key.MoveHome -> pane.cursorToFirst()
+                        Key.MoveEnd -> pane.cursorToLast()
+                        Key.Enter, Key.NumPadEnter -> pane.enterCursored()
+                        Key.DirectionRight -> pane.cursoredItem()?.let(pane::open)
+                        Key.DirectionLeft, Key.Backspace -> pane.goUp()
+                        Key.Insert -> pane.markCursoredAndAdvance()
+                        Key.Spacebar -> pane.markCursored()
+                        Key.Escape -> pane.clearSelection()
+                        Key.Tab -> active = if (active == ActivePane.Local) ActivePane.Remote else ActivePane.Local
+                        Key.F2 -> fKey(2)
+                        Key.F3 -> fKey(3)
+                        Key.F4 -> fKey(4)
+                        Key.F5 -> fKey(5)
+                        Key.F6 -> fKey(6)
+                        Key.F7 -> fKey(7)
+                        Key.F8 -> fKey(8)
+                        Key.F9 -> fKey(9)
+                        Key.F10 -> fKey(10)
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    true
+                }
+                .focusable(),
         ) {
-            if (editor == null) {
-                SftpWorkBarActions(
-                    localActive = active == ActivePane.Local,
-                    enabled = c != null,
-                    busy = c != null && (c.local.busy || c.remote.busy),
-                    onRefresh = { fKey(9) },
-                    onNewFolder = { fKey(7) },
-                    onFilter = { if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++ },
-                    onTransfer = {
-                        val coord = c
-                        // Nothing marked on the local side and no cursor to fall back on: the
-                        // native picker is the way in, the way the old Upload button worked.
-                        if (coord != null && active == ActivePane.Local && coord.local.hasNoOperand()) {
-                            uiScope.launch { pickUploadSource()?.let { coord.uploadSource(it) } }
-                        } else {
-                            fKey(5)
-                        }
-                    },
-                )
-            }
-        }
-        val openEditor = editor
-        when {
-            // F3/F4: the editor takes over the panel area and the key bar, in this same window —
-            // the panel's chrome stays, only what the function keys do changes.
-            openEditor != null -> FileEditorScreen(
-                controller = openEditor,
-                onClose = { editor = null; focus.requestFocus() },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-            openError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, Skerry.colors.sunset)
-            }
-            c == null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("sync", stringResource(Res.string.sftp_opening), null, Skerry.colors.faint)
-            }
-            else -> {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    LivePane(
-                        c.local, "computer", Skerry.colors.dim,
-                        badge = stringResource(Res.string.sftp_pane_local), badgeAccent = false, mono = mono,
-                        listState = localList,
-                        active = active == ActivePane.Local,
-                        onActivate = { active = ActivePane.Local; focus.requestFocus() },
-                        onEditingPath = { editingPath = it },
-                        onEditingFilter = { editingFilter = it },
-                        filterTick = localFilterTick,
-                        onFilterClose = { localFilterTick = 0 },
-                        restoreFocus = { focus.requestFocus() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    VLine(Skerry.colors.line)
-                    LivePane(
-                        c.remote, "dns", Skerry.colors.moss,
-                        badge = hostName, badgeAccent = true, mono = mono,
-                        listState = remoteList,
-                        active = active == ActivePane.Remote,
-                        onActivate = { active = ActivePane.Remote; focus.requestFocus() },
-                        onEditingPath = { editingPath = it },
-                        onEditingFilter = { editingFilter = it },
-                        filterTick = remoteFilterTick,
-                        onFilterClose = { remoteFilterTick = 0 },
-                        restoreFocus = { focus.requestFocus() },
-                        modifier = Modifier.weight(1f),
+            // The bar's actions are the panel's own (refresh/mkdir/filter/columns/transfer) and mean
+            // nothing over an open file — the editor brings its own header and key bar, so the bar
+            // keeps only the title while it is up.
+            SftpWorkBar(
+                onBack = onQuit,
+                // Until the coordinator opens (or when it failed to) there is no remote path to name,
+                // and "SFTP ·" with nothing after it reads as a truncated title — the session's own
+                // address stands in.
+                label = WorkBarLabel.Solo(
+                    hostName,
+                    c?.remote?.path?.let { stringResource(Res.string.sftp_wbar_subtitle, fileDisplayPath(it)) } ?: hostLabel,
+                    status,
+                ),
+            ) {
+                if (editor == null) {
+                    SftpWorkBarActions(
+                        localActive = active == ActivePane.Local,
+                        enabled = c != null,
+                        busy = c != null && (c.local.busy || c.remote.busy),
+                        onRefresh = { fKey(9) },
+                        onNewFolder = { fKey(7) },
+                        onFilter = { if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++ },
+                        onTransfer = {
+                            val coord = c
+                            // Nothing marked on the local side and no cursor to fall back on: the
+                            // native picker is the way in, the way the old Upload button worked.
+                            if (coord != null && active == ActivePane.Local && coord.local.hasNoOperand()) {
+                                uiScope.launch { pickUploadSource()?.let { coord.uploadSource(it) } }
+                            } else {
+                                fKey(5)
+                            }
+                        },
                     )
                 }
-                TransferQueueStrip(c.queue, mono, onDismiss = c::dismissTransfer)
+            }
+            val openEditor = editor
+            when {
+                // F3/F4: the editor takes over the panel area and the key bar, in this same window —
+                // the panel's chrome stays, only what the function keys do changes.
+                openEditor != null -> FileEditorScreen(
+                    controller = openEditor,
+                    onClose = { editor = null; focus.requestFocus() },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                openError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
+                    PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, Skerry.colors.sunset)
+                }
+                c == null -> Box(Modifier.weight(1f).fillMaxWidth()) {
+                    PaneNotice("sync", stringResource(Res.string.sftp_opening), null, Skerry.colors.faint)
+                }
+                else -> {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        LivePane(
+                            c.local, "computer", Skerry.colors.dim,
+                            badge = stringResource(Res.string.sftp_pane_local), badgeAccent = false, mono = mono,
+                            listState = localList,
+                            active = active == ActivePane.Local,
+                            onActivate = { active = ActivePane.Local; focus.requestFocus() },
+                            onEditingPath = { editingPath = it },
+                            onEditingFilter = { editingFilter = it },
+                            filterTick = localFilterTick,
+                            onFilterClose = { localFilterTick = 0 },
+                            restoreFocus = { focus.requestFocus() },
+                            modifier = Modifier.weight(1f).fileDropAnchor(drag, ActivePane.Local),
+                            drag = dragBindings.getValue(ActivePane.Local),
+                            dropTarget = drag.target == ActivePane.Local,
+                        )
+                        VLine(Skerry.colors.line)
+                        LivePane(
+                            c.remote, "dns", Skerry.colors.moss,
+                            badge = hostName, badgeAccent = true, mono = mono,
+                            listState = remoteList,
+                            active = active == ActivePane.Remote,
+                            onActivate = { active = ActivePane.Remote; focus.requestFocus() },
+                            onEditingPath = { editingPath = it },
+                            onEditingFilter = { editingFilter = it },
+                            filterTick = remoteFilterTick,
+                            onFilterClose = { remoteFilterTick = 0 },
+                            restoreFocus = { focus.requestFocus() },
+                            modifier = Modifier.weight(1f).fileDropAnchor(drag, ActivePane.Remote),
+                            drag = dragBindings.getValue(ActivePane.Remote),
+                            dropTarget = drag.target == ActivePane.Remote,
+                        )
+                    }
+                    TransferQueueStrip(c.queue, mono, onDismiss = c::dismissTransfer)
+                }
+            }
+            // The editor brings its own key bar (Save/Edit/Search/Quit) — the panel's would be a legend
+            // for keys that aren't listening.
+            if (openEditor == null) {
+                HLine()
+                FKeyBar(PANEL_FKEYS.map { it.copy(enabled = c != null) }, fKey, mono)
             }
         }
-        // The editor brings its own key bar (Save/Edit/Search/Quit) — the panel's would be a legend
-        // for keys that aren't listening.
-        if (openEditor == null) {
-            HLine()
-            FKeyBar(PANEL_FKEYS.map { it.copy(enabled = c != null) }, fKey, mono)
+        if (c != null && drag.active) {
+            FileDragGhost(drag, viewOrigin, mono) { side -> fileDisplayPath(if (side == ActivePane.Local) c.local.path else c.remote.path) }
         }
     }
 
@@ -387,47 +440,10 @@ private fun LiveSftpView(
         }
     }
 
-    // F6 Move the active pane to the other: copy + delete the source, with confirmation. Destination —
-    // the opposite pane's current directory.
-    moveTarget?.let { pane ->
-        val coord = c
-        val items = pane.operands()
-        if (coord == null || items.isEmpty()) {
-            LaunchedEffect(pane) { moveTarget = null }
-        } else {
-            val fromLocal = pane === coord.local
-            val destPath = fileDisplayPath(if (fromLocal) coord.remote.path else coord.local.path)
-            ConfirmMoveDialog(
-                items = items,
-                destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
-                destPath = destPath,
-                onConfirm = { coord.moveSelection(fromLocal); moveTarget = null },
-                onDismiss = { moveTarget = null },
-            )
-        }
-    }
-
-    // F5 Copy the active pane to the other (upload/download), with confirmation. Destination — the
-    // opposite pane's current directory.
-    copyTarget?.let { pane ->
-        val coord = c
-        val items = pane.operands()
-        if (coord == null || items.isEmpty()) {
-            LaunchedEffect(pane) { copyTarget = null }
-        } else {
-            val fromLocal = pane === coord.local
-            val destPath = fileDisplayPath(if (fromLocal) coord.remote.path else coord.local.path)
-            ConfirmCopyDialog(
-                items = items,
-                destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
-                destPath = destPath,
-                onConfirm = {
-                    if (fromLocal) coord.uploadSelection() else coord.downloadSelection()
-                    copyTarget = null
-                },
-                onDismiss = { copyTarget = null },
-            )
-        }
+    // F5 Copy / F6 Move (or a drag between the panes), with confirmation. Destination — the opposite
+    // pane's current directory.
+    transferRequest?.let { request ->
+        PaneTransferConfirmation(c, request, onClose = { transferRequest = null })
     }
 
     // Overwrite conflict: a transfer (F5/F6 or drag) found same-named entries in the destination. Raised
@@ -452,9 +468,6 @@ private fun LiveSftpView(
         )
     }
 }
-
-/** Which of the two panes is active (receives the keyboard and cursor highlight). */
-private enum class ActivePane { Local, Remote }
 
 /** Centered notice in the listing area (opening/error/no session). */
 @Composable

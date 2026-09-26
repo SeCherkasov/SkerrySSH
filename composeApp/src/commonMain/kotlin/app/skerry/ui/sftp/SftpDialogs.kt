@@ -40,12 +40,16 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.ui.files.FilePaneController
+import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.fileDisplayName
+import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_already_exists
 import app.skerry.ui.generated.resources.sftp_cancel
 import app.skerry.ui.generated.resources.sftp_copy
-import app.skerry.ui.generated.resources.sftp_copy_to_q
+import app.skerry.ui.generated.resources.sftp_copy_to_local_q
+import app.skerry.ui.generated.resources.sftp_copy_to_remote_q
 import app.skerry.ui.generated.resources.sftp_delete
 import app.skerry.ui.generated.resources.sftp_delete_file_body
 import app.skerry.ui.generated.resources.sftp_delete_file_q
@@ -56,7 +60,8 @@ import app.skerry.ui.generated.resources.sftp_delete_items_dirs_body
 import app.skerry.ui.generated.resources.sftp_delete_items_q
 import app.skerry.ui.generated.resources.sftp_items_count
 import app.skerry.ui.generated.resources.sftp_move
-import app.skerry.ui.generated.resources.sftp_move_to_q
+import app.skerry.ui.generated.resources.sftp_move_to_local_q
+import app.skerry.ui.generated.resources.sftp_move_to_remote_q
 import app.skerry.ui.generated.resources.sftp_overwrite
 import app.skerry.ui.generated.resources.sftp_overwrite_many
 import app.skerry.ui.generated.resources.sftp_overwrite_one
@@ -209,12 +214,13 @@ internal fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Un
 }
 
 /**
- * Confirmation for copying a batch of [items] into directory [destPath] of pane [destLabel] (F5).
+ * Confirmation for copying a batch of [items] into directory [destPath] on the server, or on this
+ * computer when not [toRemote] (F5).
  */
 @Composable
 internal fun ConfirmCopyDialog(
     items: List<FileItem>,
-    destLabel: String,
+    toRemote: Boolean,
     destPath: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
@@ -222,7 +228,7 @@ internal fun ConfirmCopyDialog(
     val single = items.singleOrNull()
     val what = if (single != null) stringResource(Res.string.sftp_what_single, fileDisplayName(single.name)) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
-        title = stringResource(Res.string.sftp_copy_to_q, destLabel),
+        title = stringResource(if (toRemote) Res.string.sftp_copy_to_remote_q else Res.string.sftp_copy_to_local_q),
         body = stringResource(Res.string.sftp_transfer_body, what, destPath),
         confirmLabel = stringResource(Res.string.sftp_copy),
         onConfirm = onConfirm,
@@ -232,14 +238,77 @@ internal fun ConfirmCopyDialog(
     )
 }
 
+/** F5 Copy / F6 Move of [pane]'s operands into the opposite pane, awaiting confirmation. */
+internal data class PaneTransferRequest(
+    val pane: FilePaneController,
+    val move: Boolean,
+    /** Puts back what a drop changed in the pane's marks, when the question is not carried out. */
+    val onAbandon: () -> Unit = {},
+)
+
 /**
- * Confirmation for moving a batch of [items] into directory [destPath] of pane [destLabel] (F6). Moving
+ * The question a drop from this pane raises, or null when there is nothing left to ask about. An
+ * unmarked row carries only itself: it is marked for the question, and the earlier marks come back
+ * if the question is dismissed.
+ */
+internal fun FilePaneController.transferRequestFor(dropped: FileDrop): PaneTransferRequest? {
+    val before = selectionSnapshot()
+    if (dropped.items.any { it.path !in selection }) {
+        dropped.items.singleOrNull()?.let(::selectOnly)
+        // The row left the listing mid-drag: the question would fall back to the cursored row.
+        if (selectedItems().isEmpty()) {
+            restoreSelection(before)
+            return null
+        }
+    }
+    return PaneTransferRequest(this, dropped.move) { restoreSelection(before) }
+}
+
+/**
+ * Confirms [request] and hands it to [coord]. The rows are the source pane's operands() at display
+ * time; if they emptied (a background refresh between the press and the frame) or the coordinator is
+ * gone, the request closes via an effect rather than by writing state in composition.
+ */
+@Composable
+internal fun PaneTransferConfirmation(coord: TransferCoordinator?, request: PaneTransferRequest, onClose: () -> Unit) {
+    val items = request.pane.operands()
+    val abandon = { request.onAbandon(); onClose() }
+    if (coord == null || items.isEmpty()) {
+        LaunchedEffect(request) { abandon() }
+        return
+    }
+    val fromLocal = request.pane === coord.local
+    val destPath = fileDisplayPath(if (fromLocal) coord.remote.path else coord.local.path)
+    if (request.move) {
+        ConfirmMoveDialog(
+            items = items,
+            toRemote = fromLocal,
+            destPath = destPath,
+            onConfirm = { coord.moveSelection(fromLocal); onClose() },
+            onDismiss = abandon,
+        )
+    } else {
+        ConfirmCopyDialog(
+            items = items,
+            toRemote = fromLocal,
+            destPath = destPath,
+            onConfirm = {
+                if (fromLocal) coord.uploadSelection() else coord.downloadSelection()
+                onClose()
+            },
+            onDismiss = abandon,
+        )
+    }
+}
+
+/**
+ * Confirmation for moving a batch of [items] into directory [destPath] on the server or this computer (F6). Moving
  * between filesystems = copy + delete the source, so confirm explicitly.
  */
 @Composable
 internal fun ConfirmMoveDialog(
     items: List<FileItem>,
-    destLabel: String,
+    toRemote: Boolean,
     destPath: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
@@ -247,7 +316,7 @@ internal fun ConfirmMoveDialog(
     val single = items.singleOrNull()
     val what = if (single != null) stringResource(Res.string.sftp_what_single, fileDisplayName(single.name)) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
-        title = stringResource(Res.string.sftp_move_to_q, destLabel),
+        title = stringResource(if (toRemote) Res.string.sftp_move_to_remote_q else Res.string.sftp_move_to_local_q),
         body = stringResource(Res.string.sftp_transfer_body, what, destPath),
         confirmLabel = stringResource(Res.string.sftp_move),
         onConfirm = onConfirm,

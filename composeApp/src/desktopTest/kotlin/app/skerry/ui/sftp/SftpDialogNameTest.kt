@@ -37,7 +37,7 @@ class SftpDialogNameTest {
 
     @Test
     fun `the copy confirmation names the file flattened`() = runForm({
-        ConfirmCopyDialog(listOf(entry()), destLabel = "this Mac", destPath = "/tmp", onConfirm = {}, onDismiss = {})
+        ConfirmCopyDialog(listOf(entry()), toRemote = false, destPath = "/tmp", onConfirm = {}, onDismiss = {})
     }) {
         val what = string(Res.string.sftp_what_single, FLATTENED)
         onNodeWithText(string(Res.string.sftp_transfer_body, what, "/tmp")).assertIsDisplayed()
@@ -45,7 +45,7 @@ class SftpDialogNameTest {
 
     @Test
     fun `the move confirmation names the file flattened`() = runForm({
-        ConfirmMoveDialog(listOf(entry()), destLabel = "this Mac", destPath = "/tmp", onConfirm = {}, onDismiss = {})
+        ConfirmMoveDialog(listOf(entry()), toRemote = false, destPath = "/tmp", onConfirm = {}, onDismiss = {})
     }) {
         val what = string(Res.string.sftp_what_single, FLATTENED)
         onNodeWithText(string(Res.string.sftp_transfer_body, what, "/tmp")).assertIsDisplayed()

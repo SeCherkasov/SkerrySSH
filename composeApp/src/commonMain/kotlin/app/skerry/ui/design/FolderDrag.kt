@@ -183,7 +183,7 @@ class FolderDragState {
  * which reads as "above the pointer" — and the drop index is a count of the centers above it, so
  * every row the viewport had cut off pushed the drop one position further down the list.
  */
-private fun LayoutCoordinates.unclippedWindowRect(): Rect = Rect(positionInWindow(), size.toSize())
+internal fun LayoutCoordinates.unclippedWindowRect(): Rect = Rect(positionInWindow(), size.toSize())
 
 /** Records a row's window bounds, read by drag targets on release. */
 fun Modifier.itemBoundsAnchor(state: FolderDragState, id: String): Modifier =
