@@ -82,6 +82,21 @@ class AttachedSessionTest {
     }
 
     @Test
+    fun `a watched session never answers the host's queries`() = runTest {
+        val watched = WatchedSession()
+        val (controller, scope) = controller()
+        controller.attachSession(watched)
+        advanceUntilIdle()
+
+        // The owner's terminal answers these; a second answer would reach the host as typed input.
+        watched.emissions.emit("\u001b[c\u001b[6n".encodeToByteArray())
+        advanceUntilIdle()
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertTrue(watched.sent.isEmpty(), "a viewer answered the owner's host")
+        scope.cancel()
+    }
+
+    @Test
     fun `the watched session ending freezes the screen without reconnecting`() = runTest {
         val watched = WatchedSession()
         val (controller, scope) = controller()

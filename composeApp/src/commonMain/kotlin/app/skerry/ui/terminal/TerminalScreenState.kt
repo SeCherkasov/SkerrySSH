@@ -21,6 +21,7 @@ import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
+import app.skerry.shared.terminal.TerminalColors
 import app.skerry.shared.terminal.TerminalEmulator
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
@@ -89,6 +90,10 @@ class TerminalScreenState(
     // would) — a backwards step would skip search refreshes for minutes and stretch the publish
     // window past PUBLISH_MIN_INTERVAL_MS.
     private val nowMillis: () -> Long = { STARTED_AT.elapsedNow().inWholeMilliseconds },
+    // Whether the emulator's replies (DA, DSR, color queries) reach the session. Off for a viewer
+    // of someone else's session: the owner's terminal already answers, and a second answer would
+    // arrive at the host as typed input.
+    private val answersQueries: Boolean = true,
 ) {
     // OSC 52 requests to write to the system clipboard. extraBufferCapacity keeps tryEmit from the
     // owner coroutine from dropping when there's no subscriber yet; DROP_OLDEST on burst keeps the
@@ -123,7 +128,7 @@ class TerminalScreenState(
         // hang. Called synchronously from feed() (owner coroutine): must only write to the PTY
         // (send -> session.send) and never start a new feed/resize, or the emulator's single-thread
         // contract breaks.
-        respond = { reply -> send(reply) },
+        respond = { reply -> if (answersQueries) send(reply) },
         // OSC 52 write is also called synchronously from feed(); publish to the flow, UI thread
         // writes to the system clipboard. Gated in the emulator by [clipboardWriteEnabled].
         onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
@@ -456,6 +461,7 @@ class TerminalScreenState(
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
             is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
+            is TerminalCommand.SetColors -> emulator.applyColors(cmd.colors)
             is TerminalCommand.ExpectStep -> applyExpectStep(cmd.token, cmd.hiddenEcho)
             is TerminalCommand.Resize -> {
                 // PTY is resized first, the emulator only on success: otherwise the grid would be
@@ -1315,6 +1321,16 @@ class TerminalScreenState(
         commands.trySend(TerminalCommand.SetClipboardWriteEnabled(enabled))
     }
 
+    /**
+     * The theme this session is drawn in, for answering OSC 10/11/12 and OSC 4 color queries — an
+     * editor asking for the background picks its light or dark scheme from the answer. Called by
+     * [TerminalScreen] whenever the theme it draws with changes; until the first call, queries go
+     * unanswered.
+     */
+    fun applyTerminalTheme(theme: TerminalTheme) {
+        commands.trySend(TerminalCommand.SetColors(theme.reportedColors()))
+    }
+
     // The init block sits at the very END of the class body on purpose: it starts coroutines
     // that call publishSnapshot -> refreshSuggestion, which writes state properties declared
     // further down. Kotlin runs initializers in declaration order, so an init block placed above
@@ -1395,6 +1411,7 @@ class TerminalScreenState(
                         is TerminalCommand.SetCursorDefault,
                         is TerminalCommand.SetMaxScrollback,
                         is TerminalCommand.SetClipboardWriteEnabled,
+                        is TerminalCommand.SetColors,
                         is TerminalCommand.ExpectStep,
                         is TerminalCommand.Resize -> Unit
                     }
@@ -1616,6 +1633,9 @@ private sealed interface TerminalCommand {
 
     /** New OSC 52 clipboard-write gate state (setting changed while the session is open). */
     class SetClipboardWriteEnabled(val enabled: Boolean) : TerminalCommand
+
+    /** Colors to answer color queries with (the theme the session is drawn in changed). */
+    class SetColors(val colors: TerminalColors) : TerminalCommand
 
     /** The runbook step the terminal should report, and the echo of its probes to hide. */
     class ExpectStep(val token: String?, val hiddenEcho: List<String>) : TerminalCommand

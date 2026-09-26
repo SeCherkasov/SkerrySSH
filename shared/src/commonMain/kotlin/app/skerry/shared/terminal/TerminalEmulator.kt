@@ -222,13 +222,14 @@ const val DEFAULT_MAX_SCROLLBACK = 5000
  * insert/delete (ICH/DCH/ECH/IL/DL/SU/SD);
  * scroll region (DECSTBM); insert mode (IRM); full SGR (attributes + 16/256/truecolor);
  * private modes (DECCKM/DECOM/DECAWM/?25/alt-screen 47/1047/1049/mouse 1000-1006/bracketed
- * paste 2004/synchronized output 2026); tab stops; DSR/DA replies and window title (OSC 0/1/2). Unknown sequences are
- * safely absorbed.
+ * paste 2004/synchronized output 2026); tab stops; DSR/DA replies; color query replies (OSC 10/11/12,
+ * OSC 4 `?`) once [applyColors] supplied the theme; window title (OSC 0/1/2); DECALN. C0 controls
+ * inside a sequence run in place, CAN/SUB cancel it. Unknown sequences are safely absorbed.
  *
  * NOT thread-safe: [feed] and state reads run on the same output-collecting coroutine
  * (as used by `TerminalScreenState`).
  *
- * @param respond called with terminal replies (DSR/DA) — the UI sends them back to the PTY.
+ * @param respond called with terminal replies (DSR/DA, color queries) — the UI sends them back to the PTY.
  * @param onBell called on BEL (0x07).
  * @param onClipboardCopy called on an OSC 52 write (decoded text) — the UI puts it on the system
  *   clipboard, but only while [clipboardWriteEnabled] is on. A clipboard READ request (OSC 52 with
@@ -471,6 +472,15 @@ class TerminalEmulator(
         return paletteCache
     }
 
+    // Theme colors for OSC 10/11/12 and OSC 4 queries; null until the UI supplies them, and until
+    // then a query goes unanswered rather than answered with colors the user does not see.
+    private var colors: TerminalColors? = null
+
+    /** The colors to report to color queries (see [TerminalColors]). Call from the owner coroutine. */
+    fun applyColors(colors: TerminalColors?) {
+        this.colors = colors
+    }
+
     // --- Parser --------------------------------------------------------------
 
     private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8, StrSeq, StrSeqEsc }
@@ -483,6 +493,10 @@ class TerminalEmulator(
     // from a plain CSI.
     private var csiIntermediate = NO_INTERMEDIATE
     private val osc = StringBuilder()
+
+    // Whether the OSC being finished ended in BEL rather than ST: a color reply goes back in the
+    // terminator the query used, as xterm does — some clients wait for the one they sent.
+    private var oscEndsWithBel = false
 
     // Body of a string sequence (DCS/APC/PM/SOS) — accumulated until ST (ESC\) or BEL. [strSeqIsDcs]
     // distinguishes DCS (parsed: XTGETTCAP) from APC/PM/SOS (absorbed whole: kitty graphics, etc).
@@ -728,7 +742,7 @@ class TerminalEmulator(
 
     private fun oscByte(b: Int) {
         when (b) {
-            0x07 -> { finishOsc(); parser = State.Ground } // BEL — end of OSC
+            0x07 -> { oscEndsWithBel = true; finishOsc(); parser = State.Ground } // BEL — end of OSC
             0x1b -> parser = State.OscEsc // possibly ST (ESC \)
             CAN, SUB -> { osc.clear(); parser = State.Ground } // cancelled: never applied
             in 0x00..0x1f -> {} // other C0 are not part of any OSC payload (xterm ignores them too)
@@ -741,6 +755,7 @@ class TerminalEmulator(
     }
 
     private fun oscEsc(b: Int) {
+        oscEndsWithBel = false
         finishOsc()
         parser = State.Ground
         // Not ST: the ESC already consumed starts the next sequence, and [b] is its first byte.
@@ -774,6 +789,7 @@ class TerminalEmulator(
                 // close button's name. Drop it rather than draw the replacement glyph.
                 .dropLastWhile { it.isHighSurrogate() }
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
+            in DYNAMIC_FOREGROUND..DYNAMIC_CURSOR -> queryDynamicColors(code, rest) // OSC 10/11/12 ; ?
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
             104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (empty = whole palette)
@@ -858,17 +874,65 @@ class TerminalEmulator(
         onClipboardCopy(text)
     }
 
-    /** OSC 4: `index;spec` pairs. A `?` spec (query) is skipped — nothing to reply with (renderer owns colors). */
+    /**
+     * OSC 4: `index;spec` pairs, applied in order. A `?` spec asks for the color at that index —
+     * answered from the override, the theme or the xterm cube, once [colors] are known. One reply
+     * carries every answer, and a sequence gets at most [MAX_COLOR_REPLIES] of them: each query is
+     * a few bytes in and thirty out.
+     */
     private fun setPalette(rest: String) {
         val parts = rest.split(';')
+        val reply = StringBuilder()
+        var answered = 0
         var i = 0
         while (i + 1 < parts.size) {
-            val idx = parts[i].toIntOrNull()
-            val rgb = parseXColor(parts[i + 1])
-            if (idx != null && idx in 0..255 && rgb != null) { paletteOverrides[idx] = rgb; paletteDirty = true }
+            val idx = parts[i].toIntOrNull()?.takeIf { it in 0..255 }
+            val spec = parts[i + 1]
+            when {
+                idx == null -> {}
+                spec != "?" -> parseXColor(spec)?.let { paletteOverrides[idx] = it; paletteDirty = true }
+                answered < MAX_COLOR_REPLIES -> paletteColor(idx)?.let { appendColorReply(reply, "4;$idx", it); answered++ }
+            }
             i += 2
         }
+        if (reply.isNotEmpty()) respond(reply.toString())
     }
+
+    /** What palette [index] looks like on screen, or null while the theme is unknown. */
+    private fun paletteColor(index: Int): TermColor.Rgb? {
+        val theme = colors ?: return null
+        return paletteOverrides[index] ?: if (index < theme.ansi.size) theme.ansi[index] else XtermPalette.rgb(index)
+    }
+
+    /**
+     * OSC 10/11/12: each `?` asks for a dynamic color — the first for [code], every further
+     * parameter for the next one (xterm's rule). Setting these colors is the theme's business, so a
+     * color spec is ignored.
+     */
+    private fun queryDynamicColors(code: Int, rest: String) {
+        val theme = colors ?: return
+        val reply = StringBuilder()
+        rest.split(';').forEachIndexed { k, part ->
+            val c = code + k
+            if (part != "?" || c > DYNAMIC_CURSOR) return@forEachIndexed
+            val rgb = when (c) {
+                DYNAMIC_FOREGROUND -> theme.foreground
+                DYNAMIC_BACKGROUND -> theme.background
+                else -> theme.cursor
+            }
+            appendColorReply(reply, c.toString(), rgb)
+        }
+        if (reply.isNotEmpty()) respond(reply.toString())
+    }
+
+    /** `OSC <what> ; rgb:RRRR/GGGG/BBBB` in xterm's 16-bit form, closed as the query was. */
+    private fun appendColorReply(out: StringBuilder, what: String, rgb: TermColor.Rgb) {
+        out.append(ESC_CHAR).append(']').append(what).append(";rgb:")
+        out.append(hex16(rgb.r)).append('/').append(hex16(rgb.g)).append('/').append(hex16(rgb.b))
+        if (oscEndsWithBel) out.append(BEL_CHAR) else out.append(ESC_CHAR).append('\\')
+    }
+
+    private fun hex16(v: Int): String = (v * 257).toString(16).padStart(4, '0')
 
     /** OSC 104: no arguments resets the whole palette; otherwise resets the listed indices. */
     private fun resetPalette(rest: String) {
@@ -1769,6 +1833,15 @@ class TerminalEmulator(
 
         /** [pendingDesignation] for `ESC #` — the DEC line-attribute and alignment family. */
         private const val DEC_LINE = 2
+
+        private const val DYNAMIC_FOREGROUND = 10
+        private const val DYNAMIC_BACKGROUND = 11
+        private const val DYNAMIC_CURSOR = 12
+
+        /** Answers per OSC 4 sequence — every palette index once. */
+        private const val MAX_COLOR_REPLIES = 256
+        private const val ESC_CHAR = '\u001b'
+        private const val BEL_CHAR = '\u0007'
 
         /**
          * DEC Special Graphics (VT100 line-drawing): ASCII 0x60..0x7e → Unicode glyphs. Index = code -

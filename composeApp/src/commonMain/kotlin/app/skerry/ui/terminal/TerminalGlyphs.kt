@@ -40,6 +40,7 @@ import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TermStyle
 import app.skerry.shared.terminal.UnderlineStyle
+import app.skerry.shared.terminal.XtermPalette
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.highlight.HighlightKind
 import kotlin.math.roundToInt
@@ -383,17 +384,6 @@ private fun TermColor.toComposeColor(theme: TerminalTheme, palette: Palette): Co
 private fun xtermColor(index: Int, palette: Palette, theme: TerminalTheme): Color {
     palette[index]?.let { return Color(it.r, it.g, it.b) }
     if (index in 0..15) return theme.ansi[index]
-    return xtermCubeColor(index, fallback = theme.foreground)
-}
-
-/** The standard xterm 6×6×6 cube (16..231) and grayscale ramp (232..255); theme-independent. */
-private fun xtermCubeColor(index: Int, fallback: Color): Color = when (index) {
-    in 16..231 -> {
-        val n = index - 16
-        val r = n / 36; val g = (n / 6) % 6; val b = n % 6
-        fun lvl(v: Int) = if (v == 0) 0 else 55 + v * 40
-        Color(lvl(r), lvl(g), lvl(b))
-    }
-    in 232..255 -> { val v = 8 + (index - 232) * 10; Color(v, v, v) }
-    else -> fallback
+    val rgb = XtermPalette.rgb(index) ?: return theme.foreground
+    return Color(rgb.r, rgb.g, rgb.b)
 }

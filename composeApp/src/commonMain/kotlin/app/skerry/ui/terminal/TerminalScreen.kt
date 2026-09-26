@@ -311,6 +311,9 @@ fun TerminalScreen(
         enabled = focused && !closed && !imeInput && !searchOpen,
     )
 
+    // Color queries (OSC 10/11/12, OSC 4) are answered with the theme this pane is drawn in.
+    LaunchedEffect(state, termTheme) { state.applyTerminalTheme(termTheme) }
+
     // Autoscroll to bottom on new output — but only when the user was already at the bottom
     // (sticky bottom, like a real terminal): scrolling up to read history must survive streaming
     // output instead of being yanked back down on every chunk. Typing/pasting (inputVersion) always
