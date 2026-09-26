@@ -222,6 +222,10 @@
     <string name="settings_kb_sudo_password">向 sudo 发送已保存的密码</string>
     <string name="settings_kb_open_link_or_path">打开链接或文件路径</string>
     <string name="settings_kb_mouse_click">Ctrl+点击</string>
+    <string name="settings_kb_files_drag_copy">复制到另一面板</string>
+    <string name="settings_kb_files_drag_move">移动到另一面板</string>
+    <string name="settings_kb_mouse_drag">拖动</string>
+    <string name="settings_kb_mouse_shift_drag">Shift+拖动</string>
     <string name="settings_kb_search_output">在输出中查找</string>
     <string name="settings_kb_copy_selection">复制选中内容</string>
     <string name="settings_kb_paste">粘贴</string>

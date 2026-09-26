@@ -64,6 +64,9 @@ internal fun LivePaneList(
     listState: LazyListState,
     active: Boolean,
     onActivate: () -> Unit,
+    // Rows become drag handles for a copy/move into the other pane; null — no dragging (a single-pane
+    // test render).
+    drag: FileDragBinding? = null,
 ) {
     val prefs = LocalSftpPrefs.current
     // The optional columns are fixed-width and the row has no horizontal scroll: on a narrow pane
@@ -115,6 +118,15 @@ internal fun LivePaneList(
                     // clicks to download or open: a bidi override in it draws one extension over
                     // another. The icon reads the same sanitized string, so the two cannot disagree.
                     val shownName = fileDisplayName(entry.name)
+                    // Dragging an unmarked row carries that row alone, the way a file manager does;
+                    // a marked one carries every marked row with it. The marks are left alone until
+                    // a drop needs them, so a drag that lands nowhere changes nothing.
+                    val dragHandle = drag?.let { d ->
+                        Modifier.fileDragSource(d.state, d.side, onDrop = d.onDrop, onStart = {
+                            onActivate()
+                            if (entry.path in pane.selection) pane.selectedItems() else listOf(entry)
+                        })
+                    } ?: Modifier
                     LiveFileRow(
                         icon = sftpFileIcon(shownName, entry.type),
                         iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.faint,
@@ -136,6 +148,7 @@ internal fun LivePaneList(
                         onPress = onPress,
                         onDoubleClick = onDoubleClick,
                         rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
+                        modifier = dragHandle,
                     )
                 }
             }
@@ -266,6 +279,7 @@ internal fun LiveFileRow(
     // Data for held-RMB rubber-band (mc): the anchor row, controller, list state for translating the
     // cursor position to a row, and the current listing. null for the synthetic ".." row.
     rubberBand: RowRubberBand?,
+    modifier: Modifier = Modifier,
 ) {
     // Latest callbacks without restarting the gesture (pointerInput is keyed on Unit — it lives the row's whole life).
     val currentPress by rememberUpdatedState(onPress)
@@ -341,6 +355,7 @@ internal fun LiveFileRow(
                     Modifier
                 },
             )
+            .then(modifier)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),

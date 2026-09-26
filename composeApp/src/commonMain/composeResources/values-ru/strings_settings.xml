@@ -222,6 +222,10 @@
     <string name="settings_kb_sudo_password">Отправить сохранённый пароль в sudo</string>
     <string name="settings_kb_open_link_or_path">Открыть ссылку или файловый путь</string>
     <string name="settings_kb_mouse_click">Ctrl+клик</string>
+    <string name="settings_kb_files_drag_copy">Копировать в другую панель</string>
+    <string name="settings_kb_files_drag_move">Переместить в другую панель</string>
+    <string name="settings_kb_mouse_drag">Перетаскивание</string>
+    <string name="settings_kb_mouse_shift_drag">Shift+перетаскивание</string>
     <string name="settings_kb_search_output">Поиск по выводу</string>
     <string name="settings_kb_copy_selection">Копировать выделение</string>
     <string name="settings_kb_paste">Вставить</string>

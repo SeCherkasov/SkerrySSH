@@ -54,8 +54,11 @@
     <!-- Диалоги копирования / перемещения -->
     <string name="sftp_what_single">“%1$s”</string>
     <string name="sftp_items_count">%1$d 个项目</string>
-    <string name="sftp_copy_to_q">复制到 %1$s？</string>
-    <string name="sftp_move_to_q">移动到 %1$s？</string>
+    <string name="sftp_drag_shift_move">Shift：移动</string>
+    <string name="sftp_copy_to_remote_q">复制到服务器？</string>
+    <string name="sftp_copy_to_local_q">复制到本机？</string>
+    <string name="sftp_move_to_remote_q">移动到服务器？</string>
+    <string name="sftp_move_to_local_q">移动到本机？</string>
     <string name="sftp_transfer_body">%1$s → %2$s</string>
 
     <!-- Ошибка передачи (имя: сообщение) -->

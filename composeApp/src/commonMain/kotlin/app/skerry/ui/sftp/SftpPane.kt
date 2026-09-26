@@ -118,6 +118,9 @@ internal fun LivePane(
     onFilterClose: () -> Unit,
     restoreFocus: () -> Unit,
     modifier: Modifier,
+    drag: FileDragBinding? = null,
+    // A file drag from the other pane is over this one: a release here drops into its directory.
+    dropTarget: Boolean = false,
 ) {
     // Keep the cursored row in view during keyboard navigation. The LazyColumn index is offset by the
     // synthetic ".." row (it precedes entries when we're not at root).
@@ -141,7 +144,8 @@ internal fun LivePane(
     Column(
         modifier
             .fillMaxHeight()
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onActivate),
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onActivate)
+            .dropTargetHighlight(dropTarget),
     ) {
         Row(
             Modifier.fillMaxWidth().background(Skerry.colors.surface).padding(horizontal = 10.dp, vertical = 8.dp),
@@ -196,6 +200,7 @@ internal fun LivePane(
                     listState = listState,
                     active = active,
                     onActivate = onActivate,
+                    drag = drag,
                 )
             }
         }

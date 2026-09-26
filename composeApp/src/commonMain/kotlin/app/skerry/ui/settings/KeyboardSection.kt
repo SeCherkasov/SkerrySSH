@@ -62,6 +62,10 @@ import app.skerry.ui.generated.resources.settings_kb_search_history
 import app.skerry.ui.generated.resources.settings_kb_sudo_password
 import app.skerry.ui.generated.resources.settings_kb_search_output
 import app.skerry.ui.generated.resources.settings_kb_open_link_or_path
+import app.skerry.ui.generated.resources.settings_kb_files_drag_copy
+import app.skerry.ui.generated.resources.settings_kb_files_drag_move
+import app.skerry.ui.generated.resources.settings_kb_mouse_drag
+import app.skerry.ui.generated.resources.settings_kb_mouse_shift_drag
 import app.skerry.ui.generated.resources.settings_kb_mouse_click
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
@@ -142,6 +146,9 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_files_switch_pane), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_hidden), ctrl("H"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_filter), ctrl("F"), live = true),
+        // Mouse gestures, listed with the F-keys they stand in for.
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_drag_copy), stringResource(Res.string.settings_kb_mouse_drag), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_drag_move), stringResource(Res.string.settings_kb_mouse_shift_drag), live = true),
     )
     // The built-in viewer/editor (F3/F4) opens inside the file panel and redefines the same bar of
     // function keys while it is there, so its keys are listed as their own group.
