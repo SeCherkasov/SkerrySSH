@@ -132,7 +132,12 @@ class MoshIncoming {
             ackOutstanding = true
             return emptyList()
         }
-        if (instruction.oldNum != ackNum) return null
+        if (instruction.oldNum != ackNum) {
+            // The server diffed from a state we no longer (or never) had — most often because our
+            // ack was lost. Telling it where we are now is what makes it diff from there.
+            ackOutstanding = true
+            return null
+        }
         val updates = try {
             decodeHostMessage(instruction.diff)
         } catch (e: MoshWireException) {

@@ -158,6 +158,19 @@ class MoshIncomingTest {
     }
 
     @Test
+    fun `a diff against a state other than ours re-acks at once`() {
+        // Our ack of state 5 was lost, so the server diffs from 4. Only the latest state is kept,
+        // so the diff is dropped — and the server only learns where we are from the next ack,
+        // which must go now rather than on the 3-second heartbeat.
+        val inc = MoshIncoming()
+        inc.onInstruction(instruction(old = 0u, new = 5u))
+        inc.clearAckOutstanding()
+        assertNull(inc.onInstruction(instruction(old = 4u, new = 6u)))
+        assertEquals(5uL, inc.ackNum)
+        assertTrue(inc.ackOutstanding)
+    }
+
+    @Test
     fun `states advance across several instructions`() {
         val inc = MoshIncoming()
         inc.onInstruction(instruction(old = 0u, new = 3u))

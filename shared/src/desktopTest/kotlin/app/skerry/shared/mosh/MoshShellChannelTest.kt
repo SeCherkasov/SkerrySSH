@@ -58,14 +58,20 @@ private class FakeMoshServer {
         }
     }
 
-    fun sendInstruction(old: ULong, new: ULong, ack: ULong, diff: ByteArray = ByteArray(0)) {
+    fun sendInstruction(
+        old: ULong,
+        new: ULong,
+        ack: ULong,
+        diff: ByteArray = ByteArray(0),
+        reversed: Boolean = false,
+    ) {
         val target = checkNotNull(clientAddress) { "no client datagram seen yet" }
         val payload = moshDeflate(
             MoshInstruction(oldNum = old, newNum = new, ackNum = ack, throwawayNum = 0u, diff = diff)
                 .encode(),
         )
-        for (fragment in fragmenter.split(payload, 400)) {
-            val sealed = codec.seal(
+        val datagrams = fragmenter.split(payload, 400).map { fragment ->
+            codec.seal(
                 MoshPacket(
                     seq = seq++,
                     toServer = false,
@@ -74,6 +80,9 @@ private class FakeMoshServer {
                     payload = fragment.encode(),
                 ),
             )
+        }
+        // [reversed] simulates the network reordering the datagrams of one instruction.
+        for (sealed in if (reversed) datagrams.reversed() else datagrams) {
             socket.send(DatagramPacket(sealed, sealed.size, target))
         }
     }
@@ -147,6 +156,25 @@ class MoshShellChannelTest {
             keystrokes.diff,
         )
         assertEquals(1uL, keystrokes.ackNum)
+    }
+
+    @Test
+    fun `an instruction whose fragments arrive out of order is still applied`() = runBlocking {
+        // mosh returns the payload of an out-of-order datagram too (it only keeps it out of the
+        // timing estimate); dropping it lost the first fragment of every reordered instruction and
+        // stalled the screen until the server retransmitted.
+        val server = server()
+        val conn = connection(server)
+        val opening = async(Dispatchers.Default) { conn.openShell(PtySize()) }
+        val first = server.receiveDataInstruction()
+        server.sendInstruction(old = 0u, new = 1u, ack = first.newNum)
+        val channel = opening.await()
+
+        // Incompressible, so the instruction really spans several datagrams.
+        val text = kotlin.random.Random(42).nextBytes(1500)
+        val collecting = async(Dispatchers.Default) { channel.output.first() }
+        server.sendInstruction(old = 1u, new = 2u, ack = first.newNum, diff = encodeHostBytesDiff(text), reversed = true)
+        assertContentEquals(text, withTimeout(5000) { collecting.await() })
     }
 
     @Test
