@@ -105,7 +105,7 @@ internal object TerminalReflow {
         } else {
             gridStart = 0
             newGrid = ArrayList(kept)
-            repeat(nr - kept.size) { newGrid.add(TermRow(MutableList(nc) { blank })) }
+            repeat(nr - kept.size) { newGrid.add(TermRow(nc, blank)) }
         }
         val newScroll = if (gridStart > 0) kept.subList(0, gridStart) else emptyList()
         val drop = (newScroll.size - maxScrollback).coerceAtLeast(0)
@@ -137,7 +137,7 @@ internal object TerminalReflow {
     ): List<TermRow> {
         if (cells.isEmpty()) {
             if (cursorCol >= 0 && cursorOut != null) { cursorOut[0] = 0; cursorOut[1] = cursorCol.coerceIn(0, nc - 1) }
-            return listOf(TermRow(MutableList(nc) { pad }))
+            return listOf(TermRow(nc, pad))
         }
         val out = ArrayList<TermRow>()
         var idx = 0
