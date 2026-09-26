@@ -140,6 +140,9 @@ private fun deviceId(dir: Path): String {
 // Reads UI prefs with range/option validation, falling back to the default on an invalid value
 // (I/O and unreadable-file defaults live in FilePrefs).
 
+/** Settings → Terminal → typing ssh on a jump host; off unless this device turned it on. */
+private const val JUMP_SHELL_PREF = "experimental_jump_shell"
+
 /** Terminal font size, px: falls back to default outside [TERMINAL_FONT_SIZE_RANGE]. */
 private fun readTerminalFontSize(prefs: FilePrefs): Int =
     prefs.int("terminal_font_size", DEFAULT_TERMINAL_FONT_SIZE)
@@ -218,20 +221,25 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val certificateInspector = SshjCertificateInspector()
     val secretFiles = OkioSecretFileReader(FileSystem.SYSTEM, homeDir = System.getProperty("user.home"))
     val keyFileResolver = KeyFileResolver(files = secretFiles, inspector = certificateInspector)
+    val sshTransport = SshjTransport(
+        HostCertificateVerifier(
+            trustedCaStore,
+            TofuHostKeyVerifier(
+                knownHostsStore,
+                mismatchStore,
+                now = { Instant.now().toString() },
+                trust = hostTrustDecider,
+            ),
+        ) { Instant.now().epochSecond },
+        keyFiles = keyFileResolver,
+        keyboardInteractiveResponder = keyboardInteractive.responder,
+    )
+    // One login per jump host for every session typed through its shell; the lock closes idle ones.
+    val jumpHosts = app.skerry.shared.ssh.SharedConnectionPool(sshTransport)
     val transport = RoutingTransport(
-        ssh = SshjTransport(
-            HostCertificateVerifier(
-                trustedCaStore,
-                TofuHostKeyVerifier(
-                    knownHostsStore,
-                    mismatchStore,
-                    now = { Instant.now().toString() },
-                    trust = hostTrustDecider,
-                ),
-            ) { Instant.now().epochSecond },
-            keyFiles = keyFileResolver,
-            keyboardInteractiveResponder = keyboardInteractive.responder,
-        ),
+        ssh = sshTransport,
+        // Read per connect: the setting is this device's consent to a mode a synced profile can carry.
+        jumpShell = app.skerry.shared.jumpshell.JumpShellTransport(jumpHosts) { prefs.bool(JUMP_SHELL_PREF, false) },
     )
     // "Test connection" and the container listing in the form: read-only verifier, so neither can
     // establish trust — only a real connection (TOFU above) does. A host with no entry is accepted,
@@ -505,7 +513,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // A share started or ended somewhere in the team: re-read the directory rather than wait for
     // the user to reopen the screen.
     teams.onSharesChanged = { sharedSessions.refresh() }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
+    val deps = AppDependencies(transport = transport, jumpHosts = jumpHosts, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -671,6 +679,8 @@ fun main(args: Array<String>) {
                             onAllowServerClipboardWriteChange = { prefs.set("terminal_clipboard_write", it) },
                             initialOfferSudoPassword = prefs.bool("terminal_sudo_password", false),
                             onOfferSudoPasswordChange = { prefs.set("terminal_sudo_password", it) },
+                            initialJumpViaShellOffered = prefs.bool(JUMP_SHELL_PREF, false),
+                            onJumpViaShellOfferedChange = { prefs.set(JUMP_SHELL_PREF, it) },
                             initialReportTeamSessions = prefs.bool("teams_report_sessions", true),
                             onReportTeamSessionsChange = { prefs.set("teams_report_sessions", it) },
                             initialOpenFilePathsInSftp = prefs.bool("terminal_open_paths", true),
@@ -705,6 +715,7 @@ fun main(args: Array<String>) {
                     certificateInspector = deps.certificateInspector,
                     secretFiles = deps.secretFiles,
                     tunnels = deps.tunnels,
+                    jumpHosts = deps.jumpHosts,
                     snippets = deps.snippets,
                     runbooks = deps.runbooks,
                     runbookRunner = deps.runbookRunner,

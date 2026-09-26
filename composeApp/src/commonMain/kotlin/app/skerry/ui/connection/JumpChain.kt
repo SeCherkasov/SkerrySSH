@@ -2,6 +2,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.vault.Credential
 import app.skerry.ui.host.rowLabel
@@ -19,7 +20,8 @@ enum class JumpChainProblem {
 
     /**
      * The jump host has no saved keychain secret (ask-at-connect profiles can't be a hop: only the
-     * final destination gets a password prompt).
+     * final destination gets a password prompt). A hop answering the server's own questions
+     * ([Host.interactiveAuth]) needs none — its prompt names the hop it comes from.
      */
     NO_CREDENTIAL,
 
@@ -59,28 +61,32 @@ fun resolveJumpChain(
 ): JumpChainResolution {
     var jumpId = jumpHostId ?: return JumpChainResolution.Resolved(null)
     // The chain is walked destination-outward; hops[0] is the hop nearest to the target. The
-    // credential is captured with its hop so [findCredential] is queried once per hop (safe even
-    // if a future implementation is one-shot or expensive).
-    val hops = mutableListOf<Pair<Host, Credential>>()
+    // auth is captured with its hop so [findCredential] is queried once per hop (safe even if a
+    // future implementation is one-shot or expensive).
+    val hops = mutableListOf<Pair<Host, SshAuth>>()
     val visited = mutableSetOf<String>()
     originId?.let(visited::add)
     while (true) {
         if (!visited.add(jumpId)) return JumpChainResolution.Unavailable(JumpChainProblem.CYCLE)
         val hop = findHost(jumpId) ?: return JumpChainResolution.Unavailable(JumpChainProblem.MISSING_HOST)
         if (hop.connectionType != ConnectionType.SSH) return JumpChainResolution.Unavailable(JumpChainProblem.NOT_SSH)
-        val credential = findCredential(hop.credentialId)
-            ?: return JumpChainResolution.Unavailable(JumpChainProblem.NO_CREDENTIAL)
-        hops += hop to credential
+        val auth = if (hop.interactiveAuth) {
+            SshAuth.Interactive
+        } else {
+            findCredential(hop.credentialId)?.toSshAuth()
+                ?: return JumpChainResolution.Unavailable(JumpChainProblem.NO_CREDENTIAL)
+        }
+        hops += hop to auth
         jumpId = hop.jumpHostId ?: break
     }
     // Assemble innermost-first: the outermost hop (entry point) ends up deepest in the structure.
     var chain: SshJump? = null
-    for ((hop, credential) in hops.asReversed()) {
+    for ((hop, auth) in hops.asReversed()) {
         chain = SshJump(
             host = hop.address,
             port = hop.port,
             username = hop.username,
-            auth = credential.toSshAuth(),
+            auth = auth,
             jump = chain,
         )
     }

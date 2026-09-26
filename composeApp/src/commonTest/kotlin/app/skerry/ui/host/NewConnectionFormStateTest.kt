@@ -761,4 +761,37 @@ class SectionFormStateTest {
 
         assertEquals("root", form.toDraft().username)
     }
+
+    @Test
+    fun jump_via_shell_travels_only_with_a_jump_host_and_prefills_from_host() {
+        val f = NewConnectionFormState().apply {
+            name = "h"; address = "a"; username = "u"; jumpHostId = "bastion-1"; jumpViaShell = true
+        }
+        assertTrue(f.jumpViaShellApplies)
+        assertTrue(f.toDraft().jumpViaShell)
+        // A choice left behind after the jump host was cleared would store a mode with nothing to type into.
+        f.jumpHostId = null
+        assertFalse(f.jumpViaShellApplies)
+        assertFalse(f.toDraft().jumpViaShell)
+
+        val host = Host(
+            id = "h1", label = "Web", address = "web", username = "", jumpHostId = "bastion-1", jumpViaShell = true,
+        )
+        assertTrue(NewConnectionFormState.fromHost(host).jumpViaShell)
+    }
+
+    @Test
+    fun typing_ssh_on_the_jump_host_asks_for_no_user_or_secret_and_stores_none() {
+        val f = NewConnectionFormState().apply {
+            name = "db"; address = "db.internal"; jumpHostId = "bastion-1"; jumpViaShell = true
+            authMode = AuthMode.NEW_PASSWORD
+        }
+        assertTrue(f.canSave, "the jump host's own ssh picks the user; nothing here is used to log in")
+        assertNull(f.resolveCredentialId { fail("a secret nobody uses was written to the vault") })
+        f.authMode = AuthMode.INTERACTIVE
+        assertFalse(f.toDraft().interactiveAuth)
+        // Without a jump host the mode is off and the usual requirements are back.
+        f.jumpHostId = null
+        assertFalse(f.canSave)
+    }
 }

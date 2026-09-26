@@ -169,6 +169,8 @@ fun DesktopDesignApp(
     certificateInspector: SshCertificateInspector? = null,
     secretFiles: SecretFileReader? = null,
     tunnels: TunnelManager? = null,
+    // Shared jump host connections; the lock closes the idle ones. `null` on the mock path.
+    jumpHosts: app.skerry.shared.ssh.SharedConnectionPool? = null,
     snippets: SnippetManager? = null,
     // Runbook library + the one in-flight run. `null` on the mock path (no vault behind them).
     runbooks: RunbookManager? = null,
@@ -401,6 +403,7 @@ fun DesktopDesignApp(
                         // The modal's own flag lives here, above the gate, so it outlives the lock — the
                         // question inside it does not.
                         closeSyncSetup = state::closeSyncSetup,
+                        jumpHosts = jumpHosts,
                     )
                 },
                 onReset = onVaultReset,

@@ -27,6 +27,7 @@ import app.skerry.ui.generated.resources.appearance_custom_term_theme
 import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
+import app.skerry.ui.generated.resources.settings_experimental_jump_shell
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions
 import app.skerry.ui.generated.resources.term_recent_section
 import app.skerry.ui.generated.resources.theme_light
@@ -138,6 +139,18 @@ class SettingsTogglesTest {
         switch(Res.string.settings_security_report_team_sessions).performScrollTo().performClick()
         waitForIdle()
         assertEquals(!before, shell.state.settings.reportTeamSessions)
+    }
+
+    /** Experimental features live in their own tab, just above the trash, not among stable settings. */
+    @Test
+    fun `the jump host shell is switched from the experimental tab`() = runDesktopShell { shell ->
+        val nav = SETTINGS_NAV.map { it.tab }
+        assertEquals(nav.indexOf(SettingsTab.Trash) - 1, nav.indexOf(SettingsTab.Experimental))
+        val before = shell.state.settings.jumpViaShellOffered
+        openSettings(SettingsTab.Experimental)
+        switch(Res.string.settings_experimental_jump_shell).performScrollTo().performClick()
+        waitForIdle()
+        assertEquals(!before, shell.state.settings.jumpViaShellOffered)
     }
 
     /** The switch of a settings row, named after the row it belongs to (see `SettingToggleRow`). */

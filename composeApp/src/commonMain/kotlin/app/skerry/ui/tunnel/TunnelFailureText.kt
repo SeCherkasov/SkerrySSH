@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import app.skerry.ui.connection.jumpProblemText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_tunnel_error_host_missing
+import app.skerry.ui.generated.resources.conn_tunnel_error_jump_shell
 import app.skerry.ui.generated.resources.conn_tunnel_error_no_credential
 import app.skerry.ui.generated.resources.conn_tunnel_error_link_lost
 import org.jetbrains.compose.resources.stringResource
@@ -13,6 +14,7 @@ import org.jetbrains.compose.resources.stringResource
 fun tunnelUnavailableText(reason: TunnelUnavailable): String = when (reason) {
     TunnelUnavailable.HostNotFound -> stringResource(Res.string.conn_tunnel_error_host_missing)
     TunnelUnavailable.NoCredential -> stringResource(Res.string.conn_tunnel_error_no_credential)
+    TunnelUnavailable.JumpShell -> stringResource(Res.string.conn_tunnel_error_jump_shell)
     is TunnelUnavailable.Jump -> jumpProblemText(reason.problem)
     // Its own line, not the dial failure's: a tunnel that came up and died is a different
     // fact from one that never connected, and the row is all the user has to tell them apart.

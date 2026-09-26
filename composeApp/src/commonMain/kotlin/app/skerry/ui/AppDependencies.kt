@@ -34,6 +34,12 @@ data class AppDependencies(
      * (only a real connect via TOFU does). `null` — preview/mock without probing.
      */
     val probeTransport: SshTransport? = null,
+    /**
+     * Shared jump host connections behind [transport]'s jump-host-shell sessions
+     * ([app.skerry.shared.jumpshell.JumpShellTransport]); the vault lock closes the idle ones.
+     * `null` — preview/mock, or a transport built without one.
+     */
+    val jumpHosts: app.skerry.shared.ssh.SharedConnectionPool? = null,
     /** VNC/RFB transport for remote-desktop tabs; `null` if VNC isn't wired up on this platform. */
     val vncTransport: VncTransport? = null,
     /** RDP transport for remote-desktop tabs; `null` if RDP isn't wired up on this platform. */

@@ -168,4 +168,15 @@ class JumpChainTest {
         val b = host("b", jumpHostId = "a")
         assertEquals(listOf(a, b), jumpHostCandidates(hosts.values.toList(), editingId = null))
     }
+
+    @Test
+    fun jump_host_answering_the_servers_questions_needs_no_credential() {
+        hosts["bastion"] = Host(
+            id = "bastion", label = "bastion", address = "bastion.example.com", username = "me",
+            interactiveAuth = true,
+        )
+        val target = host("web", jumpHostId = "bastion")
+        val resolved = resolve(target) as JumpChainResolution.Resolved
+        assertEquals(SshJump("bastion.example.com", 22, "me", SshAuth.Interactive), resolved.jump)
+    }
 }

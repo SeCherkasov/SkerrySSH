@@ -253,6 +253,7 @@
     <string name="settings_update_status">Обновление %1$s</string>
     <string name="settings_terminal_section_local_shell">Локальная оболочка</string>
     <string name="settings_local_shell_desc">Оболочка для сессий локального терминала. Пусто — системная оболочка по умолчанию.</string>
+    <string name="settings_experimental_subtitle">Функции в испытании. По умолчанию выключены, могут измениться или исчезнуть.</string>
     <string name="settings_trash_subtitle">Удалённые хосты, ключи, сниппеты и туннели.</string>
     <string name="settings_trash_title">Корзина</string>
     <string name="settings_trash_empty">Корзина пуста</string>
@@ -298,4 +299,6 @@
     <string name="keepalive_vendor_oppo">OPPO / OnePlus / realme</string>
     <string name="keepalive_vendor_vivo">vivo / iQOO</string>
     <string name="keepalive_vendor_samsung">Samsung</string>
+    <string name="settings_experimental_jump_shell">Shell прыжкового хоста</string>
+    <string name="settings_experimental_jump_shell_desc">Форма подключения предлагает заходить на хост командой ssh в приглашении прыжкового хоста — для бастионов, где доступен только shell. Один вход на прыжковый хост обслуживает все такие вкладки. Когда выключено, такие профили на этом устройстве не подключаются.</string>
 </resources>

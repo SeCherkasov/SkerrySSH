@@ -4,6 +4,9 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.carriesSftp
+import app.skerry.shared.ssh.hasShell
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.text.MAX_NOTES_LENGTH
 import app.skerry.shared.text.normalizeNotes
 import kotlinx.serialization.Serializable
@@ -85,6 +88,15 @@ data class Host(
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jumpHostId: String? = null,
+    /**
+     * Reach this host by typing `ssh` at [jumpHostId]'s prompt instead of tunneling through it (see
+     * [app.skerry.shared.ssh.SshTarget.jumpShell]): for a bastion that logs a person in inside its
+     * shell and allows nothing else. The address, port and user are then the ones the jump host's
+     * own `ssh` dials, with its keys — this profile needs no secret. Inert without [jumpHostId] and
+     * on any type but SSH. A client predating the field ignores it and tunnels instead, which such a
+     * bastion refuses; nothing is sent anywhere it would not have gone.
+     */
+    val jumpViaShell: Boolean = false,
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
     /**
@@ -98,3 +110,32 @@ data class Host(
     val container: ContainerSpec? = null,
     val rdp: RdpSpec? = null,
 )
+
+/**
+ * This profile as read from a team's vault. Typing `ssh` on the jump host hands the session and the
+ * destination's host key check to the jump host, and a peer who edits the shared profile does not
+ * get to switch that on for every member: team profiles go through the jump host end to end.
+ */
+fun Host.asTeamShared(): Host = if (jumpViaShell) copy(jumpViaShell = false) else this
+
+/** Whether a session to this profile types `ssh` on its jump host ([Host.jumpViaShell] in effect). */
+val Host.reachedThroughJumpShell: Boolean
+    get() = jumpViaShell && jumpHostId != null && connectionType == ConnectionType.SSH
+
+/**
+ * Whether connecting needs a credential of this profile's own. Not through a jump host's shell: the
+ * jump host logs in with its own auth, carried in the chain, and its `ssh` reaches this one.
+ */
+val Host.needsOwnCredential: Boolean
+    get() = connectionType.usesSshAuth && !reachedThroughJumpShell
+
+/** Whether a file session can open on this host; through a jump host's shell it would list the jump host. */
+val Host.opensFileSessions: Boolean
+    get() = connectionType.carriesSftp && !reachedThroughJumpShell
+
+/**
+ * Whether a command can be sent as the session opens. Through a jump host's shell the jump host is
+ * still logging in at that point, and the line would run there.
+ */
+val Host.takesCommandsOnOpen: Boolean
+    get() = connectionType.hasShell && !reachedThroughJumpShell

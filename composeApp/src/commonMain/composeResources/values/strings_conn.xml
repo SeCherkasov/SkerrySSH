@@ -99,6 +99,9 @@
 
     <string name="conn_tunnel_error_host_missing">Host not found</string>
     <string name="conn_tunnel_error_no_credential">No saved credential</string>
+    <string name="conn_error_jump_shell_disabled">Typing ssh on the jump host is off on this device. Turn it on in Settings → Experimental.</string>
+    <string name="conn_error_jump_shell_address">The address is not a plain host name or IP; it is not typed into the jump host's shell.</string>
+    <string name="conn_tunnel_error_jump_shell">Not available through a jump host's shell</string>
     <string name="conn_tunnel_error_link_lost">Connection lost</string>
 
     <string name="conn_serial_err_unsupported">Serial ports are not available on this device.</string>
@@ -187,4 +190,6 @@
     <string name="conn_err_hostkey_locked">Vault locked: host key trust can't be read. Unlock and retry.</string>
     <string name="conn_err_hostkey_cert">This host must present a certificate from a trusted CA; what it offered was refused.</string>
     <string name="conn_err_hostkey_jump">Jump host — %1$s</string>
+    <string name="conn_jump_via_shell">Type ssh on the jump host</string>
+    <string name="conn_jump_via_shell_desc">For a bastion that allows only a shell. Logs in as the jump host profile; the destination is reached with the jump host's keys. Terminal only.</string>
 </resources>

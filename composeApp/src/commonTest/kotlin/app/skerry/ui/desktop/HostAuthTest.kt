@@ -33,6 +33,14 @@ class HostAuthTest {
     )
 
     @Test
+    fun a_host_typed_through_its_jump_hosts_shell_asks_for_nothing() {
+        // The jump host logs in with its own auth, carried in the chain; the destination is dialed
+        // with the jump host's keys. A password prompt here would ask for a secret nobody uses.
+        val shellJump = host().copy(jumpHostId = "bastion", jumpViaShell = true)
+        assertEquals(HostAuthResolution.Resolved(SshAuth.Password("")), resolveHostAuth(shellJump, credentials = null))
+    }
+
+    @Test
     fun an_interactive_host_connects_without_a_password_prompt() {
         // Asking for a password here would be asking for something the profile deliberately lacks —
         // and the dialog refuses an empty one, so such a host could not be reached at all.

@@ -46,6 +46,7 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
 import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.host.asTeamShared
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.generated.resources.lib_teams_scope_delete_message
 import app.skerry.ui.generated.resources.lib_teams_scope_delete
@@ -509,7 +510,7 @@ private fun MobileTeamDetail(
     } else {
         null
     }
-    val sharedHosts = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultHostStore(it).all() } ?: emptyList() }
+    val sharedHosts = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultHostStore(it).all().map(Host::asTeamShared) } ?: emptyList() }
     val sharedSnippets = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
     val sharedRunbooks = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultRunbookStore(it).all() } ?: emptyList() }
 
@@ -709,7 +710,7 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
                 // Split by section like the personal catalog (desktop parity).
-                val shared = VaultHostStore(vault).all().inSection(section)
+                val shared = VaultHostStore(vault).all().map(Host::asTeamShared).inSection(section)
                 if (shared.isEmpty()) null else label to shared
             }
         }

@@ -35,6 +35,7 @@ import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.host.asTeamShared
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamScopeRef
 import androidx.compose.runtime.collectAsState
@@ -185,7 +186,7 @@ internal fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignSta
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
                 // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
                 // to the desktops list, its servers to the terminal one.
-                val shared = VaultHostStore(vault).all().inSection(section)
+                val shared = VaultHostStore(vault).all().map(Host::asTeamShared).inSection(section)
                 if (shared.isEmpty()) null else TeamSection(ref, label, shared)
             }
         }

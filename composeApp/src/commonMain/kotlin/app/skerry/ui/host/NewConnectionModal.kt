@@ -68,7 +68,10 @@ import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
 import app.skerry.ui.generated.resources.conn_field_host_address
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.generated.resources.conn_field_jump_host
+import app.skerry.ui.generated.resources.conn_jump_via_shell
+import app.skerry.ui.generated.resources.conn_jump_via_shell_desc
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_notes
@@ -160,7 +163,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
     // The probe is an SSH connect, so the controller exists only where there is one to make: a remote
     // desktop, Telnet, Serial or a local shell has no test, and with no controller there is no status
     // to leave stale under a button the form doesn't draw.
-    val showsTest = form.connectionType.hasConnectionTest
+    // Not through a jump host's shell: the probe would tunnel past a bastion that allows only a shell.
+    val showsTest = form.connectionType.hasConnectionTest && !form.typesSshOnJumpHost
     val tester = remember(transport, testScope, showsTest) {
         if (showsTest) transport?.let { ConnectionTestController(it, testScope) } else null
     }
@@ -186,7 +190,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
     // A listing belongs to one host/runtime/namespace too — the same edits make it stale.
-    LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase, form.jumpHostId) {
+    LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase, form.jumpHostId, form.jumpViaShell) {
         tester?.reset()
         browser?.reset()
     }
@@ -285,8 +289,11 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 if (form.connectionType.usesSshAuth) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
-                    Spacer14()
-                    Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form) }
+                    // Through a jump host's shell nothing of this profile logs in: no picker to fill.
+                    if (!form.typesSshOnJumpHost) {
+                        Spacer14()
+                        Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form) }
+                    }
                 }
                 // VNC authenticates with a password only — no username, no private key (allowKey = false).
                 if (form.connectionType.isVnc) {
@@ -352,6 +359,17 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         if (form.connectionType == ConnectionType.SSH) {
                             Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { KeepAlivePicker(form) }
                         }
+                    }
+                    // Experimental, behind its setting — but a profile that already carries the choice
+                    // shows it, so it can be seen and turned off.
+                    if (form.jumpViaShellApplies && (state.settings.jumpViaShellOffered || form.jumpViaShell)) {
+                        Spacer14()
+                        ToggleRow(
+                            label = stringResource(Res.string.conn_jump_via_shell),
+                            on = form.jumpViaShell,
+                            onToggle = { form.jumpViaShell = !form.jumpViaShell },
+                            subtitle = stringResource(Res.string.conn_jump_via_shell_desc),
+                        )
                     }
                 }
                 Spacer14()

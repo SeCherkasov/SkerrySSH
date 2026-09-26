@@ -52,7 +52,7 @@ enum class MobileTab(val icon: String) {
  * from Hosts, the framebuffer from Desktops or Sessions, SFTP (Files) via the host card's SFTP
  * button, and Vault/Snippets/Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Vault, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, KeepAlive, Trash, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Vault, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, KeepAlive, Experimental, Trash, About }
 
 /**
  * Push screens that keep the bottom navigation up. The terminal is one: per the template it is a
@@ -163,6 +163,8 @@ class MobileDesignState(
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
     initialOfferSudoPassword: Boolean = false,
     private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
+    initialJumpViaShellOffered: Boolean = false,
+    private val onJumpViaShellOfferedChange: (Boolean) -> Unit = {},
     initialReportTeamSessions: Boolean = true,
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     // Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
@@ -415,6 +417,14 @@ class MobileDesignState(
     var offerSudoPassword: Boolean by mutableStateOf(initialOfferSudoPassword); private set
 
     /**
+     * Experimental: whether the connection form offers "type `ssh` on the jump host" next to the
+     * jump host picker ([app.skerry.shared.host.Host.jumpViaShell]), and whether this device lets
+     * such a profile connect at all — the transport reads the stored value per connect, so a
+     * profile synced from elsewhere is refused here until this is on.
+     */
+    var jumpViaShellOffered: Boolean by mutableStateOf(initialJumpViaShellOffered); private set
+
+    /**
      * Whether a session on a team-shared host is reported to that team's activity feed (More →
      * Security). Desktop parity, see [app.skerry.ui.app.DesktopDesignState.reportTeamSessions].
      */
@@ -550,6 +560,12 @@ class MobileDesignState(
     fun toggleOfferSudoPassword() {
         offerSudoPassword = !offerSudoPassword
         onOfferSudoPasswordChange(offerSudoPassword)
+    }
+
+    /** Toggle the experimental jump-host-shell choice in the connection form and report outward. */
+    fun toggleJumpViaShellOffered() {
+        jumpViaShellOffered = !jumpViaShellOffered
+        onJumpViaShellOfferedChange(jumpViaShellOffered)
     }
 
     /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */

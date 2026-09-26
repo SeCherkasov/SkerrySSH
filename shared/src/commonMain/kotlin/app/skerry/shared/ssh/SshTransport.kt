@@ -44,6 +44,12 @@ interface SshTransport {
  * transport, see [app.skerry.shared.container.shellCommandLine]): the PTY is allocated as usual, but
  * the server runs this command in it. `null` (the default) means the account's login shell, i.e.
  * every plain SSH/Mosh/Telnet/Serial/local session.
+ *
+ * [jumpShell] changes what the last hop of [jump] is for: instead of a tunnel to this target, the
+ * session opens a shell on that hop and types `ssh` to [host]/[port]/[username] at its prompt
+ * ([app.skerry.shared.jumpshell.JumpShellTransport]). For bastions that authenticate a person
+ * inside the shell and allow nothing but a shell, where ProxyJump cannot reach past them. The hop
+ * carries its own auth; the `auth` passed with such a target is not used.
  */
 data class SshTarget(
     val host: String,
@@ -54,6 +60,7 @@ data class SshTarget(
     val keepAliveSeconds: Int = 0,
     val container: ContainerSpec? = null,
     val shellCommand: List<String>? = null,
+    val jumpShell: Boolean = false,
 )
 
 /**

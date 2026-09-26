@@ -99,6 +99,9 @@
 
     <string name="conn_tunnel_error_host_missing">Хост не найден</string>
     <string name="conn_tunnel_error_no_credential">Нет сохранённых учётных данных</string>
+    <string name="conn_error_jump_shell_disabled">Ввод ssh на прыжковом хосте выключен на этом устройстве. Включите в Настройки → Экспериментальное.</string>
+    <string name="conn_error_jump_shell_address">Адрес — не просто имя хоста или IP; в shell прыжкового хоста он не набирается.</string>
+    <string name="conn_tunnel_error_jump_shell">Недоступно через shell прыжкового хоста</string>
     <string name="conn_tunnel_error_link_lost">Соединение потеряно</string>
 
     <string name="conn_serial_err_unsupported">На этом устройстве последовательные порты недоступны.</string>
@@ -187,4 +190,6 @@
     <string name="conn_err_hostkey_locked">Хранилище заблокировано: доверие к ключу не прочитать. Разблокируйте и повторите.</string>
     <string name="conn_err_hostkey_cert">Хост обязан предъявить сертификат доверенного CA; предъявленное отклонено.</string>
     <string name="conn_err_hostkey_jump">Промежуточный хост — %1$s</string>
+    <string name="conn_jump_via_shell">Набирать ssh на прыжковом хосте</string>
+    <string name="conn_jump_via_shell_desc">Для бастиона, где доступен только shell. Вход по профилю прыжкового хоста, до цели — его ключами. Только терминал.</string>
 </resources>

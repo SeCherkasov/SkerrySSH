@@ -2,6 +2,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.reachedThroughJumpShell
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
@@ -22,12 +23,14 @@ import app.skerry.ui.terminal.SudoPasswordOffer
  * Host profile → connection address ([SshTarget]); [Host.connectionType] picks the transport.
  * [jump] is the resolved ProxyJump chain ([resolveJumpChain]) when the profile has one — the
  * caller resolves it (needs the host/credential stores) and must NOT pass `null` for a profile
- * with [Host.jumpHostId] set (that would silently connect direct).
+ * with [Host.jumpHostId] set (that would silently connect direct). A profile
+ * [reachedThroughJumpShell] turns the chain's last hop into the shell the session types `ssh` in.
  */
 fun Host.toTarget(jump: SshJump? = null): SshTarget =
     SshTarget(
         host = address, port = port, username = username, connectionType = connectionType,
         jump = jump, keepAliveSeconds = keepAliveSeconds,
+        jumpShell = reachedThroughJumpShell && jump != null,
         // Container profiles: what to exec into once the host's SSH leg is up (ignored by every
         // other transport, see [ContainerTransport]).
         container = container.takeIf { connectionType == ConnectionType.CONTAINER },

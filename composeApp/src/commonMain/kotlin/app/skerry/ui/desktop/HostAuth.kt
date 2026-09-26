@@ -1,8 +1,8 @@
 package app.skerry.ui.desktop
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.needsOwnCredential
 import app.skerry.shared.ssh.SshAuth
-import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.identity.CredentialManagerController
 
@@ -25,9 +25,10 @@ sealed interface HostAuthResolution {
  * the keychain expanded into [SshAuth]; an SSH host with no binding → [HostAuthResolution.NeedsPassword].
  */
 fun resolveHostAuth(host: Host, credentials: CredentialManagerController?): HostAuthResolution = when {
-    // Telnet/Serial need no auth — connect right away, no password prompt (auth is ignored).
-    // SSH and Mosh both authenticate over SSH and take the credential/prompt path below.
-    !host.connectionType.usesSshAuth -> HostAuthResolution.Resolved(SshAuth.Password(""))
+    // Telnet/Serial need no auth — connect right away, no password prompt (auth is ignored). Nor
+    // does a host typed through its jump host's shell: the jump host's auth rides in the chain.
+    // SSH and Mosh otherwise authenticate over SSH and take the credential/prompt path below.
+    !host.needsOwnCredential -> HostAuthResolution.Resolved(SshAuth.Password(""))
     // The server does the asking: connect straight away and let it raise its own prompt, rather than
     // demanding a password the profile deliberately doesn't have.
     host.interactiveAuth -> HostAuthResolution.Resolved(SshAuth.Interactive)

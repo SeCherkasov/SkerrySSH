@@ -1,19 +1,24 @@
 package app.skerry.ui.connection
 
 import androidx.compose.runtime.Composable
+import app.skerry.shared.jumpshell.JumpShellRefusedException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_error_failed
 import app.skerry.ui.generated.resources.conn_error_failed_detail
+import app.skerry.ui.generated.resources.conn_error_jump_shell_address
+import app.skerry.ui.generated.resources.conn_error_jump_shell_disabled
 import app.skerry.ui.generated.resources.mosh_err_bootstrap
 import app.skerry.ui.generated.resources.mosh_err_bootstrap_no_output
 import app.skerry.ui.generated.resources.mosh_err_locale
 import app.skerry.ui.generated.resources.mosh_err_not_installed
 import app.skerry.ui.generated.resources.mosh_err_udp
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * User-facing text for a connect error, localized for typed Mosh, serial and host key failures.
+ * User-facing text for a connect error, localized for typed Mosh, serial, host key and jump host
+ * shell failures.
  * Mosh problems are almost always server-side and fixable — Skerry ships only the client, so the
  * message must say what to do on the server (install the package, generate a locale, open UDP)
  * instead of leaking a raw exception string; serial problems say what to do with the device, and a
@@ -24,6 +29,7 @@ import org.jetbrains.compose.resources.stringResource
 fun connectionErrorText(error: ConnectionUiState.Error): String {
     error.hostKeyRefusal?.let { return hostKeyRefusalLine(it, error.hostKeyRefusalOnHop) }
     error.serialProblem?.let { return serialProblemText(it, error.serialDetail) }
+    error.jumpShellRefusal?.let { return stringResource(jumpShellRefusalText(it)) }
     val reason = error.moshReason ?: return error.message.takeIf { it.isNotBlank() }
         ?.let { stringResource(Res.string.conn_error_failed_detail, it) }
         ?: stringResource(Res.string.conn_error_failed)
@@ -39,4 +45,10 @@ fun connectionErrorText(error: ConnectionUiState.Error): String {
                 ?.let { stringResource(Res.string.mosh_err_bootstrap, it) }
                 ?: stringResource(Res.string.mosh_err_bootstrap_no_output)
     }
+}
+
+/** Why the jump host's shell was not used; each reason points at a different fix. */
+internal fun jumpShellRefusalText(reason: JumpShellRefusedException.Reason): StringResource = when (reason) {
+    JumpShellRefusedException.Reason.DISABLED -> Res.string.conn_error_jump_shell_disabled
+    JumpShellRefusedException.Reason.NOT_AN_ADDRESS -> Res.string.conn_error_jump_shell_address
 }

@@ -149,4 +149,21 @@ class TunnelFormTest {
 
         assertFalse(form.autostart)
     }
+
+    @Test
+    fun `a host typed through its jump host's shell has no tunnel to offer`() {
+        // A forward needs a channel on the destination itself; through the shell there is none, and
+        // tunneling past the bastion instead is exactly what such a bastion refuses.
+        val bastion = Host("j1", "bastion", "bastion.example.com", 22, "gate", credentialId = "c2")
+        val viaShell = host.copy(jumpHostId = "j1", jumpViaShell = true)
+        val hosts = mapOf("h1" to viaShell, "j1" to bastion)
+        val creds = mapOf(
+            "c1" to credential,
+            "c2" to Credential("c2", "gate@bastion", CredentialSecret.Password("jump-pw")),
+        )
+        val r = assertIs<TunnelResolution.Unavailable>(
+            resolveTunnelHost(tunnel.hostId, findHost = { hosts[it] }, findCredential = { creds[it] }),
+        )
+        assertEquals(TunnelUnavailable.JumpShell, r.reason)
+    }
 }
