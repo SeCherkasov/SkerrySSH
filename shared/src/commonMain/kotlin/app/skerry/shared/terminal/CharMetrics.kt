@@ -7,49 +7,37 @@ package app.skerry.shared.terminal
 internal object CharMetrics {
 
     /**
-     * Character width in columns via a simplified East Asian Width + emoji table: 2 for CJK/Hangul/
-     * kana/fullwidth forms and emoji blocks, else 1. Combining/zero-width chars count as 1 for now
-     * (a separate combining layer handles those).
+     * Character width in columns: 2 for East_Asian_Width Wide/Fullwidth (CJK, Hangul syllables,
+     * fullwidth forms, emoji with default emoji presentation), else 1 — ambiguous-width characters
+     * count as narrow, as in every non-CJK locale. Zero-width characters are [isCombining]'s business.
      */
-    fun charWidth(cp: Int): Int = if (
-        cp in 0x1100..0x115F ||              // Hangul Jamo
-        cp in 0x2E80..0x303E ||              // CJK radicals, Kangxi, punctuation
-        cp in 0x3041..0x33FF ||              // Hiragana/Katakana, CJK symbols
-        cp in 0x3400..0x4DBF ||              // CJK Ext A
-        cp in 0x4E00..0x9FFF ||              // CJK Unified
-        cp in 0xA000..0xA4CF ||              // Yi
-        cp in 0xAC00..0xD7A3 ||              // Hangul syllables
-        cp in 0xF900..0xFAFF ||              // CJK compatibility
-        cp in 0xFE10..0xFE19 ||              // vertical forms
-        cp in 0xFE30..0xFE6F ||              // CJK compat forms
-        cp in 0xFF00..0xFF60 ||              // fullwidth forms
-        cp in 0xFFE0..0xFFE6 ||              // fullwidth signs
-        cp in 0x1F300..0x1FAFF ||            // emoji, symbols, pictographs
-        cp in 0x20000..0x3FFFD               // CJK Ext B and beyond
-    ) 2 else 1
+    fun charWidth(cp: Int): Int = if (cp >= FIRST_WIDE && inRanges(UnicodeWidthTables.WIDE, cp)) 2 else 1
 
     /**
-     * Zero-width combining mark (simplified table, like [charWidth]): diacritics, ZWJ, variation
-     * selectors, combining marks for symbols. Full Mn/Me category not covered.
-     * Hangul Jamo (L/V/T composition) is deliberately excluded: its width is handled by [charWidth]
-     * (as in ncurses).
+     * Whether [cp] draws nothing of its own and joins the cell before it: nonspacing and enclosing
+     * marks (diacritics, viramas, variation selectors) and format characters (ZWJ, zero-width space,
+     * bidi marks, tags) — the soft hyphen and the prepended concatenation marks excepted, since they
+     * draw. Hangul Jamo vowels and finals are letters here, as in ncurses: [charWidth] handles them.
      */
-    fun isCombining(cp: Int): Boolean =
-        cp == 0x200D ||                  // ZWJ (emoji joiner)
-        cp in 0x0300..0x036F ||          // combining diacritical marks
-        cp in 0x0483..0x0489 ||          // combining marks (Cyrillic, etc.)
-        cp in 0x0591..0x05BD ||          // Hebrew (niqqud, partial)
-        cp in 0x0610..0x061A ||          // Arabic (partial)
-        cp in 0x064B..0x065F ||          // Arabic diacritics
-        cp == 0x0670 ||
-        cp in 0x06D6..0x06DC ||
-        cp in 0x0E31..0x0E3A ||          // Thai (partial)
-        cp in 0x1AB0..0x1AFF ||          // combining diacritical marks extended
-        cp in 0x1DC0..0x1DFF ||          // combining diacritical marks supplement
-        cp in 0x20D0..0x20FF ||          // combining marks for symbols
-        cp in 0xFE00..0xFE0F ||          // variation selectors
-        cp in 0xFE20..0xFE2F ||          // combining half marks
-        cp in 0xE0100..0xE01EF           // variation selectors supplement
+    fun isCombining(cp: Int): Boolean = cp >= FIRST_ZERO_WIDTH && inRanges(UnicodeWidthTables.ZERO_WIDTH, cp)
+
+    /** Binary search over sorted inclusive `[start, end]` pairs. */
+    private fun inRanges(ranges: IntArray, cp: Int): Boolean {
+        var lo = 0
+        var hi = ranges.size / 2 - 1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            when {
+                cp < ranges[2 * mid] -> hi = mid - 1
+                cp > ranges[2 * mid + 1] -> lo = mid + 1
+                else -> return true
+            }
+        }
+        return false
+    }
+
+    private val FIRST_WIDE = UnicodeWidthTables.WIDE[0]
+    private val FIRST_ZERO_WIDTH = UnicodeWidthTables.ZERO_WIDTH[0]
 
     // One shared instance per printable ASCII char: feed() calls codePointToString once per
     // printed character, and streaming plain text allocated a fresh one-char String per byte.
@@ -78,10 +66,10 @@ internal object CharMetrics {
  * wide as the row it is going into. Public because the same question is asked outside the terminal
  * grid: whether a row can show a whole command before it runs it.
  *
- * Rounded up rather than looked up past U+2000: [CharMetrics.charWidth] answers the grid, where a
- * wrong guess draws a smeared cell, and its table names the blocks a terminal meets — it calls
- * U+2B1B ⬛ and its neighbours narrow, and they draw wide. The caller here is a gate, where
- * over-counting only asks for one confirmation more often, so everything symbolic counts as two.
+ * Rounded up rather than looked up past U+2000: [CharMetrics.charWidth] answers the grid by the
+ * Unicode tables, and a font is free to draw an ambiguous or text-presentation symbol wide anyway.
+ * The caller here is a gate, where over-counting only asks for one confirmation more often, so
+ * everything symbolic counts as two.
  */
 fun displayColumns(text: String): Int {
     var columns = 0
