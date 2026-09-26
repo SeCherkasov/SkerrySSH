@@ -497,7 +497,8 @@ class TerminalEmulator(
     private var g0LineDrawing = false
     private var g1LineDrawing = false
     private var glG1 = false
-    // Where the next designation byte applies: 0=G0 (`ESC (`), 1=G1 (`ESC )`), -1=other (absorb).
+    // Where the next designation byte applies: 0=G0 (`ESC (`), 1=G1 (`ESC )`), [DEC_LINE] for
+    // `ESC #` (only DECALN is acted on), -1=other (absorb).
     private var pendingDesignation = -1
 
     fun feed(data: ByteArray) {
@@ -603,17 +604,42 @@ class TerminalEmulator(
     private fun ground(b: Int) {
         when {
             b == 0x1b -> parser = State.Esc
-            b == 0x0d -> { cx = 0; pendingWrap = false }
-            b == 0x0a || b == 0x0b || b == 0x0c -> { lineFeed(); pendingWrap = false }
-            b == 0x08 -> { if (cx > 0) cx--; pendingWrap = false }
-            b == 0x09 -> { cx = nextTabStop(cx); pendingWrap = false }
-            b == 0x07 -> onBell()
-            b == 0x0e -> glG1 = true  // SO — activate G1 in GL
-            b == 0x0f -> glG1 = false // SI — restore G0 in GL
-            b < 0x20 -> {} // other C0 — ignored
+            b < 0x20 -> control(b)
             b < 0x80 -> putCodePoint(mapGlyph(b).code)
             else -> beginUtf8(b)
         }
+    }
+
+    /**
+     * A C0 control other than ESC. It runs wherever it arrives — between characters, or inside an
+     * escape or control sequence, which then carries on (VT100 behaviour; vttest checks `CSI 2 BS C`).
+     */
+    private fun control(b: Int) {
+        when (b) {
+            0x0d -> { cx = 0; pendingWrap = false }
+            0x0a, 0x0b, 0x0c -> { lineFeed(); pendingWrap = false }
+            0x08 -> { if (cx > 0) cx--; pendingWrap = false }
+            0x09 -> { cx = nextTabStop(cx); pendingWrap = false }
+            0x07 -> onBell()
+            0x0e -> glG1 = true  // SO — activate G1 in GL
+            0x0f -> glG1 = false // SI — restore G0 in GL
+            else -> {} // other C0 — ignored
+        }
+    }
+
+    /**
+     * What a byte means in the middle of a sequence, before the state reads it: CAN and SUB cancel
+     * the sequence, ESC starts a new one, any other C0 runs and the sequence continues. Answers
+     * whether the byte was taken.
+     */
+    private fun interrupt(b: Int): Boolean {
+        when {
+            b == CAN || b == SUB -> parser = State.Ground
+            b == 0x1b -> parser = State.Esc
+            b < 0x20 -> control(b)
+            else -> return false
+        }
+        return true
     }
 
     /** Applies the active graphic set: in DEC Special Graphics, ASCII 0x60..0x7e maps to box-drawing. */
@@ -624,10 +650,16 @@ class TerminalEmulator(
 
     /** Handles the byte after `ESC (`/`ESC )`/others: `0` = line-drawing, else US-ASCII. */
     private fun consumeDesignation(b: Int) {
+        if (interrupt(b)) {
+            // A plain C0 ran in place and the designation still waits for its final byte.
+            if (parser != State.Consume) pendingDesignation = -1
+            return
+        }
         val lineDrawing = b == '0'.code
         when (pendingDesignation) {
             0 -> g0LineDrawing = lineDrawing
             1 -> g1LineDrawing = lineDrawing
+            DEC_LINE -> if (b == '8'.code) screenAlignment()
         }
         pendingDesignation = -1
         parser = State.Ground
@@ -660,12 +692,14 @@ class TerminalEmulator(
     }
 
     private fun esc(b: Int) {
+        if (interrupt(b)) return
         when (b.toChar()) {
             '[' -> { params.reset(); csiIntermediate = NO_INTERMEDIATE; parser = State.Csi }
             ']' -> { osc.clear(); parser = State.Osc }
             '(' -> { pendingDesignation = 0; parser = State.Consume } // designate G0
             ')' -> { pendingDesignation = 1; parser = State.Consume } // designate G1
-            '*', '+', '-', '.', '/', '#', ' ' -> { pendingDesignation = -1; parser = State.Consume }
+            '#' -> { pendingDesignation = DEC_LINE; parser = State.Consume }
+            '*', '+', '-', '.', '/', ' ' -> { pendingDesignation = -1; parser = State.Consume }
             '7' -> { saveCursor(); parser = State.Ground }
             '8' -> { restoreCursor(); parser = State.Ground }
             'D' -> { lineFeed(); pendingWrap = false; parser = State.Ground } // IND
@@ -686,7 +720,8 @@ class TerminalEmulator(
             b in 0x30..0x3f -> params.accept(b) // digits, ';', ':', markers ?<=> — bounded inside CsiParams
             b in 0x20..0x2f -> csiIntermediate = b.toChar() // intermediate bytes
             b in 0x40..0x7e -> { dispatchCsi(b.toChar()); parser = State.Ground }
-            b == 0x1b -> parser = State.Esc // abandons this sequence and starts the next one
+            interrupt(b) -> {} // a new ESC abandons this sequence; CAN/SUB cancel it; other C0 run
+            b == 0x7f -> {} // DEL is ignored anywhere in a sequence
             else -> parser = State.Ground
         }
     }
@@ -695,6 +730,8 @@ class TerminalEmulator(
         when (b) {
             0x07 -> { finishOsc(); parser = State.Ground } // BEL — end of OSC
             0x1b -> parser = State.OscEsc // possibly ST (ESC \)
+            CAN, SUB -> { osc.clear(); parser = State.Ground } // cancelled: never applied
+            in 0x00..0x1f -> {} // other C0 are not part of any OSC payload (xterm ignores them too)
             // Length cap: an untrusted server could send an unbounded OSC (especially OSC 52 base64) and
             // blow up the heap to OOM. Bytes beyond the limit are dropped, but parsing continues to the
             // terminator (so the tail doesn't leak into Ground as text). A truncated OSC 52 -> broken
@@ -893,6 +930,7 @@ class TerminalEmulator(
             // data, so a future streamed-graphics feature would need to drop this relaxation.
             0x07 -> { finishStrSeq(); parser = State.Ground }
             0x1b -> parser = State.StrSeqEsc                        // possibly ST (ESC \)
+            CAN, SUB -> { strSeq.clear(); parser = State.Ground }   // cancelled: never answered
             // Length cap reuses MAX_OSC_LEN (4 MiB) — generous headroom for future streamed graphics;
             // current XTGETTCAP usage needs only kilobytes. Protects against unbounded DCS -> OOM.
             else -> if (strSeq.length < MAX_OSC_LEN) strSeq.append((b and 0xff).toChar())
@@ -1396,7 +1434,7 @@ class TerminalEmulator(
     // --- Cursor / reset / alt-screen --------------------------------------
 
     private fun saveCursor() {
-        val saved = SavedCursor(cx, cy, style, g0LineDrawing, g1LineDrawing, glG1)
+        val saved = SavedCursor(cx, cy, style, g0LineDrawing, g1LineDrawing, glG1, originMode, pendingWrap)
         if (altScreen) savedAlt = saved else savedPrimary = saved
     }
 
@@ -1406,6 +1444,24 @@ class TerminalEmulator(
         cy = saved.cy.coerceIn(0, rows - 1)
         style = saved.style
         g0LineDrawing = saved.g0LineDrawing; g1LineDrawing = saved.g1LineDrawing; glG1 = saved.glG1
+        originMode = saved.originMode
+        // The wrap is only still pending if the cursor came back to the column it was pending at.
+        pendingWrap = saved.pendingWrap && cx == saved.cx
+    }
+
+    /**
+     * DECALN (`ESC # 8`): the screen fills with `E` in the default rendition, the margins open to
+     * the whole screen and the cursor goes home — the alignment pattern vttest draws its frames on.
+     */
+    private fun screenAlignment() {
+        markDirty()
+        val e = TermCell('E')
+        for (row in grid) {
+            row.fill(e, 0, cols)
+            row.wrapped = false
+        }
+        resetRegion()
+        cx = 0; cy = 0
         pendingWrap = false
     }
 
@@ -1707,6 +1763,13 @@ class TerminalEmulator(
         // the lack of a const inline is immaterial.
         val NO_INTERMEDIATE = 0.toChar()
 
+        /** CAN and SUB: cancel whatever sequence is in progress (ECMA-48 §8.3.6, §8.3.148). */
+        private const val CAN = 0x18
+        private const val SUB = 0x1a
+
+        /** [pendingDesignation] for `ESC #` — the DEC line-attribute and alignment family. */
+        private const val DEC_LINE = 2
+
         /**
          * DEC Special Graphics (VT100 line-drawing): ASCII 0x60..0x7e → Unicode glyphs. Index = code -
          * 0x60. Corners/tees/lines (j..x) are what tmux/mc/htop draw borders with; the rest (diamond,
@@ -1722,7 +1785,7 @@ class TerminalEmulator(
     }
 }
 
-/** What DECSC puts aside: cursor, rendition and the active graphic sets. */
+/** What DECSC puts aside (VT510): cursor, rendition, graphic sets, origin mode and a pending wrap. */
 private data class SavedCursor(
     val cx: Int = 0,
     val cy: Int = 0,
@@ -1730,6 +1793,8 @@ private data class SavedCursor(
     val g0LineDrawing: Boolean = false,
     val g1LineDrawing: Boolean = false,
     val glG1: Boolean = false,
+    val originMode: Boolean = false,
+    val pendingWrap: Boolean = false,
 )
 
 /** Rows per sealed chunk of frozen scrollback (see [ScrollbackBuffer]). */
