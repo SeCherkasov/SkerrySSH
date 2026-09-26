@@ -114,17 +114,30 @@ class ReadOnlyHostKeyVerifierTest {
     }
 
     @Test
-    fun `a new key type for a known host counts as an unknown host`() {
-        // ed25519 is stored, the server offers rsa: a different (host, port, keyType) triple, so there
-        // is no key to compare against and the policy decides.
-        val seeded = { store: RecordingKnownHostsStore -> store.seed(KnownHost("example.com", 22, ed25519, fpA)) }
+    fun `a new key type for a known host is not trusted under either policy`() {
+        // ed25519 is stored, the server offers rsa. The server picks the host-key algorithm, so a peer
+        // offering only one this store has no record of must not turn "this key changed" into "never
+        // seen" — TofuHostKeyVerifier refuses to treat it as a first contact, and a probe that goes
+        // on to authenticate must not be the weaker of the two. Accept is for hosts with no record
+        // at all.
+        bothPolicies { policy, store ->
+            store.seed(KnownHost("example.com", 22, ed25519, fpA))
+            val verifier = ReadOnlyHostKeyVerifier(store, policy)
 
-        val accepting = RecordingKnownHostsStore().also(seeded)
-        assertTrue(ReadOnlyHostKeyVerifier(accepting, UnknownHost.Accept).verify("example.com", 22, "rsa-sha2-512", fpB))
-        assertEquals(0, accepting.adds)
+            assertEquals(
+                HostKeyRefusal.NotTrustedYet,
+                verifier.check("example.com", 22, "rsa-sha2-512", fpB),
+                "$policy",
+            )
+            assertEquals(0, store.adds, "$policy")
+        }
+    }
 
-        val refusing = RecordingKnownHostsStore().also(seeded)
-        assertFalse(ReadOnlyHostKeyVerifier(refusing, UnknownHost.Refuse).verify("example.com", 22, "rsa-sha2-512", fpB))
+    @Test
+    fun `the same host on another port is still an unknown host`() {
+        val store = RecordingKnownHostsStore().also { it.seed(KnownHost("example.com", 22, ed25519, fpA)) }
+
+        assertTrue(ReadOnlyHostKeyVerifier(store, UnknownHost.Accept).verify("example.com", 2222, "rsa-sha2-512", fpB))
     }
 }
 

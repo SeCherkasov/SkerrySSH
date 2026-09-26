@@ -59,7 +59,10 @@ interface SftpClient {
 
     /**
      * Streams remote file [remotePath] to local path [localPath] without loading it entirely into
-     * memory (unlike [read]). The local file is created/overwritten. [onProgress] is called with
+     * memory (unlike [read]). The local file is created/overwritten, and only once the transfer is
+     * complete: a failed one leaves whatever was there before. Its mode is the remote one narrowed —
+     * never wider, never group/other-writable, always owner read-write; its modification time is
+     * the remote one. [onProgress] is called with
      * (transferred bytes, total bytes) as the transfer proceeds; total is the remote file's
      * reported size (`0` if the server didn't report one). The callback may fire from an IO
      * thread; switching to the UI thread is the caller's responsibility.
@@ -72,7 +75,9 @@ interface SftpClient {
     )
 
     /**
-     * Streams local file [localPath] to remote path [remotePath], creating/overwriting it.
+     * Streams local file [localPath] to remote path [remotePath], creating/overwriting it in place
+     * (a symlink is written through, an existing file keeps its mode; a failed transfer leaves the
+     * target truncated).
      * [onProgress] is called with (transferred bytes, total bytes), where total is the local
      * file's size. The parent directory on the server must exist.
      * @throws SftpException local file missing, no permission/parent on the server, or channel failure

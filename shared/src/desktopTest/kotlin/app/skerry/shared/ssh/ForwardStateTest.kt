@@ -21,6 +21,17 @@ class ForwardStateTest {
     }
 
     @Test
+    fun `nothing is admitted once the forward is shut down, and only one caller owns that`() {
+        val state = ForwardState()
+        assertTrue(state.admit(Closeable {}))
+
+        assertTrue(state.deactivate())
+        assertFalse(state.deactivate())
+        assertFalse(state.admit(Closeable {}))
+        assertEquals(1, state.live.size)
+    }
+
+    @Test
     fun `closeAll closes every live resource and swallows close failures`() {
         val state = ForwardState()
         var closed = 0

@@ -17,9 +17,15 @@ import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -27,6 +33,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -259,6 +266,156 @@ class SshjSftpClientTest {
             }
             assertTrue(progress.isNotEmpty(), "expected at least one progress callback")
             assertEquals(payload.length.toLong(), progress.last().first)
+        } finally {
+            src.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `download narrows the remote mode instead of copying it`() = runTest {
+        // The remote mode is the server's to choose: 0666 copied onto a local file makes it
+        // world-writable, 0400 leaves the user unable to edit what they just downloaded — and 0600
+        // must stay 0600, or a key pulled from a host is readable by every local account.
+        val dir = Files.createTempDirectory("skerry-sftp-dl-mode")
+        try {
+            root.resolve("open.txt").writeText("open")
+            Files.setPosixFilePermissions(root.resolve("open.txt"), PosixFilePermissions.fromString("rw-rw-rw-"))
+            root.resolve("closed.txt").writeText("closed")
+            Files.setPosixFilePermissions(root.resolve("closed.txt"), PosixFilePermissions.fromString("r--------"))
+
+            root.resolve("secret.txt").writeText("secret")
+            Files.setPosixFilePermissions(root.resolve("secret.txt"), PosixFilePermissions.fromString("rw-------"))
+
+            withSftp { sftp ->
+                sftp.download("/open.txt", dir.resolve("open.txt").toString())
+                sftp.download("/closed.txt", dir.resolve("closed.txt").toString())
+                sftp.download("/secret.txt", dir.resolve("secret.txt").toString())
+            }
+
+            assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(dir.resolve("secret.txt"))))
+
+            val open = Files.getPosixFilePermissions(dir.resolve("open.txt"))
+            assertTrue(PosixFilePermission.OTHERS_WRITE !in open, "world-writable after download: $open")
+            assertTrue(PosixFilePermission.GROUP_WRITE !in open, "group-writable after download: $open")
+            val closed = Files.getPosixFilePermissions(dir.resolve("closed.txt"))
+            assertTrue(
+                PosixFilePermission.OWNER_READ in closed && PosixFilePermission.OWNER_WRITE in closed,
+                "owner locked out after download: $closed",
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `download keeps the remote modification time`() = runTest {
+        val dir = Files.createTempDirectory("skerry-sftp-dl-mtime")
+        try {
+            val stamp = FileTime.from(1_577_836_800, TimeUnit.SECONDS) // 2020-01-01T00:00:00Z
+            Files.setLastModifiedTime(root.resolve("readme.txt"), stamp)
+
+            withSftp { sftp -> sftp.download("/readme.txt", dir.resolve("readme.txt").toString()) }
+
+            assertEquals(stamp.to(TimeUnit.SECONDS), Files.getLastModifiedTime(dir.resolve("readme.txt")).to(TimeUnit.SECONDS))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `download into a local directory is refused`() = runTest {
+        // sshj would write under the remote's basename inside it, somewhere the caller never named.
+        val dir = Files.createTempDirectory("skerry-sftp-dl-dir")
+        try {
+            withSftp { sftp -> assertFailsWith<SftpException> { sftp.download("/readme.txt", dir.toString()) } }
+
+            assertFalse(Files.exists(dir.resolve("readme.txt")), "written inside the directory")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a failed download keeps the local file it was about to replace`() = runTest {
+        val dir = Files.createTempDirectory("skerry-sftp-dl-fail")
+        val dest = dir.resolve("readme.txt")
+        dest.writeText("the only copy")
+        try {
+            withSftp { sftp ->
+                assertFailsWith<SftpException> {
+                    sftp.download("/readme.txt", dest.toString()) { _, _ -> throw IOException("link dropped") }
+                }
+            }
+
+            assertEquals("the only copy", Files.readString(dest))
+            assertEquals(listOf("readme.txt"), dir.toFile().list()!!.toList(), "a partial file was left behind")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `download replaces an existing local file whole`() = runTest {
+        val dir = Files.createTempDirectory("skerry-sftp-dl-over")
+        val dest = dir.resolve("readme.txt")
+        dest.writeText("an older and much longer body than the remote one")
+        try {
+            withSftp { sftp -> sftp.download("/readme.txt", dest.toString()) }
+
+            assertEquals(README_BODY, Files.readString(dest))
+            assertEquals(listOf("readme.txt"), dir.toFile().list()!!.toList())
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `upload over a symlink writes through the link`() = runTest {
+        // An upload writes into the path the user named, as OpenSSH's sftp does. Staging beside it and
+        // renaming over it replaced the link with a plain file, dropped the owner and group of the
+        // file it replaced, and failed outright in a directory the user can write files in but not
+        // create them in.
+        Files.createSymbolicLink(root.resolve("readme-link"), root.resolve("readme.txt").fileName)
+        val src = Files.createTempDirectory("skerry-sftp-ul-link").resolve("payload.txt")
+        src.writeText("new")
+        try {
+            withSftp { sftp -> sftp.upload(src.toString(), "/readme-link") }
+            assertTrue(Files.isSymbolicLink(root.resolve("readme-link")), "the link was replaced by a file")
+            assertEquals("new", root.resolve("readme.txt").readText())
+        } finally {
+            src.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `upload keeps the mode of the remote file it overwrites`() = runTest {
+        // sshj's "preserve attributes" sends 0644 for every local file, whatever its mode: a 0600
+        // secret edited and uploaded back would become readable by every account on the host.
+        val secret = root.resolve("secret.env")
+        secret.writeText("old")
+        Files.setPosixFilePermissions(secret, PosixFilePermissions.fromString("rw-------"))
+        val src = Files.createTempDirectory("skerry-sftp-ul-mode").resolve("payload.txt")
+        src.writeText("new")
+        try {
+            withSftp { sftp -> sftp.upload(src.toString(), "/secret.env") }
+
+            assertEquals("new", secret.readText())
+            assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(secret)))
+        } finally {
+            src.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `upload replaces an existing remote file whole`() = runTest {
+        val src = Files.createTempDirectory("skerry-sftp-ul-over").resolve("payload.txt")
+        src.writeText("new")
+        try {
+            withSftp { sftp ->
+                sftp.upload(src.toString(), "/readme.txt")
+                assertContentEquals("new".encodeToByteArray(), sftp.read("/readme.txt"))
+            }
+            assertEquals(setOf("readme.txt", "sub", "sub-link"), root.toFile().list()!!.toSet())
         } finally {
             src.parent.toFile().deleteRecursively()
         }

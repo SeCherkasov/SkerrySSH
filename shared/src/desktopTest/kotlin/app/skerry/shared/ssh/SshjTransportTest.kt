@@ -197,6 +197,40 @@ class SshjTransportTest {
     }
 
     @Test
+    fun `exec with more stderr than the channel window still returns stdout`() = runTest {
+        // stdout and stderr share one channel window. Read one to EOF before touching the other and
+        // a command that fills the window with stderr can never finish writing it, so stdout never
+        // reaches EOF — the call sits out the whole exec timeout.
+        val connection = connect()
+        try {
+            val started = System.nanoTime()
+            val result = connection.exec("head -c 4000000 /dev/zero >&2; echo done")
+            val seconds = (System.nanoTime() - started) / 1_000_000_000
+
+            assertEquals("done\n", result.stdout)
+            assertEquals(0, result.exitCode)
+            assertTrue(seconds < 10, "exec took ${seconds}s")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
+    fun `exec past the output cap keeps draining and still reads stderr`() = runTest {
+        // Stopping at the cap stops draining the channel: once the window fills, the command blocks
+        // on its next write and stderr never reaches EOF.
+        val connection = connect()
+        try {
+            val result = connection.exec("head -c 6000000 /dev/zero; echo tail >&2")
+
+            assertEquals("tail\n", result.stderr)
+            assertEquals(1024 * 1024, result.stdout.length)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
     fun `reports non-zero exit code`() = runTest {
         val connection = connect()
         try {

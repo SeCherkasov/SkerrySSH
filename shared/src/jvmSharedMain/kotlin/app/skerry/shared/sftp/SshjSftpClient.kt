@@ -4,12 +4,23 @@ import com.hierynomus.sshj.sftp.RemoteResourceSelector
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.FileTime
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.EnumSet
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.FileMode
+import net.schmizz.sshj.xfer.FilePermission
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.Response
@@ -99,8 +110,23 @@ internal class SshjSftpClient(
         localPath: String,
         onProgress: SftpProgress,
     ): Unit = io("Failed to download file $remotePath") {
-        // sshj.get streams the file to disk; progress comes from the transfer channel's TransferListener.
-        withTransferListener(onProgress) { sftp.get(remotePath, localPath) }
+        val target = Paths.get(localPath)
+        // sshj would write into a directory given as the target; a caller always names the file.
+        if (Files.isDirectory(target)) throw IOException("$localPath is a directory")
+        val staging = target.resolveSibling(stagingName(target.fileName.toString()))
+        val remote = sftp.stat(remotePath)
+        var placed = false
+        try {
+            // Owner-only while the bytes arrive; the final mode is set once they are all there.
+            createOwnerOnly(staging)
+            withTransferListener(onProgress, preserveAttributes = false) { sftp.get(remotePath, staging.toString()) }
+            narrowToRemoteMode(staging, remote.mode.permissionsMask)
+            Files.setLastModifiedTime(staging, FileTime.from(remote.mtime, TimeUnit.SECONDS))
+            moveReplacing(staging, target)
+            placed = true
+        } finally {
+            if (!placed) runCatching { Files.deleteIfExists(staging) }
+        }
     }
 
     override suspend fun upload(
@@ -108,7 +134,10 @@ internal class SshjSftpClient(
         remotePath: String,
         onProgress: SftpProgress,
     ): Unit = io("Failed to upload file to $remotePath") {
-        withTransferListener(onProgress) { sftp.put(localPath, remotePath) }
+        // Written in place, as OpenSSH's sftp does: a symlink is written through, and the file keeps
+        // its owner, group and mode. A failed transfer leaves the target truncated. No attributes
+        // are sent after the write: sshj's would be 0644 for every file, whatever its local mode.
+        withTransferListener(onProgress, preserveAttributes = false) { sftp.put(localPath, remotePath) }
     }
 
     override suspend fun mkdir(path: String): Unit = io("Failed to create directory $path") {
@@ -157,10 +186,16 @@ internal class SshjSftpClient(
      * Set a progress listener on sshj's shared transfer channel for the duration of [block] and
      * clear it after — so the previous transfer's listener doesn't linger on the shared
      * `fileTransfer` (operations are serialized higher up the stack, but the channel's global
-     * state is best not left dirty).
+     * state is best not left dirty). [preserveAttributes] is set for every transfer rather than
+     * restored, since each direction states its own.
      */
-    private inline fun <T> withTransferListener(onProgress: SftpProgress, block: () -> T): T {
+    private inline fun <T> withTransferListener(
+        onProgress: SftpProgress,
+        preserveAttributes: Boolean,
+        block: () -> T,
+    ): T {
         sftp.fileTransfer.transferListener = progressListener(onProgress)
+        sftp.fileTransfer.preserveAttributes = preserveAttributes
         try {
             return block()
         } finally {
@@ -184,6 +219,59 @@ internal class SshjSftpClient(
     private companion object {
         /** Default channel-level read cap for [read]; the shared contract's [SFTP_MAX_READ_BYTES]. */
         const val DEFAULT_MAX_READ_BYTES = SFTP_MAX_READ_BYTES
+    }
+}
+
+/**
+ * Name a download is written under beside its target, then renamed over it once complete: a transfer
+ * that fails half-way must neither leave a truncated file under the name the user chose nor cost them
+ * the file it was replacing. Hidden, and short enough to stay a legal name whatever [name] is.
+ */
+private fun stagingName(name: String): String =
+    ".${name.take(STAGING_NAME_KEEP)}.${Random.nextLong().toULong().toString(16)}.skerry-part"
+
+private const val STAGING_NAME_KEEP = 200
+
+/** Creates [path] readable and writable by its owner only, where the filesystem has POSIX modes. */
+private fun createOwnerOnly(path: Path) {
+    if (!path.isPosix()) return
+    Files.createFile(path, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+}
+
+/**
+ * The remote mode, narrowed: never wider than the server's (a 0600 key stays 0600), never writable by
+ * group or others (0666 would make a local file world-writable), and always readable and writable by
+ * the owner (0400 would lock the user out of what they just downloaded).
+ */
+private fun narrowToRemoteMode(path: Path, remoteMode: Int) {
+    if (!path.isPosix()) return
+    Files.setPosixFilePermissions(path, FilePermission.fromMask((remoteMode and NARROW_MASK) or OWNER_RW).toPosix())
+}
+
+private fun Path.isPosix() = "posix" in fileSystem.supportedFileAttributeViews()
+
+private fun Set<FilePermission>.toPosix(): Set<PosixFilePermission> = mapNotNullTo(mutableSetOf()) {
+    when (it) {
+        FilePermission.USR_R -> PosixFilePermission.OWNER_READ
+        FilePermission.USR_W -> PosixFilePermission.OWNER_WRITE
+        FilePermission.USR_X -> PosixFilePermission.OWNER_EXECUTE
+        FilePermission.GRP_R -> PosixFilePermission.GROUP_READ
+        FilePermission.GRP_X -> PosixFilePermission.GROUP_EXECUTE
+        FilePermission.OTH_R -> PosixFilePermission.OTHERS_READ
+        FilePermission.OTH_X -> PosixFilePermission.OTHERS_EXECUTE
+        else -> null
+    }
+}
+
+private const val NARROW_MASK = 0b111_101_101 // 0755
+private const val OWNER_RW = 0b110_000_000 // 0600
+
+/** Moves [source] over [target], atomically where the filesystem can. */
+private fun moveReplacing(source: Path, target: Path) {
+    try {
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    } catch (_: AtomicMoveNotSupportedException) {
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
     }
 }
 

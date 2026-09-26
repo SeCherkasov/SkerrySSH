@@ -9,7 +9,11 @@ import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -30,6 +34,7 @@ internal class SshjConnection(
     override val serverVersion: String?,
     private val upstream: List<SSHClient> = emptyList(),
     private val shellCommand: List<String>? = null,
+    private val disconnectTimeoutMillis: Long = DISCONNECT_TIMEOUT_MILLIS,
 ) : SshConnection {
 
     override val isConnected: Boolean
@@ -50,9 +55,14 @@ internal class SshjConnection(
                 client.startSession().use { session ->
                     val cmd = session.exec(command)
                     // Output is capped: an untrusted/hung server must not be able to exhaust client
-                    // memory with a verbose stream.
-                    val stdout = runInterruptible { cmd.inputStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
-                    val stderr = runInterruptible { cmd.errorStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
+                    // memory with a verbose stream. Both streams share the channel window and are
+                    // drained together, each to EOF: one left unread fills the window, and the
+                    // command then blocks writing to it and never closes the other.
+                    val (stdout, stderr) = coroutineScope {
+                        val out = async { runInterruptible { cmd.inputStream.readCapped(MAX_EXEC_OUTPUT_BYTES) } }
+                        val err = async { runInterruptible { cmd.errorStream.readCapped(MAX_EXEC_OUTPUT_BYTES) } }
+                        out.await().decodeToString() to err.await().decodeToString()
+                    }
                     runInterruptible { cmd.join(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
                     ExecResult(exitCode = cmd.exitStatus, stdout = stdout, stderr = stderr)
                 }
@@ -137,33 +147,45 @@ internal class SshjConnection(
         }
 
     override suspend fun disconnect() {
-        // Timeout + runInterruptible: disconnect is normally fast, but writing SSH_MSG_DISCONNECT to an
-        // already-dead socket (full TCP buffer) could hang indefinitely, and this is called from the UI
-        // thread on tab close. On timeout, just force-close the client.
-        withContext(Dispatchers.IO) {
-            withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { client.disconnect() } }
-                ?: runCatching { client.close() }
+        // NonCancellable: a caller cancelled mid-teardown must not leave the jump hops connected;
+        // every step is bounded, so this cannot outlive the caller by more than those bounds.
+        withContext(Dispatchers.IO + NonCancellable) {
+            shutDown(client)
             // ProxyJump hops die with the session: closing the target client only closes its
             // direct-tcpip channel — each hop's own transport must be shut down too. Reverse
-            // (innermost-first) order, same hang guard per hop.
-            upstream.asReversed().forEach { hopClient ->
-                withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { hopClient.disconnect() } }
-                    ?: runCatching { hopClient.close() }
-            }
-            Unit
+            // (innermost-first) order, same hang guard per hop. A tunnelled target has no socket of
+            // its own, so a stuck write on it is ended here, when the hop carrying it goes down.
+            upstream.asReversed().forEach { shutDown(it) }
         }
     }
 
-    /** Read at most [limit] bytes from the stream (remainder discarded; session.use closes it). */
-    private fun InputStream.readAtMost(limit: Int): ByteArray {
+    /**
+     * Graceful disconnect of [target], bounded by [disconnectTimeoutMillis]. Writing
+     * SSH_MSG_DISCONNECT to a dead peer (full TCP buffer) blocks in a socket write that answers
+     * neither an interrupt nor a coroutine timeout, and this runs on tab close. So the write gets a
+     * thread of its own, and when the bound passes the socket is closed under it — which is what
+     * ends that write. `close()` would not do: sshj's `close()` is `disconnect()` again.
+     */
+    private suspend fun shutDown(target: SSHClient) {
+        val graceful = thread(isDaemon = true, name = "skerry-ssh-disconnect") {
+            runCatching { target.disconnect() }
+        }
+        runInterruptible { graceful.join(disconnectTimeoutMillis) }
+        if (graceful.isAlive) runCatching { target.socket?.close() }
+    }
+
+    /**
+     * Reads the stream to EOF, keeping the first [limit] bytes. Everything past the limit is read and
+     * discarded rather than left unread: unread bytes hold the channel window shut (see [exec]).
+     */
+    private fun InputStream.readCapped(limit: Int): ByteArray {
         val out = ByteArrayOutputStream()
         val chunk = ByteArray(8192)
-        var total = 0
-        while (total < limit) {
-            val n = read(chunk, 0, minOf(chunk.size, limit - total))
+        while (true) {
+            val n = read(chunk)
             if (n < 0) break
-            out.write(chunk, 0, n)
-            total += n
+            val keep = minOf(n, limit - out.size())
+            if (keep > 0) out.write(chunk, 0, keep)
         }
         return out.toByteArray()
     }

@@ -5,7 +5,9 @@ package app.skerry.shared.ssh
  * label the user typed to connect); [hostName] is the resolved dial target (`HostName`, or the alias
  * itself when absent, matching OpenSSH). [user]/[proxyJump]/[identityFile] are `null` when the file
  * doesn't specify them. [proxyJump] holds only the first-hop host token (user/port stripped) — the
- * importer resolves it against the other imported aliases.
+ * importer resolves it against the other imported aliases. [hostName] has its `%` tokens expanded;
+ * [identityFile]/[certificateFile] are as written — [SshConfigImport] expands theirs, since some
+ * need the local user.
  */
 data class SshConfigHost(
     val alias: String,
@@ -158,7 +160,8 @@ object SshConfigParser {
             hosts.add(
                 SshConfigHost(
                     alias = alias,
-                    hostName = resolve("hostname") ?: alias,
+                    // OpenSSH expands only %h (the alias) and %% in HostName.
+                    hostName = resolve("hostname")?.let { expandSshTokens(it, mapOf('h' to alias)) } ?: alias,
                     port = resolve("port")?.toIntOrNull()?.takeIf { it in 1..65535 } ?: 22,
                     user = resolve("user"),
                     proxyJump = resolve("proxyjump")?.let { firstJumpHop(it) },
@@ -226,4 +229,27 @@ object SshConfigParser {
         return host.ifBlank { null }
     }
 
+}
+
+/**
+ * Expands OpenSSH `%x` tokens in an `ssh_config` value: `%%` is a literal `%`, a letter in [tokens]
+ * becomes its value, and any other token is left exactly as written — one that cannot be known at
+ * import (the local host name, a connection hash) stays visible instead of turning into a guess.
+ */
+internal fun expandSshTokens(value: String, tokens: Map<Char, String>): String {
+    if ('%' !in value) return value
+    val out = StringBuilder(value.length)
+    var i = 0
+    while (i < value.length) {
+        val c = value[i]
+        val next = value.getOrNull(i + 1)
+        if (c != '%' || next == null) {
+            out.append(c)
+            i++
+        } else {
+            out.append(if (next == '%') "%" else tokens[next] ?: "%$next")
+            i += 2
+        }
+    }
+    return out.toString()
 }

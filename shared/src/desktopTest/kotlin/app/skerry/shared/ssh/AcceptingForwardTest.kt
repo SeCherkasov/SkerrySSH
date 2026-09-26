@@ -5,6 +5,8 @@ import java.io.Closeable
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -26,15 +28,52 @@ class AcceptingForwardTest {
         override fun accept(): Socket = throw IOException("Too many open files")
     }
 
+    /**
+     * A listener whose accept() hands back a connection only once the listener has been closed —
+     * the connection the kernel completed just before close(), reaching the loop just after it.
+     */
+    private class LateServerSocket : ServerSocket(0) {
+        private val closed = CountDownLatch(1)
+        private val peer = ServerSocket(0)
+        val client = Socket("127.0.0.1", peer.localPort)
+        val accepted: Socket = peer.accept().also { peer.close() }
+
+        override fun accept(): Socket {
+            closed.await()
+            return accepted
+        }
+
+        override fun close() {
+            super.close()
+            closed.countDown()
+        }
+    }
+
     private class TestForward(
         socket: ServerSocket,
         registered: Closeable? = null,
     ) : AcceptingForward(socket, "test-forward") {
+        val handled = CountDownLatch(1)
+
         init {
             registered?.let { state.live.add(it) }
             startAccepting()
         }
-        override fun handle(socket: Socket) = Unit
+        override fun handle(socket: Socket) = handled.countDown()
+    }
+
+    @Test
+    fun `a connection accepted as the forward closes is closed, not tunnelled`() = runTest {
+        val listener = LateServerSocket()
+        val forward = TestForward(listener)
+
+        forward.close()
+
+        // Nothing is left to close it later: close() has already torn down every live tunnel, so a
+        // tunnel raised now would outlive the forward that owns it.
+        assertFalse(forward.handled.await(500, TimeUnit.MILLISECONDS), "a tunnel was raised after close()")
+        assertTrue(listener.accepted.isClosed, "the late connection was left open")
+        listener.client.close()
     }
 
     /**
