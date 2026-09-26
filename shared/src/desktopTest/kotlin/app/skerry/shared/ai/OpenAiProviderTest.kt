@@ -97,6 +97,35 @@ class OpenAiProviderTest {
     }
 
     @Test
+    fun `an error frame inside a successful stream fails the request`() = runTest {
+        // OpenRouter, vLLM and Ollama report a failure after the 200 status line as a data frame
+        // carrying `error`; read as an empty delta it ended the answer as if it were complete.
+        val body = "data: {\"choices\":[{\"delta\":{\"content\":\"par\"}}]}\n\n" +
+            "data: {\"error\":{\"message\":\"upstream\"},\"choices\":[{\"delta\":{\"content\":\"\"},\"finish_reason\":\"error\"}]}\n\n"
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-x"), client(HttpStatusCode.OK, body))
+
+        assertFailsWith<AiException> { provider.chat(request).toList() }
+    }
+
+    @Test
+    fun `a stream cut off before its end fails the request`() = runTest {
+        val body = "data: {\"choices\":[{\"delta\":{\"content\":\"par\"}}]}\n\n"
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-x"), client(HttpStatusCode.OK, body))
+
+        val ex = assertFailsWith<AiException> { provider.chat(request).toList() }
+        assertEquals(AiException.Kind.NETWORK, ex.kind)
+    }
+
+    @Test
+    fun `a stream that ends on a finish reason without the done sentinel is complete`() = runTest {
+        val body = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-x"), client(HttpStatusCode.OK, body))
+
+        assertEquals("ok", provider.chat(request).toList().joinToString("") { it.text })
+    }
+
+    @Test
     fun `maps 401 to UNAUTHORIZED`() = runTest {
         val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-bad"), client(HttpStatusCode.Unauthorized, """{"error":{"message":"nope"}}"""))
 

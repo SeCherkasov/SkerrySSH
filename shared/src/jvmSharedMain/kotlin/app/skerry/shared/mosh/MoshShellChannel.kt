@@ -250,23 +250,29 @@ internal class MoshShellChannel(
     }
 
     /**
-     * Decrypt/parse one datagram. Returns null if it isn't an authentic in-sequence packet
-     * from the server, otherwise the terminal bytes it produced (often empty: acks,
-     * heartbeats, not-yet-applicable diffs).
+     * Decrypt/parse one datagram. Returns null if it isn't an authentic packet from the server,
+     * otherwise the terminal bytes it produced (often empty: acks, heartbeats, not-yet-applicable
+     * diffs).
+     *
+     * A packet older than the newest one seen still carries its payload, as in mosh's
+     * `Connection::recv_one`: it may be the first fragment of an instruction whose second one
+     * overtook it, and SSP makes a replayed instruction a no-op. Only the timing state is kept
+     * to in-sequence packets.
      */
     private suspend fun processDatagram(datagram: ByteArray): ByteArray? {
         val packet = codec.open(datagram) ?: return null
         if (packet.toServer) return null // reflected/self traffic
-        if (packet.seq < rxNextSeq) return null // replay or reordered duplicate
-        rxNextSeq = packet.seq + 1u
         down += datagram.size
-        val now = clockMs()
-        stateLock.withLock {
-            if (packet.timestampReply != MOSH_TS_NONE) {
-                rtt.onSample(rttSample(timestamp16(now), packet.timestampReply))
+        if (packet.seq >= rxNextSeq) {
+            rxNextSeq = packet.seq + 1u
+            val now = clockMs()
+            stateLock.withLock {
+                if (packet.timestampReply != MOSH_TS_NONE) {
+                    rtt.onSample(rttSample(timestamp16(now), packet.timestampReply))
+                }
+                lastServerTs = packet.timestamp
+                lastServerTsAt = now
             }
-            lastServerTs = packet.timestamp
-            lastServerTsAt = now
         }
         val fragment = MoshFragment.parse(packet.payload) ?: return ByteArray(0)
         val whole = assembler.add(fragment) ?: return ByteArray(0)

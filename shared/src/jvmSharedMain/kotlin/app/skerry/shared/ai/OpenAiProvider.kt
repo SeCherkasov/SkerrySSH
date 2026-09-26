@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /**
  * JVM [AiProvider] for an OpenAI-compatible chat-completions API (desktop + Android), on Ktor.
@@ -71,11 +72,16 @@ class OpenAiProvider private constructor(
             statement.execute { response ->
                 if (!response.status.isSuccess()) throw errorFor(response.status)
                 val channel = response.bodyAsChannel()
+                var complete = false
                 while (true) {
                     val line = channel.readLine() ?: break
-                    val delta = contentDelta(line) ?: continue
-                    if (delta.isNotEmpty()) emit(AiDelta(delta))
+                    val frame = streamFrame(line) ?: continue
+                    if (frame.delta.isNotEmpty()) emit(AiDelta(frame.delta))
+                    if (frame.final) complete = true
                 }
+                // A connection dropped mid-answer also ends the body; without the end marker the
+                // user would take a cut-off answer for a whole one.
+                if (!complete) throw AiException(AiException.Kind.NETWORK, "AI stream ended before the answer did")
             }
         } catch (e: CancellationException) {
             throw e // coroutine cancellation is not a provider failure — never swallow or rewrap it
@@ -88,21 +94,30 @@ class OpenAiProvider private constructor(
         }
     }
 
+    /** One SSE frame of the answer: its text, and whether it marks the end of the stream. */
+    private class StreamFrame(val delta: String, val final: Boolean)
+
     /**
-     * Extracts the text delta from one SSE line. Returns `null` for control lines
-     * (`:` comments/keep-alive, blank, non-`data:`, `[DONE]`). Throws [AiException.Kind.PROTOCOL]
-     * on an invalid JSON frame.
+     * Reads one SSE line. Returns `null` for control lines (`:` comments/keep-alive, blank,
+     * non-`data:`). `[DONE]` and a frame carrying a `finish_reason` are the end of the answer.
+     * Throws [AiException.Kind.PROTOCOL] on an invalid JSON frame and on an error frame — providers
+     * report a failure that happens after the 200 status line inside the stream.
      */
-    private fun contentDelta(line: String): String? {
+    private fun streamFrame(line: String): StreamFrame? {
         if (!line.startsWith("data:")) return null
         val payload = line.substring("data:".length).trim()
-        if (payload.isEmpty() || payload == "[DONE]") return null
+        if (payload.isEmpty()) return null
+        if (payload == "[DONE]") return StreamFrame("", final = true)
         val chunk = try {
             json.decodeFromString(ChatChunkWire.serializer(), payload)
         } catch (e: Exception) {
             throw AiException(AiException.Kind.PROTOCOL, "Malformed AI stream chunk", e)
         }
-        return chunk.choices.firstOrNull()?.delta?.content
+        val choice = chunk.choices.firstOrNull()
+        if (chunk.error != null || choice?.finishReason == "error") {
+            throw AiException(AiException.Kind.PROTOCOL, "AI provider reported an error mid-stream")
+        }
+        return StreamFrame(choice?.delta?.content.orEmpty(), final = choice?.finishReason != null)
     }
 
     /**
@@ -238,10 +253,17 @@ private data class MsgWire(val role: String, val content: String)
 
 /** One SSE streaming frame: `choices[].delta.content` carries the next chunk of text. */
 @Serializable
-private data class ChatChunkWire(val choices: List<ChunkChoiceWire> = emptyList())
+private data class ChatChunkWire(
+    val choices: List<ChunkChoiceWire> = emptyList(),
+    // Only its presence matters: the provider's own text is not shown.
+    val error: JsonElement? = null,
+)
 
 @Serializable
-private data class ChunkChoiceWire(val delta: DeltaWire? = null)
+private data class ChunkChoiceWire(
+    val delta: DeltaWire? = null,
+    @SerialName("finish_reason") val finishReason: String? = null,
+)
 
 @Serializable
 private data class DeltaWire(val content: String? = null)
