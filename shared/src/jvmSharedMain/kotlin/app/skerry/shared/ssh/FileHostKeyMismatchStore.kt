@@ -11,7 +11,8 @@ import java.nio.file.Path
  * memory on creation; any mutation rewrites the whole file (few records — unresolved warnings, not a log).
  *
  * A file that exists but cannot be read is not an empty one: until a read succeeds, mutations stay in
- * memory instead of replacing the warnings the store never saw, and every call reads the file again.
+ * memory instead of replacing the warnings the store never saw, and every call reads the file again;
+ * the first read that succeeds writes the merge.
  * [record] runs inside host-key verification, so it does not throw for this — the connection is
  * already refused, and the warning is still shown for this run.
  *
@@ -79,6 +80,9 @@ class FileHostKeyMismatchStore(private val path: Path) : HostKeyMismatchStore {
         entries += merged
         clearedUnread.clear()
         loaded = true
+        // What changed while the file was unread is written now, not with the next change, which may
+        // never come. A refused write leaves it in memory, and the next mutation writes it again.
+        if (touched.isNotEmpty()) runCatching { persist() }
     }
 
     private fun read(): List<HostKeyMismatch> {
