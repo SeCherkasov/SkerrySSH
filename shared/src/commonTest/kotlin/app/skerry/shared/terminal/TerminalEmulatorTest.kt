@@ -150,6 +150,36 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `a run of text over wide characters erases the halves left at either end`() {
+        // 中 at 0-1, 文 at 2-3, 字 at 4-5: "xyz" ends on 文's left half, "q" starts on 字's right.
+        val emu = emulate(chunks = arrayOf("中文字\rxyz", "\r$esc[5Cq"))
+        val row = emu.lines[0]
+        assertEquals(listOf("x", "y", "z", " ", " ", "q"), row.take(6).map { it.text })
+        assertTrue(row.take(6).all { it.width == CellWidth.Single }, row.take(6).toString())
+    }
+
+    @Test
+    fun `a run of text wider than the row wraps and keeps printing`() {
+        val emu = emulate(cols = 5, rows = 3, chunks = arrayOf("abcdefghijkl"))
+        assertEquals(listOf("abcde", "fghij", "kl"), emu.lines.map { r -> r.joinToString("") { it.text }.trimEnd() })
+        assertTrue(emu.lines[0].wrapsToNextRow())
+        assertEquals(2, emu.cursorCol)
+    }
+
+    @Test
+    fun `a run of text without auto-wrap keeps overwriting the last column`() {
+        val emu = emulate(cols = 5, rows = 2, chunks = arrayOf("$esc[?7labcdefg"))
+        assertEquals("abcdg", emu.lines[0].joinToString("") { it.text })
+        assertEquals(4, emu.cursorCol)
+    }
+
+    @Test
+    fun `a run of text in line drawing prints the DEC graphics`() {
+        val emu = emulate(chunks = arrayOf("$esc(0lqqk$esc(Bq"))
+        assertEquals("┌──┐q", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
     fun `erasing from the right half of a wide character erases the whole character`() {
         val el = emulate(chunks = arrayOf("中\r$esc[C$esc[K"))
         assertEquals(CellWidth.Single, el.lines[0][0].width)
@@ -1737,5 +1767,43 @@ class TerminalEmulatorTest {
     fun `erase characters with a huge count clears to the end of the line`() {
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("abcdefghij", "$esc[4G$esc[2147483647X"))
         assertEquals("abc", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
+    fun `text typed in insert mode shifts the row right`() {
+        val emu = emulate(chunks = arrayOf("abc", "$esc[4h", "$esc[1;1HXY"))
+        assertEquals("XYabc", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
+    fun `a row scrolled in takes the current background and drops it after a reset`() {
+        val emu = emulate(cols = 4, rows = 2, chunks = arrayOf("$esc[41m\r\n\r\n"))
+        assertEquals(TermColor.Red, emu.lines.last()[0].style.bg)
+        emu.feed("$esc[m\r\n".encodeToByteArray())
+        assertEquals(TermColor.Default, emu.lines.last()[0].style.bg)
+    }
+
+    @Test
+    fun `a row scrolled in after a resize is as wide as the new screen`() {
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("a\r\nb\r\n"))
+        emu.resize(6, 2)
+        emu.feed("c\r\nd\r\n".encodeToByteArray())
+        assertEquals(6, emu.lines.last().size)
+        emu.resize(12, 2)
+        emu.feed("e\r\n".encodeToByteArray())
+        assertEquals(12, emu.lines.last().size)
+    }
+
+    @Test
+    fun `three- and four-byte UTF-8 split across feeds decode to one cell`() {
+        val emu = TerminalEmulator()
+        val cjk = "中".encodeToByteArray()
+        emu.feed(cjk.copyOfRange(0, 1))
+        emu.feed(cjk.copyOfRange(1, 3))
+        val emoji = "🚀".encodeToByteArray()
+        emu.feed(emoji.copyOfRange(0, 2))
+        emu.feed(emoji.copyOfRange(2, 4))
+        assertEquals("中", emu.lines[0][0].text)
+        assertEquals("🚀", emu.lines[0][2].text)
     }
 }

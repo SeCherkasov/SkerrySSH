@@ -68,4 +68,46 @@ class TerminalRowSnapshotTest {
         val text = emu.lines.map { row -> row.joinToString("") { it.text }.trimEnd() }
         assertEquals(listOf("abcdefgh", "xy", "z"), text)
     }
+
+    @Test
+    fun `erasing a tail that is already blank keeps the row's snapshot`() {
+        // A TUI redraws every frame ending each row with EL; a row whose tail is blank since the
+        // previous frame must not be recopied.
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("abc$esc[K")
+        val before = emu.lines[0]
+        emu.feed("$esc[1;4H$esc[K")
+        assertSame(before, emu.lines[0])
+    }
+
+    @Test
+    fun `erasing a tail that holds text makes a new snapshot`() {
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("abcdef")
+        val before = emu.lines[0]
+        emu.feed("$esc[1;4H$esc[K")
+        val after = emu.lines[0]
+        assertNotSame(before, after)
+        assertEquals("abc", after.joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
+    fun `printing the same text over itself keeps the row's snapshot`() {
+        // A TUI repaints unchanged regions every frame; the row must not be recopied for it.
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("abc")
+        val before = emu.lines[0]
+        emu.feed("\rabc")
+        assertSame(before, emu.lines[0])
+    }
+
+    @Test
+    fun `printing text that differs in one cell makes a new snapshot`() {
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("abc")
+        val before = emu.lines[0]
+        emu.feed("\rabX")
+        assertNotSame(before, emu.lines[0])
+        assertEquals("abX", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
 }

@@ -127,15 +127,22 @@ class TermRow private constructor(
     override fun get(index: Int): TermCell = cells[index]
 
     operator fun set(index: Int, element: TermCell) {
+        // A repaint of unchanged text writes the same shared cell back: it keeps the snapshot.
+        if (cells[index] === element) return
         frozen = null
         cells[index] = element
     }
 
     /** Sets columns [from] until [to] to [cell] — erases write whole spans, not cell by cell. */
     fun fill(cell: TermCell, from: Int, to: Int) {
-        if (from >= to) return
-        frozen = null
-        cells.fill(cell, from, to)
+        // A redraw erases tails that are already blank: those keep the published snapshot.
+        for (k in from until to) {
+            if (cells[k] !== cell) {
+                frozen = null
+                cells.fill(cell, k, to)
+                return
+            }
+        }
     }
 
     /** Inserts [count] copies of [cell] at [index]; the cells pushed past the end fall off. */
@@ -174,6 +181,11 @@ class TermRow private constructor(
      * than copied, since no later write can reach them.
      */
     internal fun retire(): TermSnapshotRow = frozen ?: TermSnapshotRow(cells.asList(), wrapped)
+
+    internal companion object {
+        /** A fresh row holding [template]'s cells: one bulk copy rather than a store per cell. */
+        fun copyOf(template: Array<TermCell>): TermRow = TermRow(template.copyOf(), false)
+    }
 }
 
 /**
@@ -438,6 +450,8 @@ class TerminalEmulator(
 
     // Active OSC 8 hyperlink (URI) — attached to printed cells until closed by an empty URI.
     private var currentHyperlink: String? = null
+    // The last URI opened, kept so a re-opened link reuses its instance (see setHyperlink).
+    private var lastHyperlink: String? = null
 
     // The step the runner is waiting on, and the echo of the probes that frame it. Both are set by
     // the client itself (never by the host): a mark for any other token is ignored, so a step is
@@ -541,21 +555,32 @@ class TerminalEmulator(
         val lineDrawing = if (glG1) g1LineDrawing else g0LineDrawing
         markDirty()
         var i = from
-        while (i < data.size) {
-            val b = data[i].toInt()
-            if (!isPrintableAscii(b)) break
-            val cp = if (lineDrawing && b >= 0x60) DEC_SPECIAL_GRAPHICS[b - 0x60].code else b
-            i++
+        while (i < data.size && isPrintableAscii(data[i].toInt())) {
             // A wrap or insert takes the general path; a plain overwrite is what text mostly is.
-            if (pendingWrap || insertMode) { putCodePoint(cp); continue }
+            if (pendingWrap || insertMode) {
+                putCodePoint(glyph(data[i].toInt(), lineDrawing))
+                i++
+                continue
+            }
+            // The part that fits before the right margin overwrites cells in place: a wide remnant
+            // can only sit at its two ends, and nothing inside it can change the rendition.
+            val limit = minOf(data.size, i + cols - cx)
+            var end = i + 1
+            while (end < limit && isPrintableAscii(data[end].toInt())) end++
+            val last = cx + end - i - 1
             val row = grid[cy]
-            eraseWideRemnants(row, cx, cx)
-            row[cx] = singleCell(cp)
-            lastPrintedCp = cp
-            if (cx >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx++
+            eraseWideRemnants(row, cx, last)
+            for (k in i until end) row[cx + k - i] = singleCell(glyph(data[k].toInt(), lineDrawing))
+            lastPrintedCp = glyph(data[end - 1].toInt(), lineDrawing)
+            if (last >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx = last + 1
+            i = end
         }
         return i
     }
+
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun glyph(b: Int, lineDrawing: Boolean): Int =
+        if (lineDrawing && b >= 0x60) DEC_SPECIAL_GRAPHICS[b - 0x60].code else b
 
     /**
      * Runs [b] past the echo filter before the parser sees it: the probes framing a runbook step are
@@ -680,14 +705,12 @@ class TerminalEmulator(
     }
 
     private fun beginUtf8(b: Int) {
-        val (len, init) = when {
-            b and 0xE0 == 0xC0 -> 2 to (b and 0x1F)
-            b and 0xF0 == 0xE0 -> 3 to (b and 0x0F)
-            b and 0xF8 == 0xF0 -> 4 to (b and 0x07)
+        utf8Remaining = when {
+            b and 0xE0 == 0xC0 -> { utf8CodePoint = b and 0x1F; 1 }
+            b and 0xF0 == 0xE0 -> { utf8CodePoint = b and 0x0F; 2 }
+            b and 0xF8 == 0xF0 -> { utf8CodePoint = b and 0x07; 3 }
             else -> { putCodePoint(0xFFFD); return }
         }
-        utf8Remaining = len - 1
-        utf8CodePoint = init
         parser = State.Utf8
     }
 
@@ -981,8 +1004,15 @@ class TerminalEmulator(
      */
     private fun setHyperlink(rest: String) {
         // Length cap: the URI is duplicated onto every printed cell, so a megabyte URI would bloat the grid.
-        val uri = rest.substringAfter(';', "").trim().take(MAX_HYPERLINK_LEN)
-        currentHyperlink = uri.ifEmpty { null }
+        val uri = rest.substringAfter(';', "").trim().take(MAX_HYPERLINK_LEN).ifEmpty { null }
+        // The same link re-opened (tools close and re-open OSC 8 per span) reuses its instance:
+        // printed cells are shared by link identity.
+        if (uri != null && uri == lastHyperlink) {
+            currentHyperlink = lastHyperlink
+        } else {
+            currentHyperlink = uri
+            if (uri != null) lastHyperlink = uri
+        }
     }
 
     // --- String sequences (DCS / APC / PM / SOS) ----------------------------
@@ -1259,7 +1289,7 @@ class TerminalEmulator(
         eraseWideRemnants(row, cx, (cx + w - 1).coerceAtMost(cols - 1))
         if (w == 2 && cx < cols - 1) {
             row[cx] = TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Wide, currentHyperlink)
-            row[cx + 1] = TermCell("", style, CellWidth.Continuation, currentHyperlink)
+            row[cx + 1] = continuationCell()
         } else {
             row[cx] = singleCell(cp)
         }
@@ -1270,11 +1300,20 @@ class TerminalEmulator(
 
     // Cells printed in the current rendition, by glyph: ASCII and box drawing are what streamed text
     // and TUI borders repeat, and a TermCell per printed byte was most of what output allocated.
-    // Cells are immutable, so one instance per glyph is safe; the set is dropped when the rendition
-    // or the open hyperlink moves on.
-    // A slot is valid while its cell carries the current rendition by identity — SGR keeps the
-    // instance when a sequence changes nothing, so a repeated `ESC[0m` does not empty the set.
+    // Cells are immutable, so one instance per glyph is safe.
+    // A slot is valid while its cell carries the current rendition and link by identity — SGR and
+    // OSC 8 keep the instance when a sequence changes nothing, so a repeated `ESC[0m` or a link
+    // opened again does not miss.
     private val sharedCells = arrayOfNulls<TermCell>(SHARED_CELL_SLOTS)
+
+    // The right half of a wide character carries no text, only the rendition and the link.
+    private var sharedContinuation = TermCell("", TermStyle(), CellWidth.Continuation)
+
+    private fun continuationCell(): TermCell {
+        val cached = sharedContinuation
+        if (cached.style === style && cached.hyperlink === currentHyperlink) return cached
+        return TermCell("", style, CellWidth.Continuation, currentHyperlink).also { sharedContinuation = it }
+    }
 
     private fun singleCell(cp: Int): TermCell {
         val slot = when (cp) {
@@ -1283,7 +1322,7 @@ class TerminalEmulator(
             else -> return TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
         }
         val cached = sharedCells[slot]
-        if (cached != null && cached.style === style && cached.hyperlink == currentHyperlink) return cached
+        if (cached != null && cached.style === style && cached.hyperlink === currentHyperlink) return cached
         return TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
             .also { sharedCells[slot] = it }
     }
@@ -1762,7 +1801,14 @@ class TerminalEmulator(
             .also { cachedBlank = it }
     }
 
-    private fun blankRow() = TermRow(cols, blankCell())
+    // Every scroll brings in a blank row; copying one template is cheaper than filling cell by cell.
+    private var blankTemplate: Array<TermCell> = emptyArray()
+
+    private fun blankRow(): TermRow {
+        val cell = blankCell()
+        if (blankTemplate.size != cols || blankTemplate.firstOrNull() !== cell) blankTemplate = Array(cols) { cell }
+        return TermRow.copyOf(blankTemplate)
+    }
 
     private fun blankLine(r: Int) {
         markDirty()

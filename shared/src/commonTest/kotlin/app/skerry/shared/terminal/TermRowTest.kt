@@ -66,7 +66,7 @@ class TermRowTest {
         assertSame(first, r.snapshot())
         val writes = listOf<TermRow.() -> Unit>(
             { this[0] = dot },
-            { fill(dot, 0, 1) },
+            { fill(TermCell(','), 0, 1) },
             { insert(0, 1, dot) },
             { delete(0, 1, dot) },
             { resize(4, dot) },
@@ -87,5 +87,14 @@ class TermRowTest {
         val snap = r.snapshot()
         r[0] = dot
         assertEquals("abc", snap.joinToString("") { it.text })
+    }
+
+    @Test
+    fun `a fill past cells already set writes the rest`() {
+        val r = TermRow(listOf(dot, dot, TermCell('x'), TermCell('y')))
+        val first = r.snapshot()
+        r.fill(dot, 0, 4)
+        assertEquals("....", r.joinToString("") { it.text })
+        assertNotSame(first, r.snapshot())
     }
 }

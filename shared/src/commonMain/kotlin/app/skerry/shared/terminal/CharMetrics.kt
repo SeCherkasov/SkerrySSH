@@ -11,7 +11,11 @@ internal object CharMetrics {
      * fullwidth forms, emoji with default emoji presentation), else 1 — ambiguous-width characters
      * count as narrow, as in every non-CJK locale. Zero-width characters are [isCombining]'s business.
      */
-    fun charWidth(cp: Int): Int = if (cp >= FIRST_WIDE && inRanges(UnicodeWidthTables.WIDE, cp)) 2 else 1
+    fun charWidth(cp: Int): Int = when {
+        cp < FIRST_WIDE -> 1
+        cp <= BMP_LAST -> if (bmpClass(cp) and WIDE != 0) 2 else 1
+        else -> if (inRanges(UnicodeWidthTables.WIDE, cp)) 2 else 1
+    }
 
     /**
      * Whether [cp] draws nothing of its own and joins the cell before it: nonspacing and enclosing
@@ -19,7 +23,31 @@ internal object CharMetrics {
      * bidi marks, tags) — the soft hyphen and the prepended concatenation marks excepted, since they
      * draw. Hangul Jamo vowels and finals are letters here, as in ncurses: [charWidth] handles them.
      */
-    fun isCombining(cp: Int): Boolean = cp >= FIRST_ZERO_WIDTH && inRanges(UnicodeWidthTables.ZERO_WIDTH, cp)
+    fun isCombining(cp: Int): Boolean = when {
+        cp < FIRST_ZERO_WIDTH -> false
+        cp <= BMP_LAST -> bmpClass(cp) and ZERO_WIDTH != 0
+        else -> inRanges(UnicodeWidthTables.ZERO_WIDTH, cp)
+    }
+
+    // Both tables answered once per BMP code point: box drawing and CJK streams asked the binary
+    // searches for every character they printed. Filled on first sight; a racing fill writes the
+    // same byte, so no lock is needed.
+    private val bmpClasses = ByteArray(BMP_LAST + 1)
+
+    private fun bmpClass(cp: Int): Int {
+        val known = bmpClasses[cp].toInt()
+        if (known != 0) return known
+        var c = LOOKED_UP
+        if (inRanges(UnicodeWidthTables.WIDE, cp)) c = c or WIDE
+        if (inRanges(UnicodeWidthTables.ZERO_WIDTH, cp)) c = c or ZERO_WIDTH
+        bmpClasses[cp] = c.toByte()
+        return c
+    }
+
+    private const val BMP_LAST = 0xFFFF
+    private const val LOOKED_UP = 1
+    private const val WIDE = 2
+    private const val ZERO_WIDTH = 4
 
     /** Binary search over sorted inclusive `[start, end]` pairs. */
     private fun inRanges(ranges: IntArray, cp: Int): Boolean {
