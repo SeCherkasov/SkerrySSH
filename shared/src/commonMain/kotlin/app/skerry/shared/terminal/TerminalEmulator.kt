@@ -105,10 +105,15 @@ data class TermCell(
  * identity. Not a [MutableList] on purpose — a leaked mutable iterator or sub-list would write
  * around that invalidation.
  */
-class TermRow(
-    private val cells: MutableList<TermCell>,
-    wrapped: Boolean = false,
+class TermRow private constructor(
+    private var cells: Array<TermCell>,
+    wrapped: Boolean,
 ) : AbstractList<TermCell>() {
+    constructor(cells: List<TermCell>, wrapped: Boolean = false) : this(cells.toTypedArray(), wrapped)
+
+    /** A row of [size] copies of [fill]. */
+    internal constructor(size: Int, fill: TermCell) : this(Array(size) { fill }, false)
+
     private var frozen: TermSnapshotRow? = null
 
     var wrapped: Boolean = wrapped
@@ -126,31 +131,49 @@ class TermRow(
         cells[index] = element
     }
 
-    fun add(element: TermCell) {
+    /** Sets columns [from] until [to] to [cell] — erases write whole spans, not cell by cell. */
+    fun fill(cell: TermCell, from: Int, to: Int) {
+        if (from >= to) return
         frozen = null
-        cells.add(element)
+        cells.fill(cell, from, to)
     }
 
-    fun add(index: Int, element: TermCell) {
+    /** Inserts [count] copies of [cell] at [index]; the cells pushed past the end fall off. */
+    fun insert(index: Int, count: Int, cell: TermCell) {
+        val n = count.coerceAtMost(size - index)
+        if (n <= 0) return
         frozen = null
-        cells.add(index, element)
+        cells.copyInto(cells, destinationOffset = index + n, startIndex = index, endIndex = size - n)
+        cells.fill(cell, index, index + n)
     }
 
-    fun removeAt(index: Int): TermCell {
+    /** Deletes [count] cells at [index]; the tail moves left and [fill] enters at the end. */
+    fun delete(index: Int, count: Int, fill: TermCell) {
+        val n = count.coerceAtMost(size - index)
+        if (n <= 0) return
         frozen = null
-        return cells.removeAt(index)
+        cells.copyInto(cells, destinationOffset = index, startIndex = index + n, endIndex = size)
+        cells.fill(fill, size - n, size)
+    }
+
+    /** Cuts or pads the row to [newSize] columns, padding with [pad]. */
+    fun resize(newSize: Int, pad: TermCell) {
+        if (newSize == size) return
+        frozen = null
+        val old = cells
+        cells = Array(newSize) { if (it < old.size) old[it] else pad }
     }
 
     /** This row as a render snapshot: copied once per change, shared until the next write. */
     internal fun snapshot(): TermSnapshotRow =
-        frozen ?: TermSnapshotRow(cells.toList(), wrapped).also { frozen = it }
+        frozen ?: TermSnapshotRow(cells.copyOf().asList(), wrapped).also { frozen = it }
 
     /**
      * This row leaving the grid for good — into history, where nothing writes to it again. The
      * snapshot a frame already published keeps its identity; otherwise the cells are wrapped rather
      * than copied, since no later write can reach them.
      */
-    internal fun retire(): TermSnapshotRow = frozen ?: TermSnapshotRow(cells, wrapped)
+    internal fun retire(): TermSnapshotRow = frozen ?: TermSnapshotRow(cells.asList(), wrapped)
 }
 
 /**
@@ -266,7 +289,7 @@ class TerminalEmulator(
     // Last printed codepoint — for REP (CSI Ps b): nano 9.0/ncurses fill bars (reverse title bar)
     // with it instead of literal spaces. null before the first print. Stored as Int (codepoint),
     // not Char, to correctly repeat astral characters too.
-    private var lastPrintedCp: Int? = null
+    private var lastPrintedCp = NO_CODE_POINT
 
     /** Absolute row index of the cursor in [lines] (accounting for scrollback on the main buffer). */
     val cursorRow: Int get() = (if (altScreen) 0 else scrollback.size) + cy
@@ -465,10 +488,45 @@ class TerminalEmulator(
     private var pendingDesignation = -1
 
     fun feed(data: ByteArray) {
-        for (b in data) {
-            val byte = b.toInt() and 0xff
+        var i = 0
+        while (i < data.size) {
+            val byte = data[i].toInt() and 0xff
+            if (parser == State.Ground && !echo.active && isPrintableAscii(byte)) {
+                i = printRun(data, i)
+                continue
+            }
             if (echo.active && parser == State.Ground) filterEcho(byte) else process(byte)
+            i++
         }
+    }
+
+    /** A byte that prints as itself (or as DEC line drawing) with no parser state involved. */
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun isPrintableAscii(b: Int): Boolean = b in 0x20..0x7e
+
+    /**
+     * Prints the run of printable ASCII starting at [from] and answers where it ended. Plain text is
+     * most of any stream, and walking it byte by byte through the state machine's dispatch cost more
+     * than printing it. The graphic set cannot change inside the run: SO/SI/ESC end it.
+     */
+    private fun printRun(data: ByteArray, from: Int): Int {
+        val lineDrawing = if (glG1) g1LineDrawing else g0LineDrawing
+        markDirty()
+        var i = from
+        while (i < data.size) {
+            val b = data[i].toInt()
+            if (!isPrintableAscii(b)) break
+            val cp = if (lineDrawing && b >= 0x60) DEC_SPECIAL_GRAPHICS[b - 0x60].code else b
+            i++
+            // A wrap or insert takes the general path; a plain overwrite is what text mostly is.
+            if (pendingWrap || insertMode) { putCodePoint(cp); continue }
+            val row = grid[cy]
+            eraseWideRemnants(row, cx, cx)
+            row[cx] = singleCell(cp)
+            lastPrintedCp = cp
+            if (cx >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx++
+        }
+        return i
     }
 
     /**
@@ -925,7 +983,8 @@ class TerminalEmulator(
         if (csiIntermediate != NO_INTERMEDIATE) return // other intermediate sequences are absorbed
 
         when (final) {
-            'm' -> style = SgrParser.apply(p, style)
+            // An SGR that changes nothing keeps the instance: [sharedCells] and blanks match by identity.
+            'm' -> SgrParser.apply(p, style).let { if (it != style) style = it }
             '@' -> insertChars(p.count(0, 1))
             'A' -> { cy = (cy - p.count(0, 1)).coerceAtLeast(topLimit()); pendingWrap = false }
             'B', 'e' -> { cy = (cy + p.count(0, 1)).coerceAtMost(bottomLimit()); pendingWrap = false }
@@ -1073,10 +1132,7 @@ class TerminalEmulator(
         if (w == 2 && cx >= cols - 1 && autoWrap) { grid[cy].wrapped = true; cx = 0; lineFeed() }
 
         val row = grid[cy]
-        if (insertMode) {
-            repeat(w) { row.add(cx, blankCell()) }
-            while (row.size > cols) row.removeAt(row.size - 1)
-        }
+        if (insertMode) row.insert(cx, w, blankCell())
         eraseWideRemnants(row, cx, (cx + w - 1).coerceAtMost(cols - 1))
         if (w == 2 && cx < cols - 1) {
             row[cx] = TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Wide, currentHyperlink)
@@ -1093,9 +1149,9 @@ class TerminalEmulator(
     // and TUI borders repeat, and a TermCell per printed byte was most of what output allocated.
     // Cells are immutable, so one instance per glyph is safe; the set is dropped when the rendition
     // or the open hyperlink moves on.
+    // A slot is valid while its cell carries the current rendition by identity — SGR keeps the
+    // instance when a sequence changes nothing, so a repeated `ESC[0m` does not empty the set.
     private val sharedCells = arrayOfNulls<TermCell>(SHARED_CELL_SLOTS)
-    private var sharedCellsStyle = style
-    private var sharedCellsLink: String? = null
 
     private fun singleCell(cp: Int): TermCell {
         val slot = when (cp) {
@@ -1103,14 +1159,10 @@ class TerminalEmulator(
             in 0x2500..0x257F -> ASCII_SLOTS + cp - 0x2500
             else -> return TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
         }
-        if (sharedCellsStyle !== style || sharedCellsLink !== currentHyperlink) {
-            if (sharedCellsStyle != style || sharedCellsLink != currentHyperlink) sharedCells.fill(null)
-            sharedCellsStyle = style
-            sharedCellsLink = currentHyperlink
-        }
-        return sharedCells[slot]
-            ?: TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
-                .also { sharedCells[slot] = it }
+        val cached = sharedCells[slot]
+        if (cached != null && cached.style === style && cached.hyperlink == currentHyperlink) return cached
+        return TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
+            .also { sharedCells[slot] = it }
     }
 
     /**
@@ -1139,7 +1191,8 @@ class TerminalEmulator(
 
     /** REP (CSI Ps b): repeats the last printed character Ps times. Clamped to the screen area. */
     private fun repeatLastChar(n: Int) {
-        val cp = lastPrintedCp ?: return
+        val cp = lastPrintedCp
+        if (cp == NO_CODE_POINT) return
         repeat(n.coerceIn(1, cols * rows)) { putCodePoint(cp) }
     }
 
@@ -1213,9 +1266,9 @@ class TerminalEmulator(
         when (mode) {
             // Erasing the tail (0) or the whole row (2) removes its continuation — clear wrapped so
             // reflow doesn't glue the next row to it. Erasing the head (1) leaves the tail alone.
-            0 -> { eraseWideRemnants(row, cx, cols - 1); for (c in cx until cols) row[c] = blankCell(); row.wrapped = false }
-            1 -> { eraseWideRemnants(row, 0, cx.coerceAtMost(cols - 1)); for (c in 0..cx.coerceAtMost(cols - 1)) row[c] = blankCell() }
-            2 -> { for (c in 0 until cols) row[c] = blankCell(); row.wrapped = false }
+            0 -> { eraseWideRemnants(row, cx, cols - 1); row.fill(blankCell(), cx, cols); row.wrapped = false }
+            1 -> { eraseWideRemnants(row, 0, cx.coerceAtMost(cols - 1)); row.fill(blankCell(), 0, cx.coerceAtMost(cols - 1) + 1) }
+            2 -> { row.fill(blankCell(), 0, cols); row.wrapped = false }
         }
     }
 
@@ -1262,7 +1315,7 @@ class TerminalEmulator(
         val row = grid[cy]
         val end = (cx + n).coerceAtMost(cols)
         eraseWideRemnants(row, cx, end - 1)
-        for (c in cx until end) row[c] = blankCell()
+        row.fill(blankCell(), cx, end)
     }
 
     /**
@@ -1278,15 +1331,13 @@ class TerminalEmulator(
     private fun insertChars(n: Int) {
         markDirty()
         val row = grid[cy]
-        repeat(n.coerceAtMost(cols - cx)) { row.add(cx, blankCell()) }
-        while (row.size > cols) row.removeAt(row.size - 1)
+        row.insert(cx, n, blankCell())
     }
 
     private fun deleteChars(n: Int) {
         markDirty()
         val row = grid[cy]
-        repeat(n.coerceAtMost(cols - cx)) { row.removeAt(cx) }
-        while (row.size < cols) row.add(blankCell())
+        row.delete(cx, n, blankCell())
     }
 
     private fun insertLines(n: Int) {
@@ -1405,7 +1456,7 @@ class TerminalEmulator(
         scrollback.clear()
         cx = 0; cy = 0
         pendingWrap = false
-        lastPrintedCp = null
+        lastPrintedCp = NO_CODE_POINT
         currentHyperlink = null
         // The buffer the capture pointed into is gone, and so is whatever echo was being matched —
         // but the step itself is not: its probe has yet to run, and the run needs that status. RIS
@@ -1524,8 +1575,7 @@ class TerminalEmulator(
     // Caller must markDirty() first (resize does): this writer relies on its entry frame.
     private fun resizeGrid(g: MutableList<TermRow>, nc: Int, nr: Int, activePrimary: Boolean) {
         for (row in g) {
-            while (row.size > nc) row.removeAt(row.size - 1)
-            while (row.size < nc) row.add(TermCell(' '))
+            row.resize(nc, TermCell(' '))
         }
         if (g.size > nr) {
             // When shrinking the active primary buffer, shift the top into scrollback so the cursor stays visible.
@@ -1535,14 +1585,14 @@ class TerminalEmulator(
             }
             while (g.size > nr) g.removeAt(g.size - 1)
         } else {
-            while (g.size < nr) g.add(TermRow(MutableList(nc) { TermCell(' ') }))
+            while (g.size < nr) g.add(TermRow(nc, TermCell(' ')))
         }
     }
 
     // --- Cell factories ----------------------------------------------------
 
     private fun freshScreen(): MutableList<TermRow> =
-        MutableList(rows) { TermRow(MutableList(cols) { TermCell(' ') }) }
+        MutableList(rows) { TermRow(cols, TermCell(' ')) }
 
     /**
      * A blank cell with the current background — background-color-erase (BCE): erase and scroll paint
@@ -1570,12 +1620,12 @@ class TerminalEmulator(
             .also { cachedBlank = it }
     }
 
-    private fun blankRow() = TermRow(MutableList(cols) { blankCell() })
+    private fun blankRow() = TermRow(cols, blankCell())
 
     private fun blankLine(r: Int) {
         markDirty()
         val row = grid[r]
-        for (c in 0 until cols) row[c] = blankCell()
+        row.fill(blankCell(), 0, cols)
         row.wrapped = false
     }
 
@@ -1612,6 +1662,9 @@ class TerminalEmulator(
 
         /** Window-title stack depth cap (CSI 22 t without a matching 23 t) — bloat guard. */
         const val MAX_TITLE_STACK = 128
+
+        /** [lastPrintedCp] before anything was printed. */
+        const val NO_CODE_POINT = -1
 
         /** First code point that can combine or draw wide; everything below is one plain column. */
         const val FIRST_COMBINING = 0x300
