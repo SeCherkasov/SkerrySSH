@@ -139,4 +139,13 @@ class TagsTest {
         assertEquals(null, normalizeTag("\u200B".repeat(50_000) + "prod"))
         assertEquals("prod", normalizeTag("\u200B".repeat(100) + "prod"))
     }
+
+    @Test
+    fun `a tag cut to length does not end in a blank or a hash`() {
+        // Trimmed before the cut, a long tag could end up on a space: `aaa…a ` draws exactly like
+        // `aaa…a` and compares as a different tag.
+        val body = "a".repeat(MAX_TAG_LENGTH - 1)
+        assertEquals(body, normalizeTag("$body b"))
+        assertEquals(body, normalizeTag("$body#b"))
+    }
 }

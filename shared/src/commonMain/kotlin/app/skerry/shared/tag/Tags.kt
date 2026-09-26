@@ -39,6 +39,8 @@ fun normalizeTag(raw: String): String? =
     stripInvisible(raw.take(MAX_TAG_LENGTH * TAG_SCAN_FACTOR))
         .trim().trim('#').trim().lowercase()
         .take(MAX_TAG_LENGTH).dropLastWhile { it.isHighSurrogate() }
+        // The cut can land on a blank or a `#`; trimmed again, or the tag draws like a shorter one.
+        .trimEnd().trimEnd('#').trimEnd()
         .ifBlank { null }
 
 /** How much input a tag of [MAX_TAG_LENGTH] characters is worth walking; past it, nothing is read. */

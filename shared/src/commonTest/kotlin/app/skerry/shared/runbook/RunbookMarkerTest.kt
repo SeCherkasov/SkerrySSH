@@ -53,6 +53,20 @@ class RunbookMarkerTest {
     }
 
     @Test
+    fun `an escaped trailing separator is an argument and still gets a separator of its own`() {
+        // `find … -exec rm {} \;` ends in a literal `;` handed to find. Appending only a space made
+        // the probe more arguments to find, which then refused the whole expression and never
+        // printed the mark. Verified against bash.
+        assertEquals(
+            opened("find . -exec rm {} \\;; ${probe()}"),
+            RunbookMarker.probeLine("find . -exec rm {} \\;", "TOK"),
+        )
+        assertEquals(opened("echo a \\&; ${probe()}"), RunbookMarker.probeLine("echo a \\&", "TOK"))
+        // An escaped backslash before the separator leaves the separator a real one.
+        assertEquals(opened("echo a \\\\; ${probe()}"), RunbookMarker.probeLine("echo a \\\\;", "TOK"))
+    }
+
+    @Test
     fun `trailing whitespace is trimmed before the separator`() {
         assertEquals(opened("uptime; ${probe()}"), RunbookMarker.probeLine("uptime   \n  ", "TOK"))
     }
@@ -74,6 +88,15 @@ class RunbookMarkerTest {
     fun `a hash inside quotes is not a comment`() {
         assertEquals(opened("echo '#1'; ${probe()}"), RunbookMarker.probeLine("echo '#1'", "TOK"))
         assertEquals(opened("grep \"#tag\" f; ${probe()}"), RunbookMarker.probeLine("grep \"#tag\" f", "TOK"))
+    }
+
+    @Test
+    fun `a hash right after an operator opens a comment`() {
+        // An operator ends the word before it, so `ls;# note` is `ls` and a comment. Verified
+        // against bash: the probe appended after it was swallowed and the step never reported.
+        assertEquals(opened("ls;# note\n${probe()}"), RunbookMarker.probeLine("ls;# note", "TOK"))
+        assertEquals(opened("a&&# note\n${probe()}"), RunbookMarker.probeLine("a&&# note", "TOK"))
+        assertEquals(opened("(ls)# note\n${probe()}"), RunbookMarker.probeLine("(ls)# note", "TOK"))
     }
 
     @Test
