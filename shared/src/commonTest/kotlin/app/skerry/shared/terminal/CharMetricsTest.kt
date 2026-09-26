@@ -51,6 +51,49 @@ class CharMetricsTest {
     }
 
     @Test
+    fun `emoji with default emoji presentation outside the pictograph blocks are wide`() {
+        assertEquals(2, CharMetrics.charWidth(0x2705)) // ✅
+        assertEquals(2, CharMetrics.charWidth(0x26A1)) // ⚡
+        assertEquals(2, CharMetrics.charWidth(0x231A)) // ⌚
+        assertEquals(2, CharMetrics.charWidth(0x2B1B)) // ⬛
+        assertEquals(2, CharMetrics.charWidth(0x1F97A)) // 🥺
+    }
+
+    @Test
+    fun `text-presentation symbols and ambiguous characters stay narrow`() {
+        assertEquals(1, CharMetrics.charWidth(0x2764)) // ❤ without VS16
+        assertEquals(1, CharMetrics.charWidth(0x2713)) // ✓
+        assertEquals(1, CharMetrics.charWidth(0x00B1)) // ± (ambiguous)
+        assertEquals(1, CharMetrics.charWidth(0xFF61)) // halfwidth ideographic full stop
+        assertEquals(1, CharMetrics.charWidth(0x1F1E6)) // regional indicator A
+    }
+
+    @Test
+    fun `CJK extensions past the BMP and the ideographic space are wide`() {
+        assertEquals(2, CharMetrics.charWidth(0x3000)) // ideographic space
+        assertEquals(2, CharMetrics.charWidth(0x30000)) // CJK Ext G
+        assertEquals(2, CharMetrics.charWidth(0x2A700)) // CJK Ext C
+    }
+
+    @Test
+    fun `marks and format characters of every script join the cell before`() {
+        assertTrue(CharMetrics.isCombining(0x094D)) // Devanagari virama
+        assertTrue(CharMetrics.isCombining(0x0E48)) // Thai tone mark
+        assertTrue(CharMetrics.isCombining(0x200B)) // zero-width space
+        assertTrue(CharMetrics.isCombining(0x2060)) // word joiner
+        assertTrue(CharMetrics.isCombining(0xFEFF)) // BOM / ZWNBSP
+        assertTrue(CharMetrics.isCombining(0xE0041)) // tag latin A
+    }
+
+    @Test
+    fun `characters that draw are not joined`() {
+        assertFalse(CharMetrics.isCombining(0x00AD)) // soft hyphen
+        assertFalse(CharMetrics.isCombining(0x0600)) // Arabic number sign
+        assertFalse(CharMetrics.isCombining(0x1160)) // Hangul jungseong filler — a letter here
+        assertFalse(CharMetrics.isCombining(0x0915)) // Devanagari KA
+    }
+
+    @Test
     fun `codePointToString handles BMP, astral and invalid`() {
         assertEquals("A", CharMetrics.codePointToString(0x41))
         assertEquals("😀", CharMetrics.codePointToString(0x1F600)) // surrogate pair

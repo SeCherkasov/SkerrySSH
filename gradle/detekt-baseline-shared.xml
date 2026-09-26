@@ -2,7 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:CharMetrics.kt$CharMetrics$cp in 0x1100..0x115F || // Hangul Jamo cp in 0x2E80..0x303E || // CJK radicals, Kangxi, punctuation cp in 0x3041..0x33FF || // Hiragana/Katakana, CJK symbols cp in 0x3400..0x4DBF || // CJK Ext A cp in 0x4E00..0x9FFF || // CJK Unified cp in 0xA000..0xA4CF || // Yi cp in 0xAC00..0xD7A3 || // Hangul syllables cp in 0xF900..0xFAFF || // CJK compatibility cp in 0xFE10..0xFE19 || // vertical forms cp in 0xFE30..0xFE6F || // CJK compat forms cp in 0xFF00..0xFF60 || // fullwidth forms cp in 0xFFE0..0xFFE6 || // fullwidth signs cp in 0x1F300..0x1FAFF || // emoji, symbols, pictographs cp in 0x20000..0x3FFFD</ID>
     <ID>ComplexCondition:Der.kt$Der$(lead == 0x00 &amp;&amp; !nextHasHighBit) || (lead == 0xFF &amp;&amp; nextHasHighBit)</ID>
     <ID>ComplexCondition:MoshSync.kt$MoshOutgoing$!forceAck &amp;&amp; !freshDue &amp;&amp; !retransmitDue &amp;&amp; !heartbeatDue</ID>
     <ID>ComplexCondition:NsCodec.kt$NsCodec$lumaByteCount &lt; 0 || orangeByteCount &lt; 0 || greenByteCount &lt; 0 || alphaByteCount &lt; 0</ID>
@@ -11,8 +10,6 @@
     <ID>ComplexCondition:RemoteFramebuffer.kt$RemoteFramebuffer$x &lt; 0 || y &lt; 0 || x &gt;= width || y &gt;= height</ID>
     <ID>ComplexCondition:TerminalEmulator.kt$TerminalEmulator$last &gt;= 0 &amp;&amp; grid[last].all { it.text == " " &amp;&amp; it.style.bg == TermColor.Default &amp;&amp; !it.style.inverse }</ID>
     <ID>CyclomaticComplexMethod:AutocompleteEngine.kt$AutocompleteEngine$fun onUserInput(data: ByteArray): String?</ID>
-    <ID>CyclomaticComplexMethod:CharMetrics.kt$CharMetrics$fun charWidth(cp: Int): Int</ID>
-    <ID>CyclomaticComplexMethod:CharMetrics.kt$CharMetrics$fun isCombining(cp: Int): Boolean</ID>
     <ID>CyclomaticComplexMethod:ClearCodec.kt$ClearCodec$private fun subcodecs(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
     <ID>CyclomaticComplexMethod:CommandRisk.kt$CommandRiskClassifier$fun assess(command: String): CommandAssessment</ID>
     <ID>CyclomaticComplexMethod:GraphicsChannel.kt$GraphicsChannel$private suspend fun handle(commandId: Int, body: RdpReader)</ID>
