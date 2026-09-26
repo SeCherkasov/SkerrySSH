@@ -102,6 +102,32 @@ class ClientCapabilitiesTest {
     }
 
     @Test
+    fun `the bitmap set does not offer the lossy planar forms the decoder cannot read`() {
+        // DRAW_ALLOW_DYNAMIC_COLOR_FIDELITY lets a server send planar bitmaps as YCoCg (colour loss
+        // level), DRAW_ALLOW_COLOR_SUBSAMPLING halves their chroma planes. PlanarCodec reads RGB
+        // planes only, so an offered form painted every such bitmap in the wrong colours or was
+        // refused outright.
+        val pdu = ClientCapabilities.confirmActive(0, 1007, 1024, 768, remoteFx = false)
+        val reader = RdpReader(pdu)
+        RdpShare.readControlHeader(reader)
+        reader.u32le() // shareId
+        reader.u16le() // originatorId
+        val sourceLength = reader.u16le()
+        reader.u16le() // lengthCombinedCapabilities
+        reader.skip(sourceLength)
+        val count = reader.u16le()
+        reader.u16le() // pad
+        var drawingFlags = -1
+        repeat(count) {
+            val type = reader.u16le()
+            val length = reader.u16le()
+            val body = reader.bytes(length - 4)
+            if (type == CapabilitySetType.BITMAP) drawingFlags = body[19].toInt() and 0xFF
+        }
+        assertEquals(0x08, drawingFlags, "only DRAW_ALLOW_SKIP_ALPHA")
+    }
+
+    @Test
     fun `every capability set has the size the specification fixes`() {
         val lengths = capabilitySetLengths(remoteFx = false)
 

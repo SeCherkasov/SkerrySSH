@@ -86,6 +86,23 @@ class FramebufferImageDesktopTest {
     }
 
     @Test
+    fun `a rect from before a shrink is clipped to the source it is read from`() {
+        // The region was named against a 4x4 desktop; by the time it is drawn the framebuffer is
+        // 2x2. The part both still have is drawn at the source's own stride, nothing else.
+        val image = FramebufferImage(4, 4)
+        val src = intArrayOf(0xFF000001.toInt(), 0xFF000002.toInt(), 0xFF000003.toInt(), 0xFF000004.toInt())
+
+        image.writeRects(listOf(RemoteRect(0, 0, 4, 4)), src, 2)
+
+        val pixels = image.bitmap.toPixelMap()
+        assertEquals(src[0], pixels.buffer[0])
+        assertEquals(src[1], pixels.buffer[1])
+        assertEquals(src[2], pixels.buffer[4 + 0], "the second source row lands on the second row")
+        assertEquals(src[3], pixels.buffer[4 + 1])
+        assertEquals(0, pixels.buffer[2], "nothing is read past the source's width")
+    }
+
+    @Test
     fun `a rect past the edge is clipped, not written out of bounds`() {
         val image = FramebufferImage(2, 2)
         // The rect claims 3 columns of a 2-wide source: rows that fit are written, the rest skipped.

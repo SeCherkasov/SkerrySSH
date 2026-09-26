@@ -60,26 +60,30 @@ class SurfaceDecoder(
         if (width <= 0 || height <= 0) return emptyList()
         RdpImageBounds.requireSize(width, height, "surface bits")
 
-        diagnostics.noteCodec(
-            when (codecId) {
-                0 -> "Raw"
-                ClientCapabilities.CODEC_ID_REMOTEFX -> "RemoteFX"
-                // Always advertised and always decodable, so it is the fallback a host with
-                // RemoteFX off actually lands on — the overlay has to name it, not print its id.
-                ClientCapabilities.CODEC_ID_NSCODEC -> "NSCodec"
-                else -> "0x${codecId.toString(16)}"
-            },
-        )
-        val pixels = codecs.decode(codecId, data, width, height, bitsPerPixel)
+        diagnostics.noteCodec(codecLabel(codecId))
+        val image = codecs.decode(codecId, data, width, height, bitsPerPixel)
             ?: throw RdpProtocolException("server used codec $codecId, which was not negotiated")
-        for (row in 0 until height) {
-            framebuffer.blitRow(left, top + row, width, pixels, row * width)
+        val reportedWidth = minOf(width, right - left)
+        val reportedHeight = minOf(height, bottom - top)
+        val damage = ArrayList<RdpRect>(image.painted.size)
+        for (part in image.painted) {
+            for (row in 0 until part.height) {
+                framebuffer.blitRow(left + part.x, top + part.y + row, part.width, image.pixels, (part.y + row) * width + part.x)
+            }
+            val damageWidth = minOf(part.width, reportedWidth - part.x)
+            val damageHeight = minOf(part.height, reportedHeight - part.y)
+            if (damageWidth > 0 && damageHeight > 0) damage += RdpRect(left + part.x, top + part.y, damageWidth, damageHeight)
         }
-        return listOf(
-            RdpUpdate.Region(
-                listOf(RdpRect(left, top, minOf(width, right - left), minOf(height, bottom - top))),
-            ),
-        )
+        return if (damage.isEmpty()) emptyList() else listOf(RdpUpdate.Region(damage))
+    }
+
+    private fun codecLabel(codecId: Int): String = when (codecId) {
+        0 -> "Raw"
+        ClientCapabilities.CODEC_ID_REMOTEFX -> "RemoteFX"
+        // Always advertised and always decodable, so it is the fallback a host with
+        // RemoteFX off actually lands on — the overlay has to name it, not print its id.
+        ClientCapabilities.CODEC_ID_NSCODEC -> "NSCodec"
+        else -> "0x${codecId.toString(16)}"
     }
 
     private companion object {
@@ -98,11 +102,11 @@ class SurfaceDecoder(
 class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
 
     /** Decode [data] to ARGB, or null when [codecId] names a codec this session never negotiated. */
-    fun decode(codecId: Int, data: ByteArray, width: Int, height: Int, bitsPerPixel: Int): IntArray? = when (codecId) {
-        CODEC_ID_NONE -> uncompressed(data, width, height, bitsPerPixel)
+    fun decode(codecId: Int, data: ByteArray, width: Int, height: Int, bitsPerPixel: Int): DecodedImage? = when (codecId) {
+        CODEC_ID_NONE -> DecodedImage.whole(uncompressed(data, width, height, bitsPerPixel), width, height)
         ClientCapabilities.CODEC_ID_REMOTEFX -> remoteFx?.decode(data, width, height)
         // Always on: NSCodec is advertised unconditionally (F-33), so it must decode unconditionally.
-        ClientCapabilities.CODEC_ID_NSCODEC -> NsCodec.decode(RdpReader(data), width, height)
+        ClientCapabilities.CODEC_ID_NSCODEC -> DecodedImage.whole(NsCodec.decode(RdpReader(data), width, height), width, height)
         else -> null
     }
 
@@ -163,5 +167,17 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
 
 /** Decodes a RemoteFX stream into ARGB pixels (MS-RDPRFX); implemented alongside the codec itself. */
 interface RemoteFxDecoder {
-    fun decode(data: ByteArray, width: Int, height: Int): IntArray
+    fun decode(data: ByteArray, width: Int, height: Int): DecodedImage
+}
+
+/**
+ * A codec's output for a `width`×`height` destination: row-major [pixels] of that size, and the
+ * parts of the destination they are valid for, relative to its top-left corner. Only [painted] is
+ * copied out — a codec that updates part of its rectangle (RemoteFX with its region) leaves the
+ * rest of the screen as it was.
+ */
+class DecodedImage(val pixels: IntArray, val painted: List<RdpRect>) {
+    companion object {
+        fun whole(pixels: IntArray, width: Int, height: Int) = DecodedImage(pixels, listOf(RdpRect(0, 0, width, height)))
+    }
 }

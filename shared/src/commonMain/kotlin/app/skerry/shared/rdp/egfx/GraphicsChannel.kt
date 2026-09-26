@@ -271,10 +271,12 @@ class GraphicsChannel(
             return
         }
 
-        val pixels = codecs.decode(codecId, data, rect.width, rect.height)
+        val image = codecs.decode(codecId, data, rect.width, rect.height)
             ?: throw RdpProtocolException("the server used the ${GraphicsCodecs.codecName(codecId)} codec")
-        surface.blit(rect.x, rect.y, rect.width, rect.height, pixels)
-        present(surface, rect)
+        for (part in image.painted) {
+            surface.blit(rect.x, rect.y, rect.width, rect.height, image.pixels, part)
+            present(surface, RdpRect(rect.x + part.x, rect.y + part.y, part.width, part.height))
+        }
     }
 
     /**

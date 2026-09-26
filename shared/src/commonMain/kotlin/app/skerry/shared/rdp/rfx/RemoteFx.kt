@@ -1,7 +1,9 @@
 package app.skerry.shared.rdp.rfx
 
+import app.skerry.shared.rdp.DecodedImage
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpReader
+import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RemoteFxDecoder
 
 /**
@@ -16,6 +18,10 @@ import app.skerry.shared.rdp.RemoteFxDecoder
  * image mode in its capabilities, where every tile is self-contained. Video mode's inter-frame
  * references would need a reference frame per surface, and a dropped frame would then corrupt
  * everything after it rather than one tile.
+ *
+ * What a message paints is the tiles clipped to its region (MS-RDPRFX 3.1.8.1.7.3), and nothing
+ * else: the destination a server names is often just the region's bounding box, and the parts of it
+ * no tile covers must keep what the screen already shows.
  */
 class RemoteFx : RemoteFxDecoder {
 
@@ -25,8 +31,10 @@ class RemoteFx : RemoteFxDecoder {
     private val scratchPlanes = Array(3) { IntArray(RfxDwt.TILE_COEFFICIENTS) }
     private val scratchDwt = IntArray(RfxDwt.TILE_COEFFICIENTS)
 
-    override fun decode(data: ByteArray, width: Int, height: Int): IntArray {
+    override fun decode(data: ByteArray, width: Int, height: Int): DecodedImage {
         val out = IntArray(width * height)
+        val tiles = mutableListOf<RdpRect>()
+        var region: List<RdpRect>? = null
         val reader = RdpReader(data)
         while (reader.remaining >= BLOCK_HEADER_SIZE) {
             val blockType = reader.u16le()
@@ -37,17 +45,87 @@ class RemoteFx : RemoteFxDecoder {
             val body = reader.slice(blockLength - BLOCK_HEADER_SIZE)
             when (blockType) {
                 WBT_SYNC, WBT_CODEC_VERSIONS, WBT_CHANNELS, WBT_CONTEXT,
-                WBT_FRAME_BEGIN, WBT_FRAME_END, WBT_REGION,
-                -> Unit // negotiation and framing; the pixels are all in the tile set
+                WBT_FRAME_BEGIN, WBT_FRAME_END,
+                -> Unit // negotiation and framing
 
-                WBT_EXTENSION -> decodeTileSet(body, out, width, height)
+                WBT_REGION -> region = readRegion(body, width, height)
+                WBT_EXTENSION -> decodeTileSet(body, out, width, height, tiles)
                 else -> Unit // unknown blocks are skipped by their length, as the spec requires
             }
         }
-        return out
+        // A message without a region block is out of spec; reading it as covering the whole
+        // destination keeps such a server's tiles on screen instead of dropping them.
+        return DecodedImage(out, painted(tiles, region ?: listOf(RdpRect(0, 0, width, height))))
     }
 
-    private fun decodeTileSet(reader: RdpReader, out: IntArray, width: Int, height: Int) {
+    /** TS_RFX_REGION's rectangles, clipped to the destination. None at all means all of it (2.2.2.3.3). */
+    private fun readRegion(reader: RdpReader, width: Int, height: Int): List<RdpRect> {
+        reader.u8() // codecId
+        reader.u8() // channelId
+        reader.u8() // regionFlags
+        val count = reader.u16le()
+        if (count * RECT_SIZE > reader.remaining) {
+            throw RdpProtocolException("RemoteFX region of $count rectangles does not fit its block")
+        }
+        if (count == 0) return listOf(RdpRect(0, 0, width, height))
+        val rects = ArrayList<RdpRect>(count)
+        repeat(count) {
+            val rect = intersect(
+                RdpRect(reader.u16le(), reader.u16le(), reader.u16le(), reader.u16le()),
+                RdpRect(0, 0, width, height),
+            )
+            if (rect != null) rects += rect
+        }
+        return rects
+    }
+
+    /**
+     * Every tile clipped to every region rectangle, with runs that line up in a row joined so a
+     * full-width update reports a band rather than one rectangle per tile.
+     */
+    private fun painted(tiles: List<RdpRect>, region: List<RdpRect>): List<RdpRect> {
+        val distinctTiles = tiles.distinct()
+        // Both counts are the server's to choose; past the bound, clip to the region's bounding box
+        // so one message cannot cost billions of intersections.
+        val clip = if (distinctTiles.size.toLong() * region.size > MAX_CLIP_PAIRS) listOfNotNull(bounds(region)) else region
+        val pieces = ArrayList<RdpRect>()
+        for (tile in distinctTiles) {
+            for (rect in clip) intersect(tile, rect)?.let { pieces += it }
+        }
+        pieces.sortWith(compareBy<RdpRect>({ it.y }, { it.height }, { it.x }))
+        val joined = ArrayList<RdpRect>(pieces.size)
+        for (piece in pieces) {
+            val last = joined.lastOrNull()
+            if (last != null && continues(last, piece)) {
+                val right = maxOf(last.x + last.width, piece.x + piece.width)
+                joined[joined.lastIndex] = RdpRect(last.x, last.y, right - last.x, last.height)
+            } else {
+                joined += piece
+            }
+        }
+        return joined
+    }
+
+    /** Whether [piece] lies in [last]'s band and starts no further right than [last] ends. */
+    private fun continues(last: RdpRect, piece: RdpRect) =
+        last.y == piece.y && last.height == piece.height && piece.x <= last.x + last.width
+
+    private fun bounds(rects: List<RdpRect>): RdpRect? {
+        if (rects.isEmpty()) return null
+        val left = rects.minOf { it.x }
+        val top = rects.minOf { it.y }
+        return RdpRect(left, top, rects.maxOf { it.x + it.width } - left, rects.maxOf { it.y + it.height } - top)
+    }
+
+    private fun intersect(a: RdpRect, b: RdpRect): RdpRect? {
+        val left = maxOf(a.x, b.x)
+        val top = maxOf(a.y, b.y)
+        val right = minOf(a.x + a.width, b.x + b.width)
+        val bottom = minOf(a.y + a.height, b.y + b.height)
+        return if (right > left && bottom > top) RdpRect(left, top, right - left, bottom - top) else null
+    }
+
+    private fun decodeTileSet(reader: RdpReader, out: IntArray, width: Int, height: Int, tiles: MutableList<RdpRect>) {
         reader.u8() // codecId
         reader.u8() // channelId
         val subtype = reader.u16le()
@@ -74,7 +152,7 @@ class RemoteFx : RemoteFxDecoder {
                 throw RdpProtocolException("RemoteFX tile of $tileLength bytes does not fit the block")
             }
             val tile = reader.slice(tileLength - BLOCK_HEADER_SIZE)
-            if (tileType == CBT_TILE) decodeTile(tile, quants, mode, out, width, height)
+            if (tileType == CBT_TILE) decodeTile(tile, quants, mode, out, width, height)?.let { tiles += it }
         }
     }
 
@@ -85,7 +163,7 @@ class RemoteFx : RemoteFxDecoder {
         out: IntArray,
         width: Int,
         height: Int,
-    ) {
+    ): RdpRect? {
         val quantY = reader.u8()
         val quantCb = reader.u8()
         val quantCr = reader.u8()
@@ -117,6 +195,7 @@ class RemoteFx : RemoteFxDecoder {
                 out[destY * width + destX] = RfxColor.ycbcrToArgb(y[index], cb[index], cr[index])
             }
         }
+        return intersect(RdpRect(originX, originY, RfxDwt.TILE_SIZE, RfxDwt.TILE_SIZE), RdpRect(0, 0, width, height))
     }
 
     /**
@@ -134,6 +213,7 @@ class RemoteFx : RemoteFxDecoder {
 
     private companion object {
         const val BLOCK_HEADER_SIZE = 6
+        const val RECT_SIZE = 8
 
         const val WBT_SYNC = 0xCCC0
         const val WBT_CODEC_VERSIONS = 0xCCC1
@@ -148,6 +228,7 @@ class RemoteFx : RemoteFxDecoder {
         const val CBT_TILE = 0xCAC3
 
         const val MAX_QUANT_SETS = 64
+        const val MAX_CLIP_PAIRS = 1L shl 20
         const val ENTROPY_RLGR3 = 0x01
     }
 }

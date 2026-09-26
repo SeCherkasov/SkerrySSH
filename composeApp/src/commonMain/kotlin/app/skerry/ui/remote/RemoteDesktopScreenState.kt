@@ -433,7 +433,8 @@ class RemoteDesktopScreenState(
                 // marker); redrawing on it would burn a frame for nothing.
                 if (update.rects.isNotEmpty()) {
                     val started = TimeSource.Monotonic.markNow()
-                    image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
+                    val current = session.framebuffer.snapshot
+                    image.writeRects(update.rects, current.pixels, current.width)
                     renderStats.bridgeTime(started.elapsedNow().inWholeNanoseconds)
                     frameSignal.trySend(Unit)
                 }

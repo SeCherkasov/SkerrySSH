@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp.egfx
 
+import app.skerry.shared.rdp.DecodedImage
 import app.skerry.shared.rdp.PlanarCodec
 import app.skerry.shared.rdp.RdpClientSettings
 import app.skerry.shared.rdp.RdpRect
@@ -28,12 +29,12 @@ class GraphicsCodecs(
     val avc: AvcDecoder? = null,
 ) {
 
-    /** Decode a whole [width]×[height] image, or null when [codecId] is one this client lacks. */
-    fun decode(codecId: Int, data: ByteArray, width: Int, height: Int): IntArray? = when (codecId) {
-        CODEC_UNCOMPRESSED -> uncompressed(data, width, height)
-        CODEC_PLANAR -> PlanarCodec.decode(data, width, height)
+    /** Decode a [width]×[height] image, or null when [codecId] is one this client lacks. */
+    fun decode(codecId: Int, data: ByteArray, width: Int, height: Int): DecodedImage? = when (codecId) {
+        CODEC_UNCOMPRESSED -> DecodedImage.whole(uncompressed(data, width, height), width, height)
+        CODEC_PLANAR -> DecodedImage.whole(PlanarCodec.decode(data, width, height), width, height)
         CODEC_REMOTEFX -> remoteFx?.decode(data, width, height)
-        CODEC_CLEARCODEC -> clear?.decode(data, width, height)
+        CODEC_CLEARCODEC -> clear?.decode(data, width, height)?.let { DecodedImage.whole(it, width, height) }
         else -> null
     }
 

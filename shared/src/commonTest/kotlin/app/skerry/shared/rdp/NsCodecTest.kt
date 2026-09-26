@@ -37,7 +37,7 @@ class NsCodecTest {
         val pixels = RdpCodecs()
             .decode(ClientCapabilities.CODEC_ID_NSCODEC, stream, width = 2, height = 1, bitsPerPixel = 32)
 
-        assertEquals(listOf(0xFF404040.toInt(), 0xFF606060.toInt()), pixels?.toList())
+        assertEquals(listOf(0xFF404040.toInt(), 0xFF606060.toInt()), pixels?.pixels?.toList())
     }
 
     @Test

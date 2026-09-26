@@ -110,6 +110,31 @@ class GraphicsTest {
     }
 
     @Test
+    fun `a bitmap padded past its destination rectangle paints only the rectangle`() {
+        // Windows pads a bitmap's width to a multiple of four; the inclusive destination rectangle
+        // is what is visible, as FreeRDP and rdesktop clip it. Painting the padding overwrote the
+        // pixels beside the rectangle with whatever the encoder filled it with.
+        val framebuffer = RemoteFramebuffer(4, 1)
+        val body = RdpWriter(64).apply {
+            u16le(1) // numberRectangles
+            u16le(0).u16le(0).u16le(1).u16le(0) // destLeft, destTop, destRight, destBottom: 2x1
+            u16le(4).u16le(1) // width, height: padded to four
+            u16le(16) // bitsPerPixel
+            u16le(0) // flags: uncompressed
+            u16le(8) // bitmapLength
+            u16le(0xF800).u16le(0xF800).u16le(0xFFFF).u16le(0xFFFF)
+        }.toByteArray()
+        val before = framebuffer.pixels[2]
+
+        val update = BitmapUpdate.apply(RdpReader(body), framebuffer, null, DroppedGraphics()) as RdpUpdate.Region
+
+        assertEquals(RED, framebuffer.pixels[1])
+        assertEquals(before, framebuffer.pixels[2], "the padding was painted")
+        assertEquals(before, framebuffer.pixels[3], "the padding was painted")
+        assertEquals(2, update.rects.single().width)
+    }
+
+    @Test
     fun `a bitmap update of a size no screen has is skipped instead of allocated`() {
         val framebuffer = RemoteFramebuffer(4, 4)
         val body = RdpWriter(32).apply {

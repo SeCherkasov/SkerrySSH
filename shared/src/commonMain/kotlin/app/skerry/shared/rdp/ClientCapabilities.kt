@@ -32,9 +32,9 @@ object ClientCapabilities {
     private const val INPUT_FLAG_UNICODE = 0x0010
     private const val INPUT_FLAG_FASTPATH_INPUT2 = 0x0020
 
-    // TS_BITMAP_CAPABILITYSET::drawingFlags.
-    private const val DRAW_ALLOW_DYNAMIC_COLOR_FIDELITY = 0x02
-    private const val DRAW_ALLOW_COLOR_SUBSAMPLING = 0x04
+    // TS_BITMAP_CAPABILITYSET::drawingFlags. DRAW_ALLOW_DYNAMIC_COLOR_FIDELITY (0x02) and
+    // DRAW_ALLOW_COLOR_SUBSAMPLING (0x04) stay off: they let the server send planar bitmaps as
+    // YCoCg with subsampled chroma, and PlanarCodec reads RGB planes only.
     private const val DRAW_ALLOW_SKIP_ALPHA = 0x08
 
     // TS_LARGE_POINTER_CAPABILITYSET::largePointerSupportFlags. Both flags go out (F-23): the
@@ -154,7 +154,7 @@ object ClientCapabilities {
         u16le(1) // desktopResizeFlag
         u16le(1) // bitmapCompressionFlag
         u8(0) // highColorFlags
-        u8(DRAW_ALLOW_DYNAMIC_COLOR_FIDELITY or DRAW_ALLOW_COLOR_SUBSAMPLING or DRAW_ALLOW_SKIP_ALPHA)
+        u8(DRAW_ALLOW_SKIP_ALPHA)
         u16le(1) // multipleRectangleSupport
         u16le(0) // pad2octetsB
     }.toByteArray()

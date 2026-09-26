@@ -8,6 +8,7 @@ import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RdpUpdate
 import app.skerry.shared.rdp.RdpWriter
+import app.skerry.shared.rdp.rfx.RfxTestStreams
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -511,6 +512,26 @@ class GraphicsChannelTest {
         budgeted.onMessage(bulk(deleteSurface(id = 1)))
 
         budgeted.onMessage(bulk(createSurface(id = 2, width = 8, height = 8)))
+    }
+
+    @Test
+    fun `a RemoteFX bitmap paints only its region and leaves the rest of the surface`() = runTest {
+        // xrdp names the region's bounding box as the destination rectangle.
+        val screen = RemoteFramebuffer(128, 64)
+        val channel = GraphicsChannel(screen, GraphicsCodecs.forSettings(settings(remoteFx = true))) { }
+        val whole = RdpRect(0, 0, 128, 64)
+        val message = RfxTestStreams.message(listOf(RdpRect(0, 0, 64, 64)), listOf(RfxTestStreams.greyTile(0, 0)))
+
+        channel.onMessage(
+            bulk(
+                createSurface(id = 1, width = 128, height = 64) + mapToOutput(1, 0, 0) +
+                    wireToSurface(1, whole, colour = 0x123456) +
+                    wireToSurfaceRaw(1, codecId = GraphicsCodecs.CODEC_REMOTEFX, payload = message, rect = whole),
+            ),
+        )
+
+        assertEquals(RfxTestStreams.GREY, screen.pixels[10 * 128 + 10], "the tile lands")
+        assertEquals(0xFF123456.toInt(), screen.pixels[10 * 128 + 100], "a pixel no tile covers keeps its colour")
     }
 
     /** A client-settings fixture whose only interesting field is the codec switch under test. */
