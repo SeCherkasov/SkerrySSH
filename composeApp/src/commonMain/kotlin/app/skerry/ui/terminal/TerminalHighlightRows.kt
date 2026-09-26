@@ -109,6 +109,7 @@ internal fun liveChainStart(source: HighlightSource): Int? {
 // window and that content changes do re-run the overlay.
 internal var backgroundHighlightPasses = 0
 internal var liveOverlayPasses = 0
+internal var outputHighlightScans = 0
 
 /**
  * The near-cursor-independent passes — executed commands and output — over the whole [window].
@@ -123,6 +124,7 @@ internal fun backgroundHighlightRows(
     settings: TerminalHighlight,
     vocabulary: CommandVocabulary,
     liveChainStart: Int?,
+    outputMemo: OutputHighlightMemo? = null,
 ): Map<Int, RowHighlight> {
     if (!settings.commandLine && !settings.output) return emptyMap()
     backgroundHighlightPasses++
@@ -143,7 +145,7 @@ internal fun backgroundHighlightRows(
     if (settings.output && !source.altScreen) {
         for (r in window) {
             if (r in commandRows || r !in screen.indices) continue
-            outputHighlight(screen[r])?.let { out[r] = it }
+            outputHighlight(r, screen[r], outputMemo)?.let { out[r] = it }
         }
     }
     return out
@@ -204,8 +206,32 @@ private fun tokenizeSlices(
     return slices.mapTo(HashSet()) { it.row }
 }
 
+/**
+ * Output highlights kept across passes for the rows that did not change: the output pass reads
+ * nothing but the row, and the emulator hands out the same instance for a row nothing wrote to.
+ * Keeping the result instance keeps the row's glyph runs cached too — [RowRenderCache] validates
+ * by highlight identity. Looked up by index and validated by row identity, as there.
+ */
+internal class OutputHighlightMemo(private val capacity: Int) {
+    private class Entry(val row: List<TermCell>, val highlight: RowHighlight?)
+
+    private val entries = HashMap<Int, Entry>()
+
+    fun highlight(index: Int, row: List<TermCell>): RowHighlight? {
+        val cached = entries[index]
+        if (cached != null && cached.row === row) return cached.highlight
+        if (entries.size >= capacity) entries.clear()
+        return outputHighlight(row).also { entries[index] = Entry(row, it) }
+    }
+}
+
+/** [outputHighlight] of row [index], through [memo] when there is one. */
+private fun outputHighlight(index: Int, row: List<TermCell>, memo: OutputHighlightMemo?): RowHighlight? =
+    if (memo != null) memo.highlight(index, row) else outputHighlight(row)
+
 /** Log levels, addresses and timestamps in one output row, or `null` when it holds none. */
 private fun outputHighlight(row: List<TermCell>): RowHighlight? {
+    outputHighlightScans++
     if (!rowHasOutputMarker(row)) return null
     val flat = rowText(row) ?: return null
     val spans = highlightOutputLine(flat.text)
@@ -278,6 +304,7 @@ internal fun rememberRowHighlights(
     // The chain-start ROW (not the column): stable across line editing and history recall, so the
     // background cache survives them; it moves only when the cursor crosses a chain boundary.
     val chainStart = liveChainStart(liveSource)
+    val outputMemo = remember(state) { OutputHighlightMemo(OUTPUT_MEMO_ROWS) }
     val background = remember(
         state, state.screenContentVersion, window, settings, state.vocabulary, state.executedCommands,
         state.altScreen, chainStart,
@@ -288,6 +315,7 @@ internal fun rememberRowHighlights(
             settings = settings,
             vocabulary = state.vocabulary,
             liveChainStart = chainStart,
+            outputMemo = outputMemo,
         )
     }
     // screenContentVersion in the keys, not just `background`: remember compares with equals(),
@@ -305,3 +333,6 @@ internal fun rememberRowHighlights(
         )
     }
 }
+
+/** Rows the output-highlight memo may hold — several windows, like the glyph-run cache. */
+private const val OUTPUT_MEMO_ROWS = 512

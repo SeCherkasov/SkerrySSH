@@ -28,6 +28,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -166,8 +167,17 @@ internal fun DrawScope.drawSelectionHandle(
  * in different columns share one layout.
  */
 internal fun DrawScope.drawGlyphText(measurer: TextMeasurer, text: String, topLeft: Offset, style: TextStyle) {
-    val layout = measurer.measure(AnnotatedString(text), style, density = this, layoutDirection = layoutDirection)
-    drawText(layout, color = style.color, topLeft = topLeft)
+    drawText(measureGlyphText(measurer, text, style), color = style.color, topLeft = topLeft)
+}
+
+// Test-only counter of glyph layouts requested from the measurer (same threading note as
+// [glyphRunSegmentations]). Pins that an unchanged row is not laid out again on a publish.
+internal var glyphLayoutMeasures = 0
+
+/** Lays out a glyph run for [drawGlyphText]; color is left to draw time, see there. */
+internal fun DrawScope.measureGlyphText(measurer: TextMeasurer, text: String, style: TextStyle): TextLayoutResult {
+    glyphLayoutMeasures++
+    return measurer.measure(AnnotatedString(text), style, density = this, layoutDirection = layoutDirection)
 }
 
 /**

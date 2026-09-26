@@ -289,4 +289,31 @@ class TerminalHighlightRowsTest {
         val map = highlight(screen, cursorCol = 5, executed = setOf("git status"))
         assertEquals(HighlightKind.None, map[0]?.kindAt(13) ?: HighlightKind.None)
     }
+
+    @Test
+    fun `a full output memo starts over instead of growing`() {
+        val memo = OutputHighlightMemo(capacity = 2)
+        val first = row("ERROR one")
+        memo.highlight(0, first)
+        memo.highlight(1, row("ERROR two"))
+        val scans = outputHighlightScans
+        memo.highlight(0, first)
+        assertEquals(scans, outputHighlightScans, "a kept row is not rescanned")
+        memo.highlight(2, row("ERROR three")) // the third row clears the memo
+        memo.highlight(0, first)
+        assertEquals(scans + 2, outputHighlightScans, "after the clear the first row is scanned again")
+    }
+
+    @Test
+    fun `output memo keeps the result of an unchanged row and rescans a replaced one`() {
+        val memo = OutputHighlightMemo(capacity = 8)
+        val first = row("ERROR boom")
+        val kept = memo.highlight(0, first)
+        assertTrue(kept != null && kept.kindAt(0) != HighlightKind.None)
+        assertTrue(kept === memo.highlight(0, first))
+
+        // A row the emulator rewrote is a new instance and is scanned again.
+        assertNull(memo.highlight(0, row("plain text")))
+        assertTrue(memo.highlight(0, row("ERROR again")) !== kept)
+    }
 }
