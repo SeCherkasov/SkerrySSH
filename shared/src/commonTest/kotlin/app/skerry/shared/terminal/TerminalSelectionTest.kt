@@ -86,4 +86,30 @@ class TerminalSelectionTest {
         val sel = lineSelectionAt(screen, TerminalPos(9, 0))
         assertEquals("only", sel.extract(screen))
     }
+
+    @Test
+    fun `a soft-wrapped line is copied as one line`() {
+        // A long command or URL the terminal auto-wrapped must paste back as what was typed: a line
+        // break at the wrap column would run its first half on its own.
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("echo 12345678901".encodeToByteArray())
+        val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(1, 6))
+        assertEquals("echo 12345678901", sel.extract(emu.lines))
+    }
+
+    @Test
+    fun `a space falling on the wrap column survives the copy`() {
+        val emu = TerminalEmulator(cols = 5, rows = 3)
+        emu.feed("abcd efgh".encodeToByteArray())
+        val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(1, 4))
+        assertEquals("abcd efgh", sel.extract(emu.lines))
+    }
+
+    @Test
+    fun `a hard line break is still copied as one`() {
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("ab\r\ncd".encodeToByteArray())
+        val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(1, 2))
+        assertEquals("ab\ncd", sel.extract(emu.lines))
+    }
 }

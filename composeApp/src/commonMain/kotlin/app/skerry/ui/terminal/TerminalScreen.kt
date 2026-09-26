@@ -569,7 +569,7 @@ fun TerminalScreen(
         ctrl: Boolean = false,
     ): Boolean = state.reportMouse(
         button, type, posAt(x, y), shift, alt, ctrl,
-        x.toInt().coerceAtLeast(0), y.toInt().coerceAtLeast(0),
+        x.toInt().coerceAtLeast(0), (y - state.historyRows * metrics.cellHeight).toInt().coerceAtLeast(0),
     )
 
     // try/catch per clipboard coroutine: the scope from rememberCoroutineScope carries a regular Job (not

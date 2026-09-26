@@ -73,8 +73,10 @@ data class TerminalSelection(val anchor: TerminalPos, val focus: TerminalPos) {
 
     /**
      * Selection text: takes the covered segment of each spanned row, trims trailing whitespace (as
-     * terminals do on copy), and joins rows with `\n`. Columns past the end of a row are clamped to
-     * its length.
+     * terminals do on copy), and joins rows with `\n`. A row that soft-wraps into the next one
+     * ([wrapsToNextRow]) is joined without a break and untrimmed — it is one line the terminal cut,
+     * and a long command copied with a break in it would run in halves. Columns past the end of a
+     * row are clamped to its length.
      */
     fun extract(screen: List<List<TermCell>>): String {
         if (isEmpty) return ""
@@ -83,11 +85,19 @@ data class TerminalSelection(val anchor: TerminalPos, val focus: TerminalPos) {
         val firstRow = s.row.coerceAtLeast(0)
         val lastRow = e.row.coerceAtMost(screen.lastIndex)
         if (firstRow > lastRow) return ""
-        return (firstRow..lastRow).joinToString("\n") { r ->
-            val row = screen[r]
-            val from = (if (r == s.row) s.col else 0).coerceIn(0, row.size)
-            val to = (if (r == e.row) e.col else row.size).coerceIn(from, row.size)
-            buildString { for (c in from until to) append(row[c].text) }.trimEnd()
+        return buildString {
+            for (r in firstRow..lastRow) {
+                val row = screen[r]
+                val from = (if (r == s.row) s.col else 0).coerceIn(0, row.size)
+                val to = (if (r == e.row) e.col else row.size).coerceIn(from, row.size)
+                val segment = buildString { for (c in from until to) append(row[c].text) }
+                if (r < lastRow && row.wrapsToNextRow()) {
+                    append(segment)
+                } else {
+                    append(segment.trimEnd())
+                    if (r < lastRow) append('\n')
+                }
+            }
         }
     }
 }

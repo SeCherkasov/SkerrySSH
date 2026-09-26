@@ -2138,6 +2138,28 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `reportMouse counts rows from the top of the screen, not of the history`() = runTest {
+        // Mouse tracking on the primary buffer (fzf --height, less with mouse): a click on the
+        // bottom row was reported as row 24 + everything scrolled off, which no application maps back.
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        val esc = 27.toChar().toString()
+
+        session.emit((1..60).joinToString("\r\n") { "line $it" }.encodeToByteArray())
+        session.emit("$esc[?1000h$esc[?1006h".encodeToByteArray())
+        assertTrue(state.screen.size > state.rows, "history is part of the snapshot")
+        val handled = state.reportMouse(
+            MouseButton.Left, MouseEventType.Press, TerminalPos(state.screen.lastIndex, state.cols),
+        )
+
+        assertEquals(true, handled)
+        assertContentEquals("$esc[<0;${state.cols};${state.rows}M".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
     fun `capturePrimarySelection stores the current selection text`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

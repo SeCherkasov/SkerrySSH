@@ -62,6 +62,120 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `relative cursor moves with an enormous count stop at the edge instead of overflowing`() {
+        // cy + 2147483647 wrapped negative, survived coerceAtMost, and the next print indexed the
+        // grid at a negative row — an exception that closed the session on any host output.
+        for (move in listOf("B", "e", "E")) {
+            val emu = emulate(cols = 80, rows = 24, chunks = arrayOf("$esc[5;5H$esc[2147483647${move}x"))
+            assertEquals(23, emu.cursorRow, move)
+        }
+        for (move in listOf("C", "a")) {
+            val emu = emulate(cols = 80, rows = 24, chunks = arrayOf("$esc[1;5H$esc[2147483647$move"))
+            assertEquals(79, emu.cursorCol, move)
+        }
+    }
+
+    @Test
+    fun `ECH with an enormous count still erases to the end of the line`() {
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("abcdefghij\r$esc[3C$esc[2147483647X"))
+        assertEquals("abc", emu.asText())
+    }
+
+    @Test
+    fun `an ESC that interrupts an OSC starts the next sequence instead of printing it`() {
+        // `ESC ] 0;t ESC [31m A` — the ESC ends the title and begins the SGR; losing it printed
+        // `[31mA` as text.
+        val emu = emulate(chunks = arrayOf("$esc]0;t$esc[31mA"))
+        assertEquals("A", emu.asText())
+        assertEquals(TermColor.Red, emu.lines[0][0].style.fg)
+    }
+
+    @Test
+    fun `an ESC that interrupts a DCS starts the next sequence instead of printing it`() {
+        val emu = emulate(chunks = arrayOf("${esc}Pq#0$esc[31mA"))
+        assertEquals("A", emu.asText())
+        assertEquals(TermColor.Red, emu.lines[0][0].style.fg)
+    }
+
+    @Test
+    fun `an ESC that interrupts a CSI starts the next sequence instead of printing it`() {
+        val emu = emulate(chunks = arrayOf("$esc[1;$esc[31mA"))
+        assertEquals("A", emu.asText())
+        assertEquals(TermColor.Red, emu.lines[0][0].style.fg)
+    }
+
+    @Test
+    fun `a DECSC inside the alt screen does not replace the cursor 1049 saved for the shell`() {
+        // xterm keeps one saved-cursor slot per buffer. With one shared slot a TUI's own ESC 7
+        // overwrote the shell's, and leaving the alt screen put the prompt where the TUI had been.
+        val emu = emulate(chunks = arrayOf("$esc[3;3H$esc[?1049h$esc[10;10H${esc}7$esc[?1049l"))
+        assertEquals(2, emu.cursorRow)
+        assertEquals(2, emu.cursorCol)
+    }
+
+    @Test
+    fun `DECRC inside the alt screen restores what DECSC saved there`() {
+        val emu = emulate(chunks = arrayOf("$esc[?1049h$esc[10;10H${esc}7$esc[1;1H${esc}8"))
+        assertEquals(9, emu.cursorRow)
+        assertEquals(9, emu.cursorCol)
+    }
+
+    @Test
+    fun `a resize inside the alt screen moves the saved shell cursor with its text`() {
+        // vim open, window resized, vim closed: the prompt must land below `$ vim`, not on it.
+        val emu = emulate(cols = 20, rows = 5, chunks = arrayOf("1\r\n2\r\n3\r\n4\r\n\$ vim\r\n$esc[?1049h"))
+        emu.resize(10, 5)
+        emu.feed("$esc[?1049lX".encodeToByteArray())
+        val text = emu.asText()
+        assertTrue("\$ vim" in text, text)
+        assertTrue(text.lines().last() == "X", text)
+    }
+
+    @Test
+    fun `printing over the right half of a wide character erases its left half`() {
+        // xterm erases the whole wide character; a leftover Wide cell is drawn two columns wide,
+        // on top of the character that replaced its continuation.
+        val emu = emulate(chunks = arrayOf("中\r$esc[Cx"))
+        assertEquals(" ", emu.lines[0][0].text)
+        assertEquals(CellWidth.Single, emu.lines[0][0].width)
+        assertEquals("x", emu.lines[0][1].text)
+    }
+
+    @Test
+    fun `printing over the left half of a wide character erases its right half`() {
+        val emu = emulate(chunks = arrayOf("中\rx"))
+        assertEquals("x", emu.lines[0][0].text)
+        assertEquals(CellWidth.Single, emu.lines[0][1].width)
+        assertEquals(" ", emu.lines[0][1].text)
+    }
+
+    @Test
+    fun `erasing from the right half of a wide character erases the whole character`() {
+        val el = emulate(chunks = arrayOf("中\r$esc[C$esc[K"))
+        assertEquals(CellWidth.Single, el.lines[0][0].width)
+        assertEquals("", el.asText())
+        val ech = emulate(chunks = arrayOf("a中\r$esc[2C${esc}[X"))
+        assertEquals(CellWidth.Single, ech.lines[0][1].width)
+        assertEquals("a", ech.asText())
+    }
+
+    @Test
+    fun `erasing to the left half of a wide character erases the whole character`() {
+        val emu = emulate(chunks = arrayOf("a中b\r$esc[C$esc[1K"))
+        assertEquals(CellWidth.Single, emu.lines[0][2].width)
+        assertEquals("   b", emu.lines[0].joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
+    fun `a combining mark after a wide character in the last column joins that character`() {
+        // The cursor waits on the continuation half; the mark must go to the wide cell, not become a
+        // cell of its own at the start of the next row.
+        val emu = emulate(cols = 4, rows = 2, chunks = arrayOf("ab👨‍"))
+        assertEquals("👨‍", emu.lines[0][2].text)
+        assertEquals(" ", emu.lines[1][0].text)
+    }
+
+    @Test
     fun `grid has fixed dimensions`() {
         val emu = emulate(cols = 40, rows = 10, chunks = arrayOf("hi"))
         assertEquals(10, emu.lines.size)
