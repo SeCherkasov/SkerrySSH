@@ -1,5 +1,6 @@
 package app.skerry.shared.ai
 
+import app.skerry.shared.io.readAtMost
 import app.skerry.shared.terminal.isSafeTerminalInputChar
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -14,7 +15,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.readAvailable
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -175,26 +175,12 @@ class OpenAiProvider private constructor(
 
     /**
      * Reads at most [MAX_CATALOG_BYTES] from [channel] and fails if the endpoint has more to say.
-     * `readAvailable` returns what is buffered right now, so the loop runs until EOF or the cap —
-     * a chunked body would otherwise be cut mid-JSON. Reading stops at the cap: the connection is
-     * dropped by the caller's `execute` block and the rest of the body is never pulled.
+     * Reading stops at the cap: the connection is dropped by the caller's `execute` block and the
+     * rest of the body is never pulled.
      */
-    private suspend fun readCapped(channel: ByteReadChannel): String {
-        // Grown as needed rather than pre-allocated at the cap: a real catalog is a few KB, and the
-        // buffer is charged per refresh press.
-        var buffer = ByteArray(READ_CHUNK_BYTES)
-        var size = 0
-        while (size <= MAX_CATALOG_BYTES) {
-            if (size == buffer.size) buffer = buffer.copyOf(minOf(buffer.size * 2, MAX_CATALOG_BYTES + 1))
-            val read = channel.readAvailable(buffer, size, buffer.size - size)
-            if (read <= 0) break // EOF
-            size += read
-        }
-        if (size > MAX_CATALOG_BYTES) {
-            throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds $MAX_CATALOG_BYTES bytes")
-        }
-        return buffer.decodeToString(0, size)
-    }
+    private suspend fun readCapped(channel: ByteReadChannel): String =
+        channel.readAtMost(MAX_CATALOG_BYTES)?.decodeToString()
+            ?: throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds $MAX_CATALOG_BYTES bytes")
 
     override suspend fun close() {
         if (ownsHttp) {
@@ -234,7 +220,6 @@ class OpenAiProvider private constructor(
         /** Hard caps for the model catalog: the endpoint is remote and possibly broken or hostile. */
         const val MAX_CATALOG_SIZE = 2000
         const val MAX_MODEL_ID_LENGTH = 200
-        private const val READ_CHUNK_BYTES = 16 * 1024
         const val MAX_CATALOG_BYTES = 1_048_576 // 1 MiB
     }
 }
