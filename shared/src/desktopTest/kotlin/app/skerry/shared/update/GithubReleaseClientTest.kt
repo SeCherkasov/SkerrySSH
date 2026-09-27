@@ -1,15 +1,21 @@
 package app.skerry.shared.update
 
+import app.skerry.shared.io.ResponseSizeLimit
+import app.skerry.shared.io.responseTooLarge
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.pluginOrNull
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class GithubReleaseClientTest {
@@ -41,6 +47,19 @@ class GithubReleaseClientTest {
     fun `returns null on a non-success status`() = runTest {
         assertNull(GithubReleaseClient(client(HttpStatusCode.NotFound, """{"message": "Not Found"}""")).fetchLatest())
         assertNull(GithubReleaseClient(client(HttpStatusCode.Forbidden, """{"message": "rate limited"}""")).fetchLatest())
+    }
+
+    @Test
+    fun `an oversized release answer fails on the cap`() = runTest {
+        val http = HttpClient(MockEngine { respond(ByteReadChannel(ByteArray(8192)), HttpStatusCode.OK) }) {
+            install(ResponseSizeLimit) { maxBytes = 4096 }
+        }
+        assertNotNull(assertFails { GithubReleaseClient(http).fetchLatest() }.responseTooLarge())
+    }
+
+    @Test
+    fun `the default client carries the response cap`() {
+        GithubReleaseClient.defaultHttpClient().use { assertNotNull(it.pluginOrNull(ResponseSizeLimit)) }
     }
 
     @Test

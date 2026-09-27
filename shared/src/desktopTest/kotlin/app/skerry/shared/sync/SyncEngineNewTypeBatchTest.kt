@@ -42,7 +42,13 @@ class SyncEngineNewTypeBatchTest {
     ) : FakeSyncClient() {
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
             if (records.any { it.type == unknown.name }) {
-                throw SyncException(refusal, "unknown record type: ${unknown.name}")
+                val status = when (refusal) {
+                    SyncException.Kind.PROTOCOL -> 400
+                    SyncException.Kind.NOT_FOUND -> 404
+                    SyncException.Kind.UNAUTHORIZED -> 401
+                    else -> null
+                }
+                throw SyncException(refusal, "unknown record type: ${unknown.name}", status = status)
             }
             return super.push(session, records)
         }

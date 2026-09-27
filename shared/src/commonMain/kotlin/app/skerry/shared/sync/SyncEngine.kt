@@ -23,7 +23,7 @@ private val TYPES_NEWER_THAN_SOME_SERVERS =
  * the type fails validation (400) or the route is absent (404). Every other failure of that batch
  * is a real one and belongs to the caller — not swallowed as "the server is just old".
  */
-private val OLD_SERVER_REFUSALS = setOf(SyncException.Kind.PROTOCOL, SyncException.Kind.NOT_FOUND)
+private val OLD_SERVER_REFUSALS = setOf(400, 404)
 
 /**
  * Where the delta sync cursor (`lastSyncVersion`) is stored, one per [key].
@@ -188,7 +188,9 @@ class SyncEngine(
             // A 401, a 429, a 5xx or a dropped network say nothing about the record type, and hiding
             // them made a batch that will never be accepted look exactly like one the server is
             // merely too old for — so nothing was ever diagnosable.
-            if (e.kind !in OLD_SERVER_REFUSALS) throw e
+            // By status, not kind: PROTOCOL also covers a 413, a redirect, and a reply past the
+            // client's size cap, none of which says anything about the record type.
+            if (e.status !in OLD_SERVER_REFUSALS) throw e
             false
         }
 

@@ -1,5 +1,6 @@
 package app.skerry.shared.update
 
+import app.skerry.shared.io.ResponseSizeLimit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
@@ -30,8 +31,13 @@ class GithubReleaseClient(
     companion object {
         const val LATEST_RELEASE_URL = "https://api.github.com/repos/SeCherkasov/SkerrySSH/releases/latest"
 
-        /** Bare CIO client — the check is a single small GET, no negotiation plugins needed. */
-        fun defaultHttpClient(): HttpClient = HttpClient(CIO)
+        /** A release record is a few KiB; the cap keeps a hijacked or broken answer from filling memory. */
+        const val MAX_RESPONSE_BYTES = 4L * 1024 * 1024
+
+        /** CIO client with no negotiation plugins — the check is a single small GET. */
+        fun defaultHttpClient(): HttpClient = HttpClient(CIO) {
+            install(ResponseSizeLimit) { maxBytes = MAX_RESPONSE_BYTES }
+        }
 
         /**
          * One-shot fetch with a throwaway client: the check runs at most once a day, so pooling
