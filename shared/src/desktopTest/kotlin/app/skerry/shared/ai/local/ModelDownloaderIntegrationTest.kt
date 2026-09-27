@@ -11,7 +11,7 @@ import kotlin.time.Duration.Companion.minutes
 
 /**
  * Live download of the default catalog model from HuggingFace (CDN redirect, multi-gigabyte
- * body, resume, sha256) — regression for the default CIO requestTimeout (15s), which broke any
+ * body, resume, sha256) — regression for a whole-call request timeout (15 s), which broke any
  * longer download. Skipped in normal runs; enabled by `SKERRY_LOCAL_AI_DOWNLOAD_IT` — the
  * directory to download into (the model stays there; can be moved to ~/.local/share/skerry/models).
  *

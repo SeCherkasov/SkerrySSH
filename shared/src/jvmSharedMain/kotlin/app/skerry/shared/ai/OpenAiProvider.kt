@@ -3,10 +3,10 @@ package app.skerry.shared.ai
 import app.skerry.shared.io.ResponseSizeLimit
 import app.skerry.shared.io.readAtMost
 import app.skerry.shared.io.responseTooLarge
+import app.skerry.shared.io.untrustedHttpClient
 import app.skerry.shared.terminal.isSafeTerminalInputChar
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
@@ -52,7 +52,7 @@ class OpenAiProvider private constructor(
     constructor(config: OpenAiConfig, http: HttpClient, catalogHttp: HttpClient? = null) :
         this(config, http, ownsHttp = false, catalogHttp = catalogHttp)
 
-    /** Creates and owns its own CIO client — [close] closes it, catalog client included. */
+    /** Creates and owns its own client — [close] closes it, catalog client included. */
     constructor(config: OpenAiConfig) : this(config, defaultHttpClient(), ownsHttp = true, catalogHttp = catalogHttpClient())
 
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
@@ -93,8 +93,8 @@ class OpenAiProvider private constructor(
         } catch (e: Exception) {
             // An answer past the client's size cap is the endpoint's fault, not the network's.
             e.responseTooLarge()?.let { throw AiException(AiException.Kind.PROTOCOL, "AI response exceeds ${it.limit} bytes", e) }
-            // Not just IOException: Ktor CIO also throws UnresolvedAddressException (non-IO) for a
-            // bad host — any other failure is also NETWORK (mirrors KtorSyncClient.request).
+            // Not just IOException: an engine can throw a non-IO exception for a bad host (CIO's
+            // UnresolvedAddressException) — any other failure is also NETWORK (mirrors KtorSyncClient.request).
             throw AiException(AiException.Kind.NETWORK, "AI request failed: ${e.message}", e)
         }
     }
@@ -206,7 +206,7 @@ class OpenAiProvider private constructor(
     }
 
     companion object {
-        /** Provider over a shared process-wide HttpClient (the CIO engine isn't recreated per request). */
+        /** Provider over a shared process-wide HttpClient (the engine isn't recreated per request). */
         fun pooled(config: OpenAiConfig): OpenAiProvider = OpenAiProvider(config, shared)
 
         /**
@@ -217,14 +217,14 @@ class OpenAiProvider private constructor(
          */
         private val sharedNoRedirect: HttpClient by lazy { catalogHttpClient() }
 
-        internal fun catalogHttpClient(): HttpClient = HttpClient(CIO) {
+        internal fun catalogHttpClient(): HttpClient = untrustedHttpClient {
             followRedirects = false
             capResponses()
         }
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
         private val shared: HttpClient by lazy { defaultHttpClient() }
-        internal fun defaultHttpClient(): HttpClient = HttpClient(CIO) { capResponses() }
+        internal fun defaultHttpClient(): HttpClient = untrustedHttpClient { capResponses() }
 
         /**
          * The endpoint is user-configured and may be broken or hostile: without a cap a streamed

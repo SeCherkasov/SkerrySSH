@@ -29,7 +29,14 @@ object RdpTestCertificates {
         commonName: String = "rdp-test",
         dnsNames: List<String> = emptyList(),
         ipAddresses: List<String> = emptyList(),
-    ): SSLContext {
+    ): SSLContext = serverWithCertificate(commonName, dnsNames, ipAddresses).first
+
+    /** A server-side [SSLContext] and the certificate it presents, for a client meant to trust exactly that one. */
+    fun serverWithCertificate(
+        commonName: String = "rdp-test",
+        dnsNames: List<String> = emptyList(),
+        ipAddresses: List<String> = emptyList(),
+    ): Pair<SSLContext, X509Certificate> {
         val issued = selfSigned(commonName, dnsNames, ipAddresses)
         val keyStore = KeyStore.getInstance("PKCS12").apply {
             load(null, null)
@@ -37,9 +44,10 @@ object RdpTestCertificates {
         }
         val managers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
             .apply { init(keyStore, PASSWORD) }
-        return SSLContext.getInstance("TLS").apply {
+        val context = SSLContext.getInstance("TLS").apply {
             init(managers.keyManagers, null, SecureRandom())
         }
+        return context to issued.certificate
     }
 
     /**

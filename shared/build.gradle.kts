@@ -91,9 +91,13 @@ kotlin {
                 // Sync client (Phase 2): HTTP+WS to the self-hosted server. iOS is deferred — the client
                 // lives in the shared JVM node (desktop + Android), same as the sshj transport.
                 implementation(libs.ktor.client.core)
-                implementation(libs.ktor.client.cio)
+                // OkHttp rather than CIO: CIO bounds each response header line but not how many there
+                // are, so a hostile server could stream headers until the app ran out of memory.
+                implementation(libs.ktor.client.okhttp)
                 implementation(libs.ktor.client.content.negotiation)
-                implementation(libs.ktor.client.websockets)
+                // The frame codec alone: sockets to the server go through the client's own connector
+                // (io/UntrustedWebSocket.kt), not Ktor's client plugin.
+                implementation(libs.ktor.websockets)
                 implementation(libs.ktor.serialization.kotlinx.json)
                 // SRP-6a client side (verifier generator + client exchange).
                 implementation(libs.nimbus.srp)

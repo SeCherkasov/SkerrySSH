@@ -1,7 +1,10 @@
 package app.skerry.shared.sync
 
 import app.skerry.shared.io.ResponseSizeLimit
+import app.skerry.shared.io.WebSocketLimits
 import app.skerry.shared.io.readAtMost
+import app.skerry.shared.io.untrustedHttpClient
+import app.skerry.shared.io.untrustedWebSocket
 import app.skerry.sync.wire.AccountSummaryResponse
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
@@ -57,12 +60,9 @@ import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.timeout
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -81,6 +81,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
@@ -90,7 +91,7 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /**
- * JVM implementation of [SyncClient] (desktop + Android): Ktor CIO client + Nimbus SRP-6a.
+ * JVM implementation of [SyncClient] (desktop + Android): Ktor client + Nimbus SRP-6a.
  * Zero-knowledge: only the SRP verifier (derived from [authKey]) and encrypted blobs go to the
  * server; password/masterKey/dataKey stay on the device. SRP parameters: the 2048-bit RFC 5054
  * group, SHA-256 (matching the server).
@@ -315,7 +316,7 @@ class KtorSyncClient(
 
     override fun changes(session: SyncSession): Flow<SyncSignal> = flow {
         val wsUrl = serverUrl.replaceFirst("http", "ws") + "/sync"
-        http.webSocket(urlString = wsUrl, request = { bearerAuth(session.accessToken) }) {
+        untrustedWebSocket(wsUrl, session.accessToken, WS_LIMITS) {
             for (frame in incoming) {
                 if (frame is Frame.Text) parseSignal(frame.readText())?.let { emit(it) }
             }
@@ -537,7 +538,7 @@ class KtorSyncClient(
         // Open liveness endpoint (see server Plugins.kt `/healthz`). No bearer token — the ping
         // must succeed even without a session (vault locked). Any failure means unreachable (don't throw).
         // Tight per-request timeout: after a device sleep the pooled connection is often dead (NAT
-        // mappings dropped), and waiting out CIO's default 15s on it keeps the indicator stale.
+        // mappings dropped), and waiting out the default 15 s on it keeps the indicator stale.
         http.get("$serverUrl/healthz") {
             timeout { requestTimeoutMillis = PING_TIMEOUT_MS }
         }.status.isSuccess()
@@ -603,17 +604,7 @@ class KtorSyncClient(
     }
 
     private suspend fun HttpResponse.toException(): SyncException {
-        val kind = when (status) {
-            HttpStatusCode.Unauthorized -> SyncException.Kind.UNAUTHORIZED
-            HttpStatusCode.NotFound -> SyncException.Kind.NOT_FOUND
-            HttpStatusCode.Conflict -> SyncException.Kind.CONFLICT
-            HttpStatusCode.Gone -> SyncException.Kind.GONE
-            HttpStatusCode.Forbidden -> SyncException.Kind.FORBIDDEN
-            HttpStatusCode.TooManyRequests -> SyncException.Kind.TOO_MANY_REQUESTS
-            // Whole range, not just 500/502/503: a proxy can answer with codes the server never
-            // emits, and they all mean the same to the user — not your fault, retry later.
-            else -> if (status.value in 500..599) SyncException.Kind.SERVER_ERROR else SyncException.Kind.PROTOCOL
-        }
+        val kind = syncKindOf(status.value)
         // A deliberate refusal is where the server's own sentence is the whole information
         // ("registration is closed" vs "this account id is blocked", "storage quota exceeded" vs a
         // body past its cap): the status alone leaves the user with nothing to act on. Every other
@@ -661,12 +652,12 @@ class KtorSyncClient(
 
     companion object {
         /**
-         * Ping period for the `/sync` live-pull socket. CIO exempts WebSockets from its request
-         * timeout, so without pings a connection that died with no FIN/RST (Wi-Fi switch, suspend,
-         * NAT idle timeout) never errors: [changes] hangs on a dead socket while the status stays
-         * Online and live-pull is silently gone. The pinger detects the dead peer (no pong within
-         * ~2× the interval), fails the session, and the coordinator's watch loop reconnects with
-         * backoff. 30s also keeps NAT/proxy idle timeouts (typically ≥60s) from dropping the mapping.
+         * Ping period for the `/sync` live-pull socket. No request timeout covers a WebSocket once
+         * it is open, so without pings a connection that died with no FIN/RST (Wi-Fi switch,
+         * suspend, NAT idle timeout) never errors: [changes] hangs on a dead socket while the status
+         * stays Online and live-pull is silently gone. The pinger detects the dead peer (no pong
+         * within ~2× the interval), fails the session, and the coordinator's watch loop reconnects
+         * with backoff. 30s also keeps NAT/proxy idle timeouts (typically ≥60s) from dropping the mapping.
          */
         const val WS_PING_INTERVAL_MS = 30_000L
 
@@ -696,17 +687,23 @@ class KtorSyncClient(
          */
         const val MAX_RESPONSE_BYTES = 32L * 1024 * 1024
 
-        fun defaultHttpClient(): HttpClient = HttpClient(CIO) { syncClientConfig() }
+        /** Frames a socket to the server queues while its reader is busy: unbounded, as Ktor's client leaves them. */
+        const val WS_INCOMING_FRAMES = Channel.UNLIMITED
+
+        /** Everything a socket to the sync server — `/sync`, the share relay — may cost the client. */
+        val WS_LIMITS = WebSocketLimits(
+            maxFrameBytes = WS_MAX_FRAME_BYTES,
+            incomingFrames = WS_INCOMING_FRAMES,
+            pingIntervalMillis = WS_PING_INTERVAL_MS,
+        )
+
+        fun defaultHttpClient(): HttpClient = untrustedHttpClient { syncClientConfig() }
 
         internal fun HttpClientConfig<*>.syncClientConfig(maxResponseBytes: Long = MAX_RESPONSE_BYTES) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
-            // No global values — only the per-request ping timeout applies; the sync/auth calls keep
-            // the engine defaults, and WebSockets stay exempt (see WS_PING_INTERVAL_MS above).
+            // No values of its own: the real client brings them (untrustedHttpClient), and a test
+            // engine still needs the plugin for the ping's per-request timeout.
             install(HttpTimeout)
-            install(WebSockets) {
-                pingIntervalMillis = WS_PING_INTERVAL_MS
-                maxFrameSize = WS_MAX_FRAME_BYTES
-            }
             install(ResponseSizeLimit) { maxBytes = maxResponseBytes }
         }
     }
