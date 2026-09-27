@@ -34,7 +34,7 @@ class ResponseSizeLimitConfig {
 
 /**
  * Fails a response whose body runs past [ResponseSizeLimitConfig.maxBytes], stopping the read there.
- * The cap covers the body only: CIO bounds each header line, not how many there are.
+ * The cap covers the body only; the header section is the engine's (see [untrustedHttpClient]).
  *
  * Ktor 3 holds every non-streamed response whole in memory before client code sees it, so a cap
  * applied to the body afterwards bounds what is kept, not what was read: a broken or hostile server

@@ -37,6 +37,8 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Blocking read loop of a shell channel (ssh/telnet/serial) | `ssh/StreamShellChannel` |
 | SGR parsing, glyph metrics, reflow | `terminal/SgrParser`, `CharMetrics`, `TerminalReflow` |
 | Out-of-band step status from the shell, and hiding the echo of what the client typed | `terminal/TerminalStepMark` (`STEP_MARK_OSC`, `TerminalStepMark`) + `TerminalEmulator.expectStep`, `terminal/TerminalEchoFilter` — the runbook layer only builds the probes (`runbook/RunbookMarker`) |
+| HTTP to a server the app does not control (sync, AI endpoint, model or release host) | `io/untrustedHttpClient` (bounded header section, whole-call timeout) + a per-caller `io/ResponseSizeLimit` — never `HttpClient(CIO)` or a bare engine |
+| WebSocket to such a server | `io/untrustedWebSocket` + `WebSocketLimits` (frame cap, queue depth, pings, handshake deadline) — never Ktor's client `webSocket {}` |
 | Sync client⇆server wire DTO | module `:sync-wire` (`app.skerry.sync.wire`) — never mirror by hand |
 | Remote-desktop session as the UI sees it (pixels, updates, input) | `graphics/RemoteDesktopSession`, `RemoteDesktopUpdate`, `RemoteKeyEvent`, `RemoteDesktopQuality`, `RemoteDesktopCapabilities` — RDP and VNC adapters both implement this, protocol types stay behind it |
 | ARGB pixel buffer (resize/blit/fill/copyRect) | `graphics/RemoteFramebuffer` |

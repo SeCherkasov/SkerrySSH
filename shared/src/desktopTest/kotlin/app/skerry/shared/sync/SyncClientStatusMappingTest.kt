@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.shared.io.ResponseHeadTooLargeException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -116,6 +117,14 @@ class SyncClientStatusMappingTest {
         assertEquals(SyncException.Kind.PROTOCOL, failure.kind)
         assertEquals(413, failure.status)
         assertEquals("storage quota exceeded", failure.message)
+    }
+
+    /** A server whose answer head never ends is at fault, not the network: not retried as a drop would be. */
+    @Test
+    fun `an answer head past the cap is a protocol failure`() {
+        val failure = ResponseHeadTooLargeException(16 * 1024).toSyncTransportFailure()
+        assertEquals(SyncException.Kind.PROTOCOL, failure.kind)
+        assertEquals("response head exceeds 16384 bytes", failure.message)
     }
 
     @Test

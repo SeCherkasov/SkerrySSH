@@ -1,13 +1,14 @@
 package app.skerry.shared.share
 
+import app.skerry.shared.io.untrustedWebSocket
+import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.syncKindOf
 import app.skerry.shared.sync.toSyncTransportFailure
 import app.skerry.sync.wire.SharesResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
@@ -15,6 +16,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import io.ktor.websocket.CloseReason
+import io.ktor.websocket.DefaultWebSocketSession
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
@@ -24,11 +26,11 @@ import java.util.Base64
 
 /**
  * JVM (desktop + Android) implementation of [SessionShareClient] over the same Ktor client the sync
- * client uses. Frames arrive sealed and are passed through untouched — this layer only knows the
- * difference between the session's data (binary frames) and the relay's own control messages
- * (text frames: `viewers:N:...` and the `from:` line that names the socket the next frame arrived
- * on). An unknown control line is ignored, which is what lets a server add one without breaking
- * clients older than it.
+ * client uses, and a relay socket held to the same limits as its `/sync` one. Frames arrive
+ * sealed and are passed through untouched — this layer only knows the difference between the
+ * session's data (binary frames) and the relay's own control messages (text frames: `viewers:N:...`
+ * and the `from:` line that names the socket the next frame arrived on). An unknown control line
+ * is ignored, which is what lets a server add one without breaking clients older than it.
  *
  * [serverUrl] — base HTTP(S) URL with no trailing slash, as for
  * [app.skerry.shared.sync.KtorSyncClient].
@@ -76,7 +78,7 @@ class KtorSessionShareClient(
     private suspend fun connect(path: String, session: SyncSession, block: suspend (ShareChannel) -> Unit) {
         val wsUrl = serverUrl.replaceFirst("http", "ws") + path
         try {
-            http.webSocket(urlString = wsUrl, request = { bearerAuth(session.accessToken) }) {
+            untrustedWebSocket(wsUrl, session.accessToken, KtorSyncClient.WS_LIMITS) {
                 block(WebSocketShareChannel(this))
             }
         } catch (e: CancellationException) {
@@ -102,19 +104,13 @@ class KtorSessionShareClient(
     }
 
     private fun HttpResponse.toException(): SyncException {
-        val kind = when (status) {
-            HttpStatusCode.Unauthorized -> SyncException.Kind.UNAUTHORIZED
-            HttpStatusCode.NotFound -> SyncException.Kind.NOT_FOUND
-            HttpStatusCode.Forbidden -> SyncException.Kind.FORBIDDEN
-            else -> if (status.value in 500..599) SyncException.Kind.SERVER_ERROR else SyncException.Kind.PROTOCOL
-        }
-        return SyncException(kind, "server responded ${status.value}", status = status.value)
+        return SyncException(syncKindOf(status.value), "server responded ${status.value}", status = status.value)
     }
 }
 
 /** [ShareChannel] over a live Ktor WebSocket session. */
 private class WebSocketShareChannel(
-    private val socket: DefaultClientWebSocketSession,
+    private val socket: DefaultWebSocketSession,
 ) : ShareChannel {
 
     override suspend fun send(frame: ByteArray) = socket.send(Frame.Binary(true, frame))

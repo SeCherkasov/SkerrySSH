@@ -1,7 +1,7 @@
 package app.skerry.shared.ai.local
 
+import app.skerry.shared.io.untrustedHttpClient
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
@@ -33,17 +33,8 @@ class ModelDownloader(
     private val fileSystem: FileSystem,
     private val store: LocalModelStore,
 ) {
-    /**
-     * Downloader with its own CIO client, owned by the process and lives for its duration.
-     * CIO's default requestTimeout of 15s applies to the whole request, which would abort a
-     * gigabyte download mid-body with "Network error" at any speed, so it's disabled here
-     * (cancellation/socket drop still terminate normally and are picked up by Range resume).
-     */
-    constructor(fileSystem: FileSystem, store: LocalModelStore) : this(
-        HttpClient(CIO) { engine { requestTimeout = 0 } },
-        fileSystem,
-        store,
-    )
+    /** Downloader with its own client, owned by the process and lives for its duration. */
+    constructor(fileSystem: FileSystem, store: LocalModelStore) : this(defaultHttpClient(), fileSystem, store)
 
     fun download(model: LocalModel): Flow<ModelDownloadEvent> = flow {
         val part = store.partPath(model)
@@ -99,7 +90,7 @@ class ModelDownloader(
             if (e.kind == ModelDownloadException.Kind.INTEGRITY) store.delete(model)
             throw e
         } catch (e: Exception) {
-            // As in OpenAiProvider: not just IOException (CIO also throws non-IO on a bad host).
+            // As in OpenAiProvider: not just IOException (an engine may throw non-IO on a bad host).
             throw ModelDownloadException(ModelDownloadException.Kind.NETWORK, "Model download failed: ${e.message}", e)
         }
     }
@@ -111,7 +102,14 @@ class ModelDownloader(
             hashing.hash.hex()
         }
 
-    private companion object {
-        const val DEFAULT_CHUNK = 64 * 1024
+    internal companion object {
+        private const val DEFAULT_CHUNK = 64 * 1024
+
+        /**
+         * No whole-call timeout: 15 s would abort a gigabyte download mid-body with "Network error"
+         * at any speed. Connect and per-read timeouts still catch a dead host, and a dropped socket
+         * is picked up by Range resume.
+         */
+        internal fun defaultHttpClient(): HttpClient = untrustedHttpClient(requestTimeoutMillis = null)
     }
 }

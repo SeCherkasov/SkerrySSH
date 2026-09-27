@@ -1,8 +1,8 @@
 package app.skerry.shared.update
 
 import app.skerry.shared.io.ResponseSizeLimit
+import app.skerry.shared.io.untrustedHttpClient
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -34,8 +34,8 @@ class GithubReleaseClient(
         /** A release record is a few KiB; the cap keeps a hijacked or broken answer from filling memory. */
         const val MAX_RESPONSE_BYTES = 4L * 1024 * 1024
 
-        /** CIO client with no negotiation plugins — the check is a single small GET. */
-        fun defaultHttpClient(): HttpClient = HttpClient(CIO) {
+        /** Client with no negotiation plugins — the check is a single small GET. */
+        fun defaultHttpClient(): HttpClient = untrustedHttpClient {
             install(ResponseSizeLimit) { maxBytes = MAX_RESPONSE_BYTES }
         }
 
