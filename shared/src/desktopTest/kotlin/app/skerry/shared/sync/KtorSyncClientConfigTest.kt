@@ -15,7 +15,8 @@ class KtorSyncClientConfigTest {
     }
 
     @Test
-    fun `the sync sockets bound each frame`() {
+    fun `the sync sockets bound each frame and the queue of unread ones`() {
         assertEquals(64L * 1024, KtorSyncClient.WS_LIMITS.maxFrameBytes)
+        assertEquals(64, KtorSyncClient.WS_LIMITS.incomingFrames)
     }
 }

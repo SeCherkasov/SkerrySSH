@@ -81,7 +81,6 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
@@ -687,8 +686,17 @@ class KtorSyncClient(
          */
         const val MAX_RESPONSE_BYTES = 32L * 1024 * 1024
 
-        /** Frames a socket to the server queues while its reader is busy: unbounded, as Ktor's client leaves them. */
-        const val WS_INCOMING_FRAMES = Channel.UNLIMITED
+        /**
+         * Frames a socket to the server queues while its reader is busy — a signal is starting a
+         * pull, a share viewer is still drawing. Past it the client stops reading and the rest
+         * waits in TCP on the server's side, so what a server can park in this process is bounded
+         * by this times [WS_MAX_FRAME_BYTES].
+         *
+         * The price of backpressure over TCP: a server's pings queue behind the data too, so a
+         * reader stuck past the server's ping timeout loses the socket rather than just pausing it.
+         * `/sync` reconnects on its own; a share session ends.
+         */
+        const val WS_INCOMING_FRAMES = 64
 
         /** Everything a socket to the sync server — `/sync`, the share relay — may cost the client. */
         val WS_LIMITS = WebSocketLimits(
