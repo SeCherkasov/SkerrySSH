@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.shared.vault.VaultRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -29,3 +30,6 @@ internal open class FakeSyncClient(var serverRecords: List<RemoteRecord> = empty
     override suspend fun ping(): Boolean = true
     override suspend fun close() {}
 }
+
+/** A vault record as the server would hand it to another device. */
+internal fun VaultRecord.toRemote() = RemoteRecord(id, type.name, version, updatedAt, deviceId, deleted, blob)

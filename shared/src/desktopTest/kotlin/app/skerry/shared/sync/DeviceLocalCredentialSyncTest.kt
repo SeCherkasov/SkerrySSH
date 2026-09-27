@@ -33,8 +33,6 @@ class DeviceLocalCredentialSyncTest {
     private val password = "correct horse battery staple"
     private val session = SyncSession("acct", "access", "refresh")
 
-    private fun VaultRecord.toRemote() = RemoteRecord(id, type.name, version, updatedAt, deviceId, deleted, blob)
-
     private fun newVault(deviceId: String) = FileVault(
         path = Files.createTempDirectory("skerry-devlocal-$deviceId").resolve("vault.json").toString().toPath(),
         crypto = IonspinVaultCrypto(),

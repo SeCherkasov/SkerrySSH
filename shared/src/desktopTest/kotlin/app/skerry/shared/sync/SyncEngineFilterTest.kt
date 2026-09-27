@@ -3,7 +3,6 @@ package app.skerry.shared.sync
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
-import app.skerry.shared.vault.VaultRecord
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.shared.vault.trashRecordId
 import kotlinx.coroutines.runBlocking
@@ -26,8 +25,6 @@ import kotlin.test.assertTrue
 class SyncEngineFilterTest {
 
     private val password = "correct horse battery staple"
-
-    private fun VaultRecord.toRemote() = RemoteRecord(id, type.name, version, updatedAt, deviceId, deleted, blob)
 
     private fun newVault(deviceId: String) = FileVault(
         path = Files.createTempDirectory("skerry-filter-$deviceId").resolve("vault.json").toString().toPath(),

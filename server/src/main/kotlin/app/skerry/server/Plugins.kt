@@ -2,6 +2,8 @@ package app.skerry.server
 
 import app.skerry.server.auth.TokenService
 import app.skerry.server.config.MetricsExposure
+import app.skerry.server.db.StorageQuota
+import app.skerry.server.db.StorageQuotaExceededException
 import app.skerry.server.metrics.HTTP_REQUESTS_METRIC
 import app.skerry.server.metrics.JwtRejection
 import app.skerry.server.metrics.RejectReason
@@ -234,6 +236,16 @@ fun Application.configureServer(services: Services) {
     install(StatusPages) {
         exception<BadRequestException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "bad request"))
+        }
+        // 413, the answer a body past SKERRY_MAX_BODY_BYTES already gets: the client does not retry
+        // it, and a push that would not fit today will not fit on the next cycle either.
+        exception<StorageQuotaExceededException> { call, cause ->
+            services.metrics.requestRejected(RejectReason.STORAGE_QUOTA)
+            val reason = when (cause.quota) {
+                StorageQuota.ACCOUNT -> "account storage quota exceeded (the teams it owns count towards it)"
+                StorageQuota.SPACE -> "team space storage quota exceeded"
+            }
+            call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse(reason))
         }
         exception<Throwable> { call, cause ->
             services.metrics.unhandledException()

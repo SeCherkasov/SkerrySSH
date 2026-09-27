@@ -78,6 +78,8 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run -Pse
 | `SKERRY_TOMBSTONE_DAYS` | `90` | 删除墓碑在被物理清理前保留多久。 |
 | `SKERRY_CORS_HOSTS` | *(空)* | 逗号分隔的允许 CORS 来源。为空则禁用 CORS（原生客户端不受其约束）。 |
 | `SKERRY_MAX_BODY_BYTES` | `4194304`（4 MiB） | 请求体上限（防 OOM/滥用）；更大的请求会得到 `413`。 |
+| `SKERRY_MAX_ACCOUNT_BYTES` | `134217728`（128 MiB） | 单个账户可存储的密文上限：其保险库加上它所拥有团队的全部共享空间。会使其超出上限的推送得到 `413`；不增加体积的修改照常同步。`0` 表示不限。 |
+| `SKERRY_MAX_SCOPE_BYTES` | `134217728`（128 MiB） | 团队单个共享空间（全团队或某个范围）的同一上限。`0` 表示不限。 |
 | `SKERRY_DEV` | *(未设置)* | `1` 解锁默认 JWT 密钥，仅用于本地开发。 |
 | `SKERRY_METRICS` | `off` | Prometheus `/metrics`：`off`（404）、`token`（bearer）、`open`（无凭据）。 |
 | `SKERRY_METRICS_TOKEN` | *(空)* | `SKERRY_METRICS=token` 时使用的 bearer 令牌。模式为 `token` 而此项为空时启动失败。 |

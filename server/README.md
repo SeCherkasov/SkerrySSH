@@ -83,6 +83,8 @@ runs — production only *requires* a stable `SKERRY_JWT_SECRET`.
 | `SKERRY_TOMBSTONE_DAYS` | `90` | How long deletion tombstones are retained before physical cleanup. |
 | `SKERRY_CORS_HOSTS` | *(empty)* | Comma-separated allowed CORS origins. Empty disables CORS (native clients aren't subject to it). |
 | `SKERRY_MAX_BODY_BYTES` | `4194304` (4 MiB) | Request-body cap (OOM/abuse guard); larger requests get `413`. |
+| `SKERRY_MAX_ACCOUNT_BYTES` | `134217728` (128 MiB) | Most ciphertext one account may store: its vault plus every share space of the teams it owns. A push that would grow it past this gets `413`; edits that don't grow it still sync. `0` = unlimited. |
+| `SKERRY_MAX_SCOPE_BYTES` | `134217728` (128 MiB) | The same cap for one share space of a team (team-wide or a scope). `0` = unlimited. |
 | `SKERRY_DEV` | *(unset)* | `1` unlocks the default JWT secret for local development only. |
 | `SKERRY_METRICS` | `off` | Prometheus `/metrics`: `off` (404), `token` (bearer), `open` (no credential). |
 | `SKERRY_METRICS_TOKEN` | *(empty)* | Bearer token for `SKERRY_METRICS=token`. Startup fails if the mode is `token` and this is empty. |

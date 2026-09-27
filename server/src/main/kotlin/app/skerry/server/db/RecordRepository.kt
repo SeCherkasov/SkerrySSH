@@ -61,7 +61,13 @@ data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val c
  * concurrent upserts so two transactions can't assign the same `serverSeq`. Not needed for SQLite
  * (pool=1, single writer).
  */
-class RecordRepository(private val db: Database, private val lockAccountRow: Boolean = false) {
+class RecordRepository(
+    private val db: Database,
+    private val lockAccountRow: Boolean = false,
+    private val page: PullPageLimits = PullPageLimits(),
+    /** Stored-ciphertext cap per account, its teams included (see [enforceAccountQuota]); 0 ⇒ unlimited. */
+    private val maxAccountBytes: Long = 0,
+) {
 
     /**
      * Batch upsert with LWW. For each incoming record, the larger of (`version`, then `deviceId`
@@ -75,6 +81,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
         // READ COMMITTED a re-SELECT would see a concurrent commit and regress the cursor.
         val seqBefore = (if (lockAccountRow) accountQuery.forUpdate() else accountQuery).single()[Accounts.syncSeq]
         var seq = seqBefore
+        var grew = 0L
 
         val result = incoming.map { rec ->
             val existing = Records.selectAll()
@@ -88,6 +95,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             if (wins) {
                 seq += 1
                 val newSeq = seq
+                grew += rec.blob.size - (existing?.get(Records.blob)?.bytes?.size ?: 0)
                 if (existing == null) {
                     Records.insert {
                         it[Records.accountId] = accountId
@@ -117,6 +125,8 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             }
         }
 
+        enforceAccountQuota(maxAccountBytes, grew, accountId)
+
         val changed = seq != seqBefore
         if (changed) {
             Accounts.update({ Accounts.id eq accountId }) { it[syncSeq] = seq }
@@ -136,12 +146,17 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             .map { it[Records.recordId] }
     }
 
-    /** Delta: records with `serverSeq > since`, ordered by ascending cursor. */
+    /**
+     * One page of the delta: records with `serverSeq > since`, ordered by ascending cursor, cut to
+     * [PullPageLimits]. The rest follows from the last record's `serverSeq`; an empty page means the
+     * delta is exhausted.
+     */
     suspend fun delta(accountId: String, since: Long): List<StoredRecord> = dbTransaction(db) {
         Records.selectAll()
             .where { (Records.accountId eq accountId) and (Records.serverSeq greater since) }
             .orderBy(Records.serverSeq to SortOrder.ASC)
-            .map { it.toStoredRecord() }
+            .page(page, Records.blob) { it.toStoredRecord() }
+            .records
     }
 
     private fun org.jetbrains.exposed.v1.core.ResultRow.toStoredRecord() = StoredRecord(

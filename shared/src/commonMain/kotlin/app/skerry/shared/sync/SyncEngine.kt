@@ -194,7 +194,7 @@ class SyncEngine(
             false
         }
 
-    /** Pulls delta pages until exhausted (for future pagination), merging each page into the vault. */
+    /** Pulls delta pages until an empty one (the server pages the delta), merging each page into the vault. */
     private suspend fun drainPull(session: SyncSession, from: Long, onMerged: (MergeResult) -> Unit): Long {
         var cursor = from
         // Filter is read once per drainPull and re-read only after an incoming SETTINGS record is
