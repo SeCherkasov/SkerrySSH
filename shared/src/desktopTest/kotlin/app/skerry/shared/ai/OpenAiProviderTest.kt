@@ -1,14 +1,18 @@
 package app.skerry.shared.ai
 
+import app.skerry.shared.io.ResponseSizeLimit
+import app.skerry.shared.io.responseTooLarge
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.pluginOrNull
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.builtins.serializer
 import kotlinx.coroutines.test.runTest
@@ -19,6 +23,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class OpenAiProviderTest {
@@ -139,6 +144,39 @@ class OpenAiProviderTest {
 
         val ex = assertFailsWith<AiException> { provider.chat(request).toList() }
         assertEquals(AiException.Kind.RATE_LIMITED, ex.kind)
+    }
+
+    @Test
+    fun `an answer past the response cap is a protocol error`() = runTest {
+        val http = HttpClient(MockEngine {
+            respond(content = ByteReadChannel(sse("x".repeat(8192)).encodeToByteArray()), status = HttpStatusCode.OK)
+        }) { install(ResponseSizeLimit) { maxBytes = 4096 } }
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-x"), http)
+
+        val ex = assertFailsWith<AiException> { provider.chat(request).toList() }
+        assertEquals(AiException.Kind.PROTOCOL, ex.kind)
+    }
+
+    @Test
+    fun `a catalog past the response cap is a protocol error`() = runTest {
+        val http = HttpClient(MockEngine {
+            respond(content = ByteReadChannel(ByteArray(8192) { 'x'.code.toByte() }), status = HttpStatusCode.OK)
+        }) { install(ResponseSizeLimit) { maxBytes = 4096 } }
+
+        val ex = assertFailsWith<AiException> { providerWithCatalog(http).listModels() }
+        assertEquals(AiException.Kind.PROTOCOL, ex.kind)
+        assertNotNull(ex.cause?.responseTooLarge(), "failed on something other than the cap: $ex")
+    }
+
+    @Test
+    fun `the provider's own clients carry the response cap`() {
+        for (http in listOf(OpenAiProvider.defaultHttpClient(), OpenAiProvider.catalogHttpClient())) {
+            try {
+                assertNotNull(http.pluginOrNull(ResponseSizeLimit))
+            } finally {
+                http.close()
+            }
+        }
     }
 
     // ---- listModels (the BYOK model catalog) ----

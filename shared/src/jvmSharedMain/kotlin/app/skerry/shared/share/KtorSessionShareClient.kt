@@ -2,6 +2,7 @@ package app.skerry.shared.share
 
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.toSyncTransportFailure
 import app.skerry.sync.wire.SharesResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -83,7 +84,7 @@ class KtorSessionShareClient(
         } catch (e: SyncException) {
             throw e
         } catch (e: Exception) {
-            throw SyncException(SyncException.Kind.NETWORK, "share relay error: ${e.message}", e)
+            throw e.toSyncTransportFailure("share relay error")
         }
     }
 
@@ -97,7 +98,7 @@ class KtorSessionShareClient(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        throw SyncException(SyncException.Kind.NETWORK, "network error: ${e.message}", e)
+        throw e.toSyncTransportFailure()
     }
 
     private fun HttpResponse.toException(): SyncException {
@@ -107,7 +108,7 @@ class KtorSessionShareClient(
             HttpStatusCode.Forbidden -> SyncException.Kind.FORBIDDEN
             else -> if (status.value in 500..599) SyncException.Kind.SERVER_ERROR else SyncException.Kind.PROTOCOL
         }
-        return SyncException(kind, "server responded ${status.value}")
+        return SyncException(kind, "server responded ${status.value}", status = status.value)
     }
 }
 

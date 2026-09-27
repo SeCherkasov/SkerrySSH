@@ -1,8 +1,11 @@
 package app.skerry.shared.ai
 
+import app.skerry.shared.io.ResponseSizeLimit
 import app.skerry.shared.io.readAtMost
+import app.skerry.shared.io.responseTooLarge
 import app.skerry.shared.terminal.isSafeTerminalInputChar
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -88,6 +91,8 @@ class OpenAiProvider private constructor(
         } catch (e: AiException) {
             throw e
         } catch (e: Exception) {
+            // An answer past the client's size cap is the endpoint's fault, not the network's.
+            e.responseTooLarge()?.let { throw AiException(AiException.Kind.PROTOCOL, "AI response exceeds ${it.limit} bytes", e) }
             // Not just IOException: Ktor CIO also throws UnresolvedAddressException (non-IO) for a
             // bad host — any other failure is also NETWORK (mirrors KtorSyncClient.request).
             throw AiException(AiException.Kind.NETWORK, "AI request failed: ${e.message}", e)
@@ -156,6 +161,7 @@ class OpenAiProvider private constructor(
         } catch (e: AiException) {
             throw e
         } catch (e: Exception) {
+            e.responseTooLarge()?.let { throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds ${it.limit} bytes", e) }
             // Same ladder as chat(): a typo'd host raises UnresolvedAddressException, which is not
             // an IOException — without this the UI would call a plain network failure "unknown".
             throw AiException(AiException.Kind.NETWORK, "Model catalog request failed: ${e.message}", e)
@@ -211,16 +217,29 @@ class OpenAiProvider private constructor(
          */
         private val sharedNoRedirect: HttpClient by lazy { catalogHttpClient() }
 
-        private fun catalogHttpClient(): HttpClient = HttpClient(CIO) { followRedirects = false }
+        internal fun catalogHttpClient(): HttpClient = HttpClient(CIO) {
+            followRedirects = false
+            capResponses()
+        }
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
         private val shared: HttpClient by lazy { defaultHttpClient() }
-        private fun defaultHttpClient(): HttpClient = HttpClient(CIO)
+        internal fun defaultHttpClient(): HttpClient = HttpClient(CIO) { capResponses() }
+
+        /**
+         * The endpoint is user-configured and may be broken or hostile: without a cap a streamed
+         * answer (read line by line, a line itself unbounded) could grow until the app runs out of
+         * memory. A real answer is a few hundred KiB at most.
+         */
+        private fun HttpClientConfig<*>.capResponses() {
+            install(ResponseSizeLimit) { maxBytes = MAX_RESPONSE_BYTES }
+        }
 
         /** Hard caps for the model catalog: the endpoint is remote and possibly broken or hostile. */
         const val MAX_CATALOG_SIZE = 2000
         const val MAX_MODEL_ID_LENGTH = 200
         const val MAX_CATALOG_BYTES = 1_048_576 // 1 MiB
+        const val MAX_RESPONSE_BYTES = 16L * 1024 * 1024
     }
 }
 

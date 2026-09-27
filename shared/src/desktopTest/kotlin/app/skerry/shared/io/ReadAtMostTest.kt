@@ -1,12 +1,17 @@
 package app.skerry.shared.io
 
+import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.cancel
+import io.ktor.utils.io.writeFully
 import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
 import kotlinx.io.Source
 import kotlin.test.Test
+import java.io.IOException
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFails
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -57,6 +62,16 @@ class ReadAtMostTest {
             channel.readAtMost(limit)
             assertTrue(channel.consumed <= limit + 1, "took ${channel.consumed} bytes for a limit of $limit")
         }
+    }
+
+    /** Ktor's `readAvailable` answers a cancelled channel with -1, exactly as it answers the end. */
+    @Test
+    fun `a body cut off mid-read fails instead of reading as whole`() = runTest {
+        val channel = ByteChannel()
+        channel.writeFully(ByteArray(10))
+        channel.flush()
+        channel.cancel(IOException("connection reset"))
+        assertFails { channel.readAtMost(LIMIT) }
     }
 
     private companion object {

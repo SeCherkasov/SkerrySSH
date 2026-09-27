@@ -9,8 +9,11 @@ import app.skerry.shared.vault.trashRecordId
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import java.io.IOException
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -108,7 +111,7 @@ class SyncEngineFilterTest {
             override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
                 if (records.any { it.type == RecordType.TRASH.name }) {
                     // How a server without the type actually answers: the type fails validation.
-                    throw SyncException(SyncException.Kind.PROTOCOL, "unknown record type: TRASH")
+                    throw SyncException(SyncException.Kind.PROTOCOL, "unknown record type: TRASH", status = 400)
                 }
                 return super.push(session, records)
             }
@@ -119,5 +122,36 @@ class SyncEngineFilterTest {
         assertTrue(RecordType.HOST.name in pushedTypes, "host must reach a server that can't take the trash")
         assertFalse(RecordType.TRASH.name in pushedTypes)
         assertTrue(outcome.pushed > 0, "the cycle must report the records it did push")
+    }
+
+    /**
+     * Only a 400 or a 404 is how an old server refuses a type. A reply past the client's size cap,
+     * or a 413 for a batch past the server's, says nothing about the record type.
+     */
+    @Test
+    fun `an optional push failing on anything but a type refusal is not taken for an old server`() {
+        runBlocking {
+            initializeVaultCrypto()
+            val vault = newVault("devD")
+            vault.create(password.toCharArray())
+            vault.put("h1", RecordType.HOST, "host".encodeToByteArray())
+            vault.put(trashRecordId(RecordType.HOST, "h0"), RecordType.TRASH, "snapshot".encodeToByteArray())
+
+            val failures = listOf(
+                SyncException(SyncException.Kind.PROTOCOL, "server response exceeds 1024 bytes", IOException("cap")),
+                // Past the server's per-push body cap: a real refusal, but not of the record type.
+                SyncException(SyncException.Kind.PROTOCOL, "server responded 413", status = 413),
+            )
+            for (thrown in failures) {
+                val client = object : FakeSyncClient() {
+                    override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
+                        if (records.any { it.type == RecordType.TRASH.name }) throw thrown
+                        return super.push(session, records)
+                    }
+                }
+                val failure = assertFailsWith<SyncException> { SyncEngine(client, vault, InMemorySyncStateStore()).sync(session) }
+                assertEquals(thrown.message, failure.message)
+            }
+        }
     }
 }

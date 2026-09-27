@@ -17,7 +17,11 @@ internal suspend fun ByteReadChannel.readAtMost(limit: Int): ByteArray? {
     while (filled <= limit) {
         if (filled == buffer.size) buffer = buffer.copyOf(minOf(buffer.size * 2, limit + 1))
         val read = readAvailable(buffer, filled, buffer.size - filled)
-        if (read == -1) break
+        if (read == -1) {
+            // A cancelled channel reads as -1 too; without this a body cut off mid-way reads as whole.
+            closedCause?.let { throw it }
+            break
+        }
         filled += read
     }
     return if (filled > limit) null else buffer.copyOf(filled)

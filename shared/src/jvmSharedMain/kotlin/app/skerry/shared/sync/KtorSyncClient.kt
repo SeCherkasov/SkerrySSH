@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.shared.io.ResponseSizeLimit
 import app.skerry.shared.io.readAtMost
 import app.skerry.sync.wire.AccountSummaryResponse
 import app.skerry.sync.wire.ChallengeRequest
@@ -54,6 +55,7 @@ import app.skerry.sync.wire.TeamScopesResponse
 import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
@@ -558,7 +560,7 @@ class KtorSyncClient(
     private suspend fun put(path: String, block: io.ktor.client.request.HttpRequestBuilder.() -> Unit): HttpResponse =
         request { http.put("$serverUrl$path", block) }
 
-    /** Wraps network failures in [SyncException] NETWORK (instead of a bare IOException escaping). */
+    /** Wraps transport failures in [SyncException] (instead of a bare IOException escaping). */
     private suspend fun request(call: suspend () -> HttpResponse): HttpResponse = try {
         call()
     } catch (e: CancellationException) {
@@ -566,7 +568,7 @@ class KtorSyncClient(
     } catch (e: SyncException) {
         throw e
     } catch (e: Exception) {
-        throw SyncException(SyncException.Kind.NETWORK, "network error: ${e.message}", e)
+        throw e.toSyncTransportFailure()
     }
 
     /** 2xx — ok (body not needed), otherwise [SyncException] by status. */
@@ -616,13 +618,13 @@ class KtorSyncClient(
         // information ("registration is closed" vs "this account id is blocked"): the status alone
         // leaves the user with nothing to act on. Every other kind keeps the neutral status message.
         val message = if (kind == SyncException.Kind.FORBIDDEN) serverErrorMessage() else null
-        return SyncException(kind, message ?: "server responded ${status.value}")
+        return SyncException(kind, message ?: "server responded ${status.value}", status = status.value)
     }
 
     /**
      * The `error` field of the server's error body, or null when the body isn't one — a reverse
      * proxy's HTML error page must not become the message shown to the user. Bounded twice over: an
-     * oversized body is not decoded (Ktor has already buffered it whole), and the message is trimmed
+     * oversized body is not decoded (Ktor has already buffered it, up to [MAX_RESPONSE_BYTES]), and the message is trimmed
      * to what a UI line can carry. The server this points at is user-configured, so "it wouldn't
      * send that" isn't a guarantee.
      */
@@ -681,7 +683,19 @@ class KtorSyncClient(
         /** Health-ping timeout (see [ping]) — /healthz answers in milliseconds, 5s is generous. */
         const val PING_TIMEOUT_MS = 5_000L
 
-        fun defaultHttpClient(): HttpClient = HttpClient(CIO) {
+        /**
+         * Largest HTTP response body this client will read. Ktor holds a whole response in memory
+         * before the client sees it, so without this a broken or hostile server can run the app out
+         * of memory, taking every open session down with sync. Decoding multiplies it several times
+         * over (the saved bytes, their text, the decoded blobs), which an Android heap must still
+         * hold. A pull is not paged and carries the whole vault, so this is also the largest vault a
+         * device can pull; the server takes at most 4 MiB per push.
+         */
+        const val MAX_RESPONSE_BYTES = 32L * 1024 * 1024
+
+        fun defaultHttpClient(): HttpClient = HttpClient(CIO) { syncClientConfig() }
+
+        internal fun HttpClientConfig<*>.syncClientConfig(maxResponseBytes: Long = MAX_RESPONSE_BYTES) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
             // No global values — only the per-request ping timeout applies; the sync/auth calls keep
             // the engine defaults, and WebSockets stay exempt (see WS_PING_INTERVAL_MS above).
@@ -690,6 +704,7 @@ class KtorSyncClient(
                 pingIntervalMillis = WS_PING_INTERVAL_MS
                 maxFrameSize = WS_MAX_FRAME_BYTES
             }
+            install(ResponseSizeLimit) { maxBytes = maxResponseBytes }
         }
     }
 }

@@ -186,8 +186,16 @@ sealed interface SyncSignal {
     data object Membership : SyncSignal
 }
 
-/** Sync client error: network, protocol, or expected (no account / wrong password). */
-class SyncException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
+/**
+ * Sync client error: network, protocol, or expected (no account / wrong password). [status] is the HTTP status of the answer that refused the call, or null when the failure was not
+ * an answer at all — a dropped connection, or a reply past the client's size cap.
+ */
+class SyncException(
+    val kind: Kind,
+    message: String,
+    cause: Throwable? = null,
+    val status: Int? = null,
+) : Exception(message, cause) {
     enum class Kind {
         NETWORK,
         UNAUTHORIZED,
