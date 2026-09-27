@@ -323,4 +323,8 @@ enum class WsCloseReason(val label: String) {
     ERROR("error"),
 }
 
-enum class RejectReason(val label: String) { LENGTH_REQUIRED("length_required"), BODY_TOO_LARGE("body_too_large") }
+enum class RejectReason(val label: String) {
+    LENGTH_REQUIRED("length_required"),
+    BODY_TOO_LARGE("body_too_large"),
+    STORAGE_QUOTA("storage_quota"),
+}

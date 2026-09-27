@@ -614,10 +614,12 @@ class KtorSyncClient(
             // emits, and they all mean the same to the user — not your fault, retry later.
             else -> if (status.value in 500..599) SyncException.Kind.SERVER_ERROR else SyncException.Kind.PROTOCOL
         }
-        // A deliberate refusal is the one case where the server's own sentence is the whole
-        // information ("registration is closed" vs "this account id is blocked"): the status alone
-        // leaves the user with nothing to act on. Every other kind keeps the neutral status message.
-        val message = if (kind == SyncException.Kind.FORBIDDEN) serverErrorMessage() else null
+        // A deliberate refusal is where the server's own sentence is the whole information
+        // ("registration is closed" vs "this account id is blocked", "storage quota exceeded" vs a
+        // body past its cap): the status alone leaves the user with nothing to act on. Every other
+        // answer keeps the neutral status message.
+        val relayed = kind == SyncException.Kind.FORBIDDEN || status == HttpStatusCode.PayloadTooLarge
+        val message = if (relayed) serverErrorMessage() else null
         return SyncException(kind, message ?: "server responded ${status.value}", status = status.value)
     }
 
@@ -688,8 +690,9 @@ class KtorSyncClient(
          * before the client sees it, so without this a broken or hostile server can run the app out
          * of memory, taking every open session down with sync. Decoding multiplies it several times
          * over (the saved bytes, their text, the decoded blobs), which an Android heap must still
-         * hold. A pull is not paged and carries the whole vault, so this is also the largest vault a
-         * device can pull; the server takes at most 4 MiB per push.
+         * hold. A server of this version pages a pull at 4 MiB of ciphertext (one larger record gets a
+         * page to itself, and the server takes at most 4 MiB per push); an older one answers with the
+         * whole delta, so against it this is also the largest vault a device can pull.
          */
         const val MAX_RESPONSE_BYTES = 32L * 1024 * 1024
 

@@ -1,6 +1,7 @@
 package app.skerry.server.db
 
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.VarCharColumnType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -12,6 +13,9 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+
+/** Width of the `team_id` and `scope_id` columns, for binding them in raw SQL. */
+private const val SPACE_ID_LENGTH = 64
 
 /** A page of one share space's delta plus the cursor to resume from (see [TeamRecordRepository.delta]). */
 data class TeamDeltaPage(val records: List<StoredRecord>, val cursor: Long)
@@ -52,13 +56,51 @@ data class TeamUpsertResult(
  * them up by `updatedAt` age (ISO-8601 UTC, comparable lexicographically). Clients apply a
  * redelivered tombstone idempotently.
  */
-class TeamRecordRepository(private val db: Database, private val lockTeamRow: Boolean = false) {
+class TeamRecordRepository(
+    private val db: Database,
+    private val lockTeamRow: Boolean = false,
+    private val page: PullPageLimits = PullPageLimits(),
+    /** Stored-ciphertext cap per share space (see [upsert]); 0 ⇒ unlimited. */
+    private val maxScopeBytes: Long = 0,
+    /** The owner's cap, which a team's spaces count towards (see [enforceAccountQuota]); 0 ⇒ unlimited. */
+    private val maxAccountBytes: Long = 0,
+) {
+
+    /** Inserts [rec] as a new row of the space, or overwrites the team's row with its id. */
+    private fun write(teamId: String, scopeId: String, rec: IncomingRecord, isNew: Boolean, newSeq: Long) {
+        if (isNew) {
+            TeamRecords.insert {
+                it[TeamRecords.teamId] = teamId
+                it[TeamRecords.scopeId] = scopeId
+                it[recordId] = rec.id
+                it[type] = rec.type
+                it[version] = rec.version
+                it[updatedAt] = rec.updatedAt
+                it[deviceId] = rec.deviceId
+                it[deleted] = rec.deleted
+                it[blob] = ExposedBlob(rec.blob)
+                it[teamSeq] = newSeq
+            }
+        } else {
+            TeamRecords.update({ (TeamRecords.teamId eq teamId) and (TeamRecords.recordId eq rec.id) }) {
+                it[type] = rec.type
+                it[version] = rec.version
+                it[updatedAt] = rec.updatedAt
+                it[deviceId] = rec.deviceId
+                it[deleted] = rec.deleted
+                it[blob] = ExposedBlob(rec.blob)
+                it[teamSeq] = newSeq
+            }
+        }
+    }
 
     /** Batch upsert with LWW by (`version`, `deviceId`) — same semantics as [RecordRepository.upsert]. */
     suspend fun upsert(teamId: String, scopeId: String, incoming: List<IncomingRecord>): TeamUpsertResult = dbTransaction(db) {
         val teamQuery = Teams.selectAll().where { Teams.id eq teamId }
-        val seqBefore = (if (lockTeamRow) teamQuery.forUpdate() else teamQuery).single()[Teams.teamSeq]
+        val team = (if (lockTeamRow) teamQuery.forUpdate() else teamQuery).single()
+        val seqBefore = team[Teams.teamSeq]
         var seq = seqBefore
+        var grew = 0L
         val applied = mutableListOf<AppliedTeamRecord>()
 
         val result = incoming.mapNotNull { rec ->
@@ -79,42 +121,34 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
             if (wins) {
                 seq += 1
                 val newSeq = seq
+                grew += rec.blob.size - (existing?.get(TeamRecords.blob)?.bytes?.size ?: 0)
                 val change = when {
                     rec.deleted -> TeamRecordChange.REMOVED
                     // Nothing was visible here before: a new row, or one holding a tombstone.
                     existing == null || existing[TeamRecords.deleted] -> TeamRecordChange.SHARED
                     else -> TeamRecordChange.CHANGED
                 }
-                if (existing == null) {
-                    TeamRecords.insert {
-                        it[TeamRecords.teamId] = teamId
-                        it[TeamRecords.scopeId] = scopeId
-                        it[recordId] = rec.id
-                        it[type] = rec.type
-                        it[version] = rec.version
-                        it[updatedAt] = rec.updatedAt
-                        it[deviceId] = rec.deviceId
-                        it[deleted] = rec.deleted
-                        it[blob] = ExposedBlob(rec.blob)
-                        it[teamSeq] = newSeq
-                    }
-                } else {
-                    TeamRecords.update({ (TeamRecords.teamId eq teamId) and (TeamRecords.recordId eq rec.id) }) {
-                        it[type] = rec.type
-                        it[version] = rec.version
-                        it[updatedAt] = rec.updatedAt
-                        it[deviceId] = rec.deviceId
-                        it[deleted] = rec.deleted
-                        it[blob] = ExposedBlob(rec.blob)
-                        it[teamSeq] = newSeq
-                    }
-                }
+                write(teamId, scopeId, rec, isNew = existing == null, newSeq)
                 StoredRecord(rec.id, rec.type, rec.version, rec.updatedAt, rec.deviceId, rec.deleted, rec.blob, newSeq)
                     .also { applied += AppliedTeamRecord(it, change) }
             } else {
                 existing.toStoredRecord()
             }
         }
+
+        enforceQuota(
+            StorageQuota.SPACE, maxScopeBytes, grew,
+            "SELECT COALESCE(SUM(LENGTH(blob)), 0) FROM team_records WHERE team_id = ? AND scope_id = ?",
+            listOf(VarCharColumnType(SPACE_ID_LENGTH) to teamId, VarCharColumnType(SPACE_ID_LENGTH) to scopeId),
+        )
+        val owner = team[Teams.ownerAccountId]
+        // The team row locks only this team: pushes into several teams of one owner, or a vault push
+        // of theirs, would each sum a total that misses the others'. The owner's row, the one a vault
+        // push locks, lines them up. Taken after the team's, and only on growth, when a sum follows.
+        if (lockTeamRow && maxAccountBytes > 0 && grew > 0) {
+            Accounts.selectAll().where { Accounts.id eq owner }.forUpdate().single()
+        }
+        enforceAccountQuota(maxAccountBytes, grew, owner)
 
         if (applied.isNotEmpty()) {
             Teams.update({ Teams.id eq teamId }) { it[teamSeq] = seq }
@@ -135,6 +169,9 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
      * gets a `teamSeq` above the bound, is excluded, and arrives on the next pull. The reverse skew is
      * harmless: a record already committed at the time of the counter read is visible to the later
      * query too, because a record row and its team's counter are updated in one transaction.
+     *
+     * The delta is cut to [PullPageLimits]; a page cut short ends at its last record instead of the
+     * counter, and the next pull picks up from there.
      */
     suspend fun delta(teamId: String, scopeId: String, since: Long): TeamDeltaPage = dbTransaction(db) {
         val cursor = Teams.selectAll().where { Teams.id eq teamId }.singleOrNull()?.get(Teams.teamSeq) ?: since
@@ -144,8 +181,9 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
                     (TeamRecords.teamSeq greater since) and (TeamRecords.teamSeq lessEq cursor)
             }
             .orderBy(TeamRecords.teamSeq to SortOrder.ASC)
-            .map { it.toStoredRecord() }
-        TeamDeltaPage(records, cursor)
+            .page(page, TeamRecords.blob) { it.toStoredRecord() }
+        // A page cut short resumes from its last record: the counter would claim the records left out.
+        TeamDeltaPage(records.records, if (records.complete) cursor else records.records.last().serverSeq)
     }
 
     /**

@@ -106,6 +106,18 @@ class SyncClientStatusMappingTest {
         assertEquals("server responded 403", failure.message)
     }
 
+    /** A full storage quota is fixed by deleting something; "server responded 413" says nothing of that. */
+    @Test
+    fun `a 413 carries the server's reason`() = runTest {
+        val failure = assertFailsWith<SyncException> {
+            clientRespondingWith(HttpStatusCode.PayloadTooLarge, body = """{"error":"storage quota exceeded"}""")
+                .pull(session, since = 0)
+        }
+        assertEquals(SyncException.Kind.PROTOCOL, failure.kind)
+        assertEquals(413, failure.status)
+        assertEquals("storage quota exceeded", failure.message)
+    }
+
     @Test
     fun `anything else stays protocol`() = runTest {
         assertEquals(SyncException.Kind.PROTOCOL, kindFor(HttpStatusCode.BadRequest))

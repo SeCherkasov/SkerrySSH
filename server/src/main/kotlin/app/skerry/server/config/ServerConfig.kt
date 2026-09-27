@@ -58,6 +58,14 @@ data class ServerConfig(
     /** Upper bound on request body size in bytes (OOM/abuse guard). Enforced via Content-Length -> 413. */
     val maxRequestBodyBytes: Long,
     /**
+     * Most ciphertext one account may store, in bytes: its vault and the share spaces of every team
+     * it owns. A push that would grow it past this is refused with 413; one that keeps or shrinks it
+     * still goes through. 0 ⇒ unlimited.
+     */
+    val maxAccountBytes: Long,
+    /** The same bound for one share space of a team (the team-wide space or one scope). 0 ⇒ unlimited. */
+    val maxScopeBytes: Long,
+    /**
      * Trusted reverse-proxy IPs (the direct peers in front of the server). When a request's direct
      * peer is one of these, per-IP rate limits key on the real client IP from `X-Forwarded-For`;
      * otherwise the header is ignored (a client can't spoof it). Empty ⇒ no proxy, key on the
@@ -93,10 +101,16 @@ data class ServerConfig(
         /** Known-unsafe default; production must override it (see the guard in Application.module). */
         const val DEFAULT_JWT_SECRET = "dev-insecure-change-me"
 
+        /** Default for both storage quotas: 128 MiB of ciphertext. */
+        const val DEFAULT_QUOTA_BYTES = 128L * 1024 * 1024
+
         fun fromEnv(env: Map<String, String> = System.getenv()): ServerConfig {
             fun str(key: String, default: String) = env[key]?.takeIf { it.isNotBlank() } ?: default
             fun long(key: String, default: Long) = env[key]?.toLongOrNull() ?: default
             fun int(key: String, default: Int) = env[key]?.toIntOrNull() ?: default
+            // Unlimited only when asked for with 0: a typo'd or negative value keeps the default
+            // rather than quietly lifting a guard on the operator's disk.
+            fun quota(key: String) = long(key, DEFAULT_QUOTA_BYTES).takeIf { it >= 0 } ?: DEFAULT_QUOTA_BYTES
 
             return ServerConfig(
                 host = str("SKERRY_HOST", "0.0.0.0"),
@@ -116,6 +130,8 @@ data class ServerConfig(
                     .split(",").map { it.trim() }.filter { it.isNotEmpty() }
                     .mapNotNull(::parseCorsHost),
                 maxRequestBodyBytes = long("SKERRY_MAX_BODY_BYTES", 4L * 1024 * 1024), // 4 MiB
+                maxAccountBytes = quota("SKERRY_MAX_ACCOUNT_BYTES"),
+                maxScopeBytes = quota("SKERRY_MAX_SCOPE_BYTES"),
                 trustedProxies = str("SKERRY_TRUSTED_PROXIES", "")
                     .split(",").map { it.trim() }.filter { it.isNotEmpty() },
                 // Default open for backward compatibility; anything other than "open" (case-insensitive) closes it.

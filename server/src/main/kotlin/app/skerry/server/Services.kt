@@ -45,10 +45,12 @@ class Services(
     val accounts = AccountRepository(database)
     val devices = DeviceRepository(database)
     // On PostgreSQL, serialize upserts with an account-row lock; not needed on SQLite (pool=1).
-    val records = RecordRepository(database, lockAccountRow = config.isPostgres)
+    val records = RecordRepository(database, lockAccountRow = config.isPostgres, maxAccountBytes = config.maxAccountBytes)
     val pairing = PairingRepository(database)
     val teams = TeamRepository(database)
-    val teamRecords = TeamRecordRepository(database, lockTeamRow = config.isPostgres)
+    val teamRecords = TeamRecordRepository(database, lockTeamRow = config.isPostgres, maxScopeBytes = config.maxScopeBytes,
+        maxAccountBytes = config.maxAccountBytes,
+    )
     val teamScopes = TeamScopeRepository(database)
     val stats = StatsRepository(database)
     val activity = ActivityRepository(database)

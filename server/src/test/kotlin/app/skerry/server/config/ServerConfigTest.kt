@@ -5,6 +5,16 @@ import kotlin.test.assertEquals
 
 class ServerConfigTest {
 
+    @Test
+    fun `a storage quota is lifted only by an explicit 0`() {
+        val default = ServerConfig.DEFAULT_QUOTA_BYTES
+        assertEquals(0L, ServerConfig.fromEnv(mapOf("SKERRY_MAX_ACCOUNT_BYTES" to "0")).maxAccountBytes)
+        assertEquals(default, ServerConfig.fromEnv(mapOf("SKERRY_MAX_ACCOUNT_BYTES" to "-1")).maxAccountBytes)
+        assertEquals(default, ServerConfig.fromEnv(mapOf("SKERRY_MAX_SCOPE_BYTES" to "-5")).maxScopeBytes)
+        assertEquals(default, ServerConfig.fromEnv(mapOf("SKERRY_MAX_SCOPE_BYTES" to "12MB")).maxScopeBytes)
+        assertEquals(5_000L, ServerConfig.fromEnv(mapOf("SKERRY_MAX_SCOPE_BYTES" to "5000")).maxScopeBytes)
+    }
+
     private fun corsHosts(value: String): List<CorsHost> =
         ServerConfig.fromEnv(mapOf("SKERRY_CORS_HOSTS" to value)).corsHosts
 
