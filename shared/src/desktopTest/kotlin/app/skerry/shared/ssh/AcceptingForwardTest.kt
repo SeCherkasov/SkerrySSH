@@ -34,11 +34,13 @@ class AcceptingForwardTest {
      */
     private class LateServerSocket : ServerSocket(0) {
         private val closed = CountDownLatch(1)
+        val waiting = CountDownLatch(1)
         private val peer = ServerSocket(0)
         val client = Socket("127.0.0.1", peer.localPort)
         val accepted: Socket = peer.accept().also { peer.close() }
 
         override fun accept(): Socket {
+            waiting.countDown()
             closed.await()
             return accepted
         }
@@ -66,6 +68,9 @@ class AcceptingForwardTest {
     fun `a connection accepted as the forward closes is closed, not tunnelled`() = runTest {
         val listener = LateServerSocket()
         val forward = TestForward(listener)
+        // A loop that has not reached accept() yet sees the forward closed and never takes the
+        // connection; the kernel resets it with the listener, so only the in-flight case is tested.
+        assertTrue(listener.waiting.await(5, TimeUnit.SECONDS), "the accept loop never started")
 
         forward.close()
 
