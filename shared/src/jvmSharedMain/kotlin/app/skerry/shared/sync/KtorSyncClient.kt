@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.shared.io.readAtMost
 import app.skerry.sync.wire.AccountSummaryResponse
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
@@ -69,8 +70,6 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.readRemaining
-import kotlinx.io.readByteArray
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLParameter
@@ -623,17 +622,17 @@ class KtorSyncClient(
     /**
      * The `error` field of the server's error body, or null when the body isn't one — a reverse
      * proxy's HTML error page must not become the message shown to the user. Bounded twice over: an
-     * oversized body is not read at all, and the message is trimmed to what a UI line can carry.
-     * The server this points at is user-configured, so "it wouldn't send that" isn't a guarantee.
+     * oversized body is not decoded (Ktor has already buffered it whole), and the message is trimmed
+     * to what a UI line can carry. The server this points at is user-configured, so "it wouldn't
+     * send that" isn't a guarantee.
      */
     private suspend fun HttpResponse.serverErrorMessage(): String? = try {
         // Read at most the cap, rather than trusting Content-Length: a chunked response declares no
-        // length at all, and a hostile one could declare anything. Past the cap the JSON is cut off
-        // mid-string and simply fails to decode, which is the intended "no message" outcome.
-        val text = bodyAsChannel().readRemaining(SyncClientLimits.MAX_ERROR_BODY_BYTES).readByteArray().decodeToString()
-        errorJson.decodeFromString<ServerError>(text)
-            .error.trim().take(SyncClientLimits.MAX_ERROR_MESSAGE_CHARS)
-            .takeIf { it.isNotEmpty() }
+        // length at all, and a hostile one could declare anything.
+        bodyAsChannel().readAtMost(SyncClientLimits.MAX_ERROR_BODY_BYTES)
+            ?.let { errorJson.decodeFromString<ServerError>(it.decodeToString()).error }
+            ?.trim()?.take(SyncClientLimits.MAX_ERROR_MESSAGE_CHARS)
+            ?.takeIf { it.isNotEmpty() }
     } catch (e: CancellationException) {
         // Reading the body suspends, so a cancelled caller lands here; swallowing it would leave the
         // job looking alive and break structured concurrency (same rule as in `request`).
@@ -703,6 +702,7 @@ private val errorJson = Json { ignoreUnknownKeys = true }
 
 /** Caps on what a server's error response may hand to the client (see `serverErrorMessage`). */
 object SyncClientLimits {
-    const val MAX_ERROR_BODY_BYTES = 8 * 1024L
+    const val MAX_ERROR_BODY_BYTES = 8 * 1024
     const val MAX_ERROR_MESSAGE_CHARS = 300
 }
+
