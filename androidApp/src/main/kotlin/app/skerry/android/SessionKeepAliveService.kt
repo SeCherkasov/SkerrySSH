@@ -1,5 +1,6 @@
 package app.skerry.android
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -27,9 +29,9 @@ import java.util.UUID
  * One notification per live session (Termius-style): the summary notification ([SUMMARY_ID]) is
  * the foreground one that must stay up while the service is foreground; each session gets its own
  * notification titled with the host, and tapping it routes back to that exact terminal (the
- * session id travels in the intent). The moment the last session closes, [ACTION_REMOVE] tears the
- * service down and every notification disappears — the persistent notification is present exactly
- * when it matters, never parked forever.
+ * session id travels in the intent); its Disconnect button closes that session. The moment the
+ * last session closes, [ACTION_REMOVE] tears the service down and every notification disappears —
+ * the persistent notification is present exactly when it matters, never parked forever.
  *
  * [ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE] is deliberate: unlike dataSync, the
  * connectedDevice type has no 6-hour timeout on Android 14+, and its semantics fit — we keep a
@@ -41,6 +43,9 @@ class SessionKeepAliveService : Service() {
         const val ACTION_ADD = "app.skerry.android.action.KEEPALIVE_ADD"
         const val ACTION_REMOVE = "app.skerry.android.action.KEEPALIVE_REMOVE"
         const val ACTION_NOTIFICATION_DISMISSED = "app.skerry.android.action.KEEPALIVE_NOTIFICATION_DISMISSED"
+
+        /** The Disconnect button on a per-session notification; carries [EXTRA_SESSION_ID]. */
+        const val ACTION_DISCONNECT = "app.skerry.android.action.KEEPALIVE_DISCONNECT"
 
         /**
          * The "keep the CPU awake" switch was flipped while sessions are already open. Without it
@@ -88,8 +93,20 @@ class SessionKeepAliveService : Service() {
     // sessionId -> host label, kept alongside [sessions] so a dismissed notification can be
     // re-shown with its host title without consulting the process-side bridge.
     private val sessionHosts = LinkedHashMap<String, String>()
-    // Registered while the service lives; re-shows notifications when one is swiped away.
-    private var dismissReceiver: BroadcastReceiver? = null
+    private val disconnectButton = NotificationDisconnect(
+        closeSession = { id -> KeepAliveRuntime.sessions?.closeSession(id) == true },
+        forget = { id ->
+            Log.w(TAG, "disconnect for unknown session $id: dropping its notification")
+            KeepAliveRuntime.bridge?.onSessionEnded(id)
+            removeSession(id)
+        },
+        // isDeviceLocked, not isKeyguardLocked: a swipe-only lock screen guards nothing, and the
+        // button must not go dead there. No KeyguardManager reads as locked — this is the gate.
+        deviceLocked = { getSystemService(KeyguardManager::class.java)?.isDeviceLocked ?: true },
+    )
+    // Registered while the service lives: re-shows notifications when one is swiped away, and
+    // takes the Disconnect button.
+    private var notificationReceiver: BroadcastReceiver? = null
     private val wakeLock = WakeLockGate {
         val power = getSystemService(PowerManager::class.java)
         if (power == null) {
@@ -107,13 +124,13 @@ class SessionKeepAliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        registerDismissReceiver()
+        registerNotificationReceiver()
     }
 
     override fun onDestroy() {
         wakeLock.release()
-        dismissReceiver?.let { unregisterReceiver(it) }
-        dismissReceiver = null
+        notificationReceiver?.let { unregisterReceiver(it) }
+        notificationReceiver = null
         super.onDestroy()
     }
 
@@ -127,22 +144,27 @@ class SessionKeepAliveService : Service() {
     }
 
     /**
-     * Registers the receiver for [ACTION_NOTIFICATION_DISMISSED]. A foreground-service
-     * notification can be swiped away by the user even with [Notification.Builder.setOngoing]
-     * (MIUI/HyperOS are lenient here); the keep-alive state itself is unaffected, but the
-     * notification is the only visible handle back to the live terminals — so re-show it.
-     * Re-registered on every service create (START_STICKY restart included).
+     * Registers the receiver for [ACTION_NOTIFICATION_DISMISSED] and [ACTION_DISCONNECT]. A
+     * foreground-service notification can be swiped away by the user even with
+     * [Notification.Builder.setOngoing] (MIUI/HyperOS are lenient here); the keep-alive state
+     * itself is unaffected, but the notification is the only visible handle back to the live
+     * terminals — so re-show it. Re-registered on every service create (START_STICKY restart
+     * included).
      */
-    private fun registerDismissReceiver() {
-        if (dismissReceiver != null) return
+    private fun registerNotificationReceiver() {
+        if (notificationReceiver != null) return
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                restoreNotifications()
+                when (intent.action) {
+                    // Main thread, where the sessions graph lives.
+                    ACTION_DISCONNECT -> disconnectButton.handle(intent.getStringExtra(EXTRA_SESSION_ID))
+                    else -> restoreNotifications()
+                }
             }
         }
-        val filter = IntentFilter(ACTION_NOTIFICATION_DISMISSED)
+        val filter = IntentFilter(ACTION_NOTIFICATION_DISMISSED).apply { addAction(ACTION_DISCONNECT) }
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        dismissReceiver = receiver
+        notificationReceiver = receiver
     }
 
     /** Re-shows the summary plus every per-session notification after a dismiss. */
@@ -182,7 +204,7 @@ class SessionKeepAliveService : Service() {
             bridgeInstance?.snapshotSessions().orEmpty().forEach { (id, host) -> addSessionInternal(id, host) }
         }
         when (intent.action) {
-            ACTION_REMOVE -> removeSession(intent)
+            ACTION_REMOVE -> removeSession(intent.getStringExtra(EXTRA_SESSION_ID))
             ACTION_SYNC_WAKE_LOCK -> {
                 syncWakeLock()
                 // Nothing to keep alive: the switch was flipped as the last session was closing.
@@ -280,8 +302,7 @@ class SessionKeepAliveService : Service() {
         syncWakeLock()
     }
 
-    private fun removeSession(intent: Intent) {
-        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+    private fun removeSession(sessionId: String?) {
         if (sessionId == null) {
             Log.w(TAG, "keep-alive remove without session id dropped")
             return
@@ -364,6 +385,21 @@ class SessionKeepAliveService : Service() {
         // master password; the shade must not undo that). This honours the OS "hide sensitive
         // content" setting — the platform's strongest app-side option; devices set to "show all
         // content" still show the full notification.
+        val disconnect = PendingIntent.getBroadcast(
+            this,
+            notifId,
+            // Package-scoped for the same reason as the dismiss intent below.
+            Intent(ACTION_DISCONNECT).setPackage(packageName).putExtra(EXTRA_SESSION_ID, sessionId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val disconnectAction = Notification.Action.Builder(
+            Icon.createWithResource(this, R.drawable.ic_notification_session),
+            getString(R.string.session_keepalive_disconnect),
+            disconnect,
+        ).apply {
+            // Android 12+ asks for the unlock itself; older versions are held by NotificationDisconnect.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAuthenticationRequired(true)
+        }.build()
         val publicVersion = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.session_keepalive_public_title))
             .setContentText(getString(R.string.session_keepalive_text))
@@ -380,6 +416,7 @@ class SessionKeepAliveService : Service() {
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
             .setContentIntent(tap)
+            .addAction(disconnectAction)
             .setDeleteIntent(notificationDismissedPendingIntent(notifId))
             .build()
     }

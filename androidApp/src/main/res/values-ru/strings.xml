@@ -7,6 +7,7 @@
     <string name="session_keepalive_title">Сеансы активны</string>
     <string name="session_keepalive_public_title">Сеанс активен</string>
     <string name="session_keepalive_text">Нажмите, чтобы вернуться к этому терминалу</string>
+    <string name="session_keepalive_disconnect">Отключиться</string>
     <plurals name="session_keepalive_count">
         <item quantity="one">%1$d сеанс активен</item>
         <item quantity="few">%1$d сеанса активны</item>

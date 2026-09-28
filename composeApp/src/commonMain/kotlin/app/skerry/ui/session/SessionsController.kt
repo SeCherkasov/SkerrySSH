@@ -621,6 +621,20 @@ class SessionsController(
         if (tab.focusedPaneId == paneId) tab.setFocusedPane(neighbor ?: tab.panes.first().id)
     }
 
+    /** The tab holding the session (pane) [sessionId], or null when no tab holds it any more. */
+    fun tabHolding(sessionId: String): Tab? = tabs.firstOrNull { tab -> tab.pane(sessionId) != null }
+
+    /**
+     * Close the session [sessionId] knowing only its own id, as a keep-alive notification does:
+     * [closePane] on the tab that holds it. `false` when no tab holds it — a stale notification for
+     * a pane that is already gone.
+     */
+    fun closeSession(sessionId: String): Boolean {
+        val tab = tabHolding(sessionId) ?: return false
+        closePane(tab.id, sessionId)
+        return true
+    }
+
     /** Focus pane [paneId] of tab [tabId]; a pane this tab doesn't hold is ignored. */
     fun focusPane(tabId: String, paneId: String) {
         val tab = tab(tabId) ?: return

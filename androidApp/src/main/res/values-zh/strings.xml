@@ -7,6 +7,7 @@
     <string name="session_keepalive_title">会话保持中</string>
     <string name="session_keepalive_public_title">会话保持中</string>
     <string name="session_keepalive_text">点按返回此终端</string>
+    <string name="session_keepalive_disconnect">断开连接</string>
     <!-- Chinese has a single CLDR plural category — only "other" is ever selected. -->
     <plurals name="session_keepalive_count">
         <item quantity="other">%1$d 个会话保持中</item>

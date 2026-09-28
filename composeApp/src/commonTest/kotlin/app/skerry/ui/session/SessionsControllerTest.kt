@@ -385,6 +385,59 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    @Test
+    fun `closeSession closes a split pane by its own id and keeps the tab`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        val paneConnection = transport.connections[1]
+
+        assertEquals(a, sessions.tabHolding(pane)?.id)
+        assertTrue(sessions.closeSession(pane))
+        assertFalse(sessions.closeSession(pane)) // a second tap on a notification already acted on
+        assertNull(sessions.tabHolding(pane))
+
+        assertEquals(listOf(a), sessions.tab(a)!!.panes.map { it.id })
+        assertTrue(paneConnection.disconnected)
+        assertFalse(transport.connections[0].disconnected)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closeSession on the only pane closes its tab`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+
+        assertTrue(sessions.closeSession(a))
+
+        assertEquals(listOf(b), sessions.tabs.map { it.id })
+        assertTrue(transport.connections[0].disconnected)
+        scope.cancel()
+    }
+
+    // The tab keeps its first pane's id after that pane is closed. A stale notification for the
+    // closed pane carries the same id and must not take the surviving pane down with it.
+    @Test
+    fun `closeSession ignores an id that only the tab still carries`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        sessions.closePane(a, a)
+
+        assertFalse(sessions.closeSession(a))
+        assertFalse(sessions.closeSession("missing"))
+
+        assertEquals(listOf(pane), sessions.tab(a)!!.panes.map { it.id })
+        assertFalse(transport.connections[1].disconnected)
+        scope.cancel()
+    }
+
     // Three panes on purpose: with two, "the pane after it" and "the pane before it" are the same
     // survivor, so the fallback order and the untouched-focus branch both look right either way.
     @Test
