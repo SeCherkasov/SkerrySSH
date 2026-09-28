@@ -340,15 +340,13 @@ class MainActivity : FragmentActivity() {
                     // its screen. activate() alone switches the internal active tab but leaves the
                     // user on whatever screen was up (Hosts) — the Sessions list does both steps, so
                     // a notification tap must too. Notifications are keyed by PANE id (a split pane
-                    // has its own), so the lookup matches panes, not just tab ids. Cleared
+                    // has its own), so the lookup matches panes, not tab ids. Cleared
                     // unconditionally — a stale id (session already closed) must not wedge the state.
                     LaunchedEffect(KeepAliveRuntime.pendingSessionId) {
                         val target = KeepAliveRuntime.pendingSessionId
                         if (target != null) {
                             val sessions = keepAliveSessions
-                            val tab = sessions?.tabs?.firstOrNull { t ->
-                                t.id == target || t.panes.any { it.id == target }
-                            }
+                            val tab = sessions?.tabHolding(target)
                             if (tab != null) {
                                 sessions.activate(tab.id)
                                 sessions.focusPane(tab.id, target)

@@ -13,6 +13,7 @@
     <!-- Lock-screen (publicVersion) title of ONE redacted per-session notification — singular. -->
     <string name="session_keepalive_public_title">Session active</string>
     <string name="session_keepalive_text">Tap to return to this terminal</string>
+    <string name="session_keepalive_disconnect">Disconnect</string>
     <plurals name="session_keepalive_count">
         <item quantity="one">%1$d session active</item>
         <item quantity="other">%1$d sessions active</item>
