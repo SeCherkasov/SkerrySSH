@@ -181,7 +181,7 @@ fun VncView(state: DesktopDesignState) {
             }
             is RemoteDesktopUiState.Error -> CenterNotice(
                 "error",
-                vncFailureText(ui.failure),
+                remoteDesktopErrorText(ui),
                 color = Skerry.colors.sunset,
             )
             is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {

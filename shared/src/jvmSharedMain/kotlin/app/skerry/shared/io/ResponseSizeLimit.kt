@@ -25,7 +25,7 @@ class ResponseTooLargeException(val limit: Long) : IOException("response exceeds
  * reader through a cancelled channel, which may wrap the cause, so the whole chain is searched.
  */
 fun Throwable.responseTooLarge(): ResponseTooLargeException? =
-    generateSequence(this) { it.cause }.filterIsInstance<ResponseTooLargeException>().firstOrNull()
+    findCause<ResponseTooLargeException>()
 
 class ResponseSizeLimitConfig {
     /** Largest response body, in bytes, that the client reads before failing the call. Required. */

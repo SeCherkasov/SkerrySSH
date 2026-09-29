@@ -2,6 +2,7 @@ package app.skerry.shared.sync
 
 import app.skerry.shared.io.ResponseHeadTooLargeException
 import app.skerry.shared.io.WebSocketUpgradeRefusedException
+import app.skerry.shared.io.findCause
 import app.skerry.shared.io.responseTooLarge
 
 /**
@@ -11,7 +12,7 @@ import app.skerry.shared.io.responseTooLarge
  * is classified by it as any other answer is.
  */
 internal fun Exception.toSyncTransportFailure(what: String = "network error"): SyncException {
-    val refused = generateSequence<Throwable>(this) { it.cause }.filterIsInstance<WebSocketUpgradeRefusedException>().firstOrNull()
+    val refused = findCause<WebSocketUpgradeRefusedException>()
     if (refused != null) return SyncException(syncKindOf(refused.status), "server responded ${refused.status}", this, refused.status)
     responseTooLarge()?.let { return SyncException(SyncException.Kind.PROTOCOL, "server response exceeds ${it.limit} bytes", this) }
     if (this is ResponseHeadTooLargeException) return SyncException(SyncException.Kind.PROTOCOL, message.orEmpty(), this)

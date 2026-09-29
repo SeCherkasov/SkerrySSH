@@ -21,6 +21,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
@@ -82,7 +84,28 @@ class RdpTcpTransport(
             throw RdpProtocolException("the server redirected the connection more than $MAX_REDIRECTS times")
         }
 
-    private suspend fun connectOnce(target: RdpTarget, credentials: RdpCredentials): RdpSession =
+    /**
+     * One attempt, with a failure wrapped in the [RdpConnectException] that names the step it
+     * happened at (see [rdpConnectFailure]).
+     */
+    private suspend fun connectOnce(target: RdpTarget, credentials: RdpCredentials): RdpSession {
+        var stage: RdpConnectStage? = null
+        try {
+            return connectOnce(target, credentials) { stage = it }
+        } catch (e: Exception) {
+            // Cancelling closes the socket under a blocking read, which fails as an EOF; that EOF
+            // is the cancellation's echo, not a server that hung up.
+            currentCoroutineContext().ensureActive()
+            throw rdpConnectFailure(stage, e)
+        }
+    }
+
+    /** [onStage] hears each named step as it starts, and `null` once the work leaves them. */
+    private suspend fun connectOnce(
+        target: RdpTarget,
+        credentials: RdpCredentials,
+        onStage: (RdpConnectStage?) -> Unit,
+    ): RdpSession =
         withContext(Dispatchers.IO) {
             val connector = RdpTcpConnector(certificateVerifier, connectTimeoutMillis)
             val connection = connector.connect(
@@ -91,7 +114,10 @@ class RdpTcpTransport(
                 requestedProtocols = RdpSecurityProtocol.SSL or RdpSecurityProtocol.HYBRID,
                 cookie = credentials.username.takeIf { it.isNotBlank() },
                 loadBalanceInfo = target.loadBalanceInfo.takeIf { it.isNotBlank() },
+                onStage = onStage,
             )
+            // Opening the audio device is not a step of the protocol; its failure is not the TLS one.
+            onStage(null)
             // The device is resolved before the channel is asked for: a machine with no usable
             // output plays nothing either way, and asking for a channel we would then ignore costs
             // the session bandwidth for every sound the server sends.
@@ -112,7 +138,10 @@ class RdpTcpTransport(
             }
             try {
                 val networkLevelAuth = connection.selectedProtocol == RdpSecurityProtocol.HYBRID
-                if (networkLevelAuth) authenticate(connection, target, credentials)
+                if (networkLevelAuth) {
+                    onStage(RdpConnectStage.Nla)
+                    authenticate(connection, target, credentials)
+                }
 
                 val settings = target.clientSettings(connection.selectedProtocol, audioOpened = audio != null)
                 // With NLA the user is already authenticated; sending the password again in the
@@ -128,8 +157,9 @@ class RdpTcpTransport(
                         settings.channels.contains(RdpClientSettings.CHANNEL_AUDIO),
                 )
                 val state = RdpConnectionSequence(
-                    connection.source, connection.sink, settings, logon, JvmLicenseCrypto(),
+                    connection.source, connection.sink, settings, logon, JvmLicenseCrypto(), onStage,
                 ).run()
+                onStage(null)
                 // Established. The session's own reads wait for as long as the desktop is still,
                 // so the timeout the negotiation ran under goes now.
                 connection.clearReadTimeout()

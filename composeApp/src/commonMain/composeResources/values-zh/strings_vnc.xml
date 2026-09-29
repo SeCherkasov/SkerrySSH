@@ -2,7 +2,7 @@
     <string name="vnc_connecting">正在连接…</string>
     <string name="vnc_session_closed">会话已结束</string>
     <string name="vnc_connection_lost">连接已断开</string>
-    <string name="vnc_connect_failed">连接失败</string>
+    <string name="vnc_connect_failed">连接失败。</string>
     <string name="vnc_error_auth">服务器要求 Skerry 不支持的身份验证方式。</string>
     <string name="vnc_error_protocol">服务器发送了意外的 VNC 数据流。</string>
     <string name="vnc_error_cert_rejected">未接受服务器证书。重新连接以再次查看。</string>
@@ -82,4 +82,19 @@
     <string name="rd_surface">远程桌面：%1$s。%2$s</string>
     <string name="rd_surface_release">%1$s 释放键盘</string>
     <string name="rd_keyboard_input">远程桌面输入</string>
+    <string name="rdp_stage_line">阶段：%1$s。</string>
+    <string name="rdp_stage_line_drop">阶段：%1$s。%2$s</string>
+    <string name="rdp_stage_tcp">TCP 连接</string>
+    <string name="rdp_stage_negotiation">安全协商（X.224）</string>
+    <string name="rdp_stage_tls">TLS 握手</string>
+    <string name="rdp_stage_nla">NLA（CredSSP）</string>
+    <string name="rdp_stage_mcs">MCS 连接</string>
+    <string name="rdp_stage_licensing">登录与许可</string>
+    <string name="rdp_stage_capabilities">能力交换</string>
+    <string name="rdp_stage_finalization">会话完成</string>
+    <string name="rdp_drop_closed">服务器关闭了连接。</string>
+    <string name="rdp_drop_timeout">服务器停止响应。</string>
+    <string name="rdp_drop_reset">连接被重置。</string>
+    <string name="rdp_drop_refused">连接被拒绝。</string>
+    <string name="rdp_drop_unresolved">找不到主机。</string>
 </resources>

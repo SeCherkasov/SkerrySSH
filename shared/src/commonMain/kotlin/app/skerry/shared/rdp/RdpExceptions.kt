@@ -92,3 +92,64 @@ enum class RdpNegotiationFailure(val code: Int) {
         fun of(code: Int): RdpNegotiationFailure? = entries.firstOrNull { it.code == code }
     }
 }
+
+/**
+ * A connect attempt that failed, with the step it failed at. [cause] is the failure itself — a
+ * typed reason when the server gave one, a bare I/O error when it only closed the socket — and it
+ * is the latter case this wrapper exists for: "failed to connect" says nothing, "the server closed
+ * the connection during the TLS handshake" says where to look.
+ */
+class RdpConnectException(
+    val stage: RdpConnectStage,
+    /** How the link ended, when it was the network that ended it; `null` for a failure the server named. */
+    val drop: RdpDrop?,
+    cause: Throwable,
+) : Exception(
+    "${stage.name} failed" + (drop?.let { " (${it.name})" } ?: "") + ": " + (cause.message ?: cause::class.simpleName ?: cause.toString()),
+    cause,
+)
+
+/** The steps of establishing an RDP connection, in the order they run (MS-RDPBCGR 1.3.1.1). */
+enum class RdpConnectStage {
+    /** Opening the TCP connection. */
+    Tcp,
+
+    /** X.224 Connection Request/Confirm: which security protocol to use. */
+    Negotiation,
+
+    /** The TLS upgrade, certificate check included. */
+    Tls,
+
+    /** Network Level Authentication (CredSSP/NTLM). */
+    Nla,
+
+    /** MCS Connect, basic settings exchange and channel joins. */
+    Mcs,
+
+    /** The Client Info PDU (the logon) and the licensing that answers it. */
+    Licensing,
+
+    /** Demand Active / Confirm Active. */
+    Capabilities,
+
+    /** Synchronize, control and font map, up to the first frame. */
+    Finalization,
+}
+
+/** How the network ended a connect attempt. */
+enum class RdpDrop {
+    /** The server closed the connection. */
+    Closed,
+
+    /** The server stopped answering. */
+    Timeout,
+
+    /** The connection was reset. */
+    Reset,
+
+    /** Nothing accepted the connection on that port. */
+    Refused,
+
+    /** The host name did not resolve. */
+    Unresolved,
+}

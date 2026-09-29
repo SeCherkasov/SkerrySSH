@@ -5,6 +5,10 @@ import app.skerry.shared.rdp.RdpAuthException
 import app.skerry.shared.rdp.RdpAuthFailure
 import app.skerry.shared.rdp.RdpCertificateOffer
 import app.skerry.shared.rdp.RdpCertificateRejectedException
+import app.skerry.shared.rdp.RdpConnectException
+import app.skerry.shared.rdp.RdpConnectStage
+import app.skerry.shared.rdp.RdpDrop
+import app.skerry.shared.rdp.RdpTlsException
 import app.skerry.ui.vnc.VncFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +18,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private fun rejectedOffer() = RdpCertificateOffer(
@@ -59,6 +64,37 @@ class RemoteDesktopControllerTest {
         assertTrue(state is RemoteDesktopUiState.Error)
         assertEquals(VncFailure.Other, state.failure)
         assertEquals("refused", state.detail)
+    }
+
+    @Test
+    fun a_connect_that_died_mid_step_names_the_step_and_how_it_ended() = runTest {
+        // The server hung up in the middle of the TLS handshake: no reason on either side, so the
+        // step and the hang-up are the only diagnosis the user can pass on.
+        val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+
+        controller.connect {
+            throw RdpConnectException(RdpConnectStage.Tls, RdpDrop.Closed, RdpTlsException("handshake", IllegalStateException()))
+        }
+        advanceUntilIdle()
+
+        val state = controller.uiState
+        assertTrue(state is RemoteDesktopUiState.Error)
+        assertEquals(VncFailure.RdpTls, state.failure)
+        assertEquals(RdpConnectStage.Tls, state.stage)
+        assertEquals(RdpDrop.Closed, state.drop)
+    }
+
+    @Test
+    fun a_failure_without_a_step_carries_none() = runTest {
+        val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+
+        controller.connect { throw IllegalStateException("refused") }
+        advanceUntilIdle()
+
+        val state = controller.uiState
+        assertTrue(state is RemoteDesktopUiState.Error)
+        assertNull(state.stage)
+        assertNull(state.drop)
     }
 
     @Test

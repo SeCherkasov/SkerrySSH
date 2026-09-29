@@ -2,6 +2,8 @@ package app.skerry.ui.vnc
 
 import app.skerry.shared.rdp.RdpAuthException
 import app.skerry.shared.rdp.RdpAuthFailure
+import app.skerry.shared.rdp.RdpConnectException
+import app.skerry.shared.rdp.RdpConnectStage
 import app.skerry.shared.rdp.RdpNegotiationException
 import app.skerry.shared.rdp.RdpNegotiationFailure
 import app.skerry.shared.rdp.RdpProtocolException
@@ -67,5 +69,15 @@ class RdpFailureClassificationTest {
         val wrapped = IllegalStateException("outer", IllegalStateException("inner", tls))
 
         assertEquals(VncFailure.RdpTls, vncFailureOf(wrapped))
+    }
+
+    @Test
+    fun `the step a failure is reported under does not hide its reason`() {
+        val refused = RdpNegotiationException(RdpNegotiationFailure.SSL_NOT_ALLOWED_BY_SERVER, "wire text")
+
+        assertEquals(
+            VncFailure.RdpLegacySecurity,
+            vncFailureOf(RdpConnectException(RdpConnectStage.Negotiation, drop = null, cause = refused)),
+        )
     }
 }
