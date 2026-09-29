@@ -293,6 +293,8 @@ class MainActivity : FragmentActivity() {
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
                     onAutoLockChange = { writeAutoLock(dir, it) },
+                    initialLockOnBackground = FLAG_LOCK_ON_BACKGROUND.read(dir),
+                    onLockOnBackgroundChange = { writeFlag(dir, FLAG_LOCK_ON_BACKGROUND, it) },
                     initialTerminalScrollback = readTerminalScrollback(dir),
                     onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
                     initialTerminalCursorStyle = readTerminalCursorStyle(dir),
@@ -809,6 +811,7 @@ class MainActivity : FragmentActivity() {
                 writeFlag(dir, FLAG_HIDE_SYSTEM_BARS, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
+                writeFlag(dir, FLAG_LOCK_ON_BACKGROUND, true)
             }
             hosts.reload()
             snippets.reload()

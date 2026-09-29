@@ -54,6 +54,8 @@ import app.skerry.ui.generated.resources.settings_security_auto_lock
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_lock_device
+import app.skerry.ui.generated.resources.settings_security_lock_device_desc
 import app.skerry.ui.generated.resources.settings_security_account_password
 import app.skerry.ui.generated.resources.settings_security_account_password_desc
 import app.skerry.ui.generated.resources.settings_security_master_password
@@ -79,6 +81,7 @@ import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Toggle
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.settings.masterPasswordSubtitle
 import app.skerry.ui.settings.securityEventLine
@@ -192,6 +195,18 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     }
                     Box(Modifier.width(160.dp)) { MobileAutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
                 }
+                HLine()
+
+                // Background lock, separate from the idle threshold above (issue #397). On a phone it
+                // fires only when the device itself locks (deviceMandatesAutoLock).
+                ToggleRow(
+                    stringResource(Res.string.settings_security_lock_device),
+                    on = state.lockOnBackground,
+                    onToggle = state::toggleLockOnBackground,
+                    modifier = Modifier.padding(vertical = 14.dp),
+                    subtitle = stringResource(Res.string.settings_security_lock_device_desc),
+                    labelSize = 14.5.sp,
+                )
                 HLine()
 
                 // Two-factor is not implemented yet: an honest SOON badge instead of a fake "enabled".

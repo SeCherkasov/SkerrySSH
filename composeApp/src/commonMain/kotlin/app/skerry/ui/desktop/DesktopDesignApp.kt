@@ -390,6 +390,7 @@ fun DesktopDesignApp(
                 // Idle auto-lock threshold from settings: changing it in the UI recomposes VaultGate
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.settings.autoLock.idleMs,
+                lockOnBackground = state.settings.lockOnBackground,
                 // Unattended work the user started defers the idle lock — see [IdleLockPolicy]. Read
                 // on every tick of the idle timer, so both getters stay O(open sessions).
                 workInFlight = { liveSessions?.writeInFlight == true || runbookRunner?.stepInFlight == true },

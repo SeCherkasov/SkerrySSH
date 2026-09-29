@@ -3,8 +3,8 @@ package app.skerry.ui.vault
 /**
  * Idle-timeout auto-lock threshold (Settings -> Security -> Auto-lock). Drives the idle timer in
  * [app.skerry.ui.vault.VaultGate]: inactivity longer than [idleMs] locks the vault. `null` [idleMs]
- * ([Never]) disables the idle timer (background auto-lock is a separate policy, see
- * `deviceMandatesAutoLock`). Stable [id] survives restarts (persisted to file).
+ * ([Never]) disables the idle timer (background auto-lock is a separate switch, `lockOnBackground`
+ * in [app.skerry.ui.vault.VaultGate], gated further by `deviceMandatesAutoLock`). Stable [id] survives restarts (persisted to file).
  */
 enum class AutoLockDuration(val id: String, val idleMs: Long?) {
     OneMinute("1m", 60_000L),

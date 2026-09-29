@@ -161,6 +161,10 @@
     <string name="settings_autolock_15m">After 15 minutes</string>
     <string name="settings_autolock_30m">After 30 minutes</string>
     <string name="settings_autolock_never">Never</string>
+    <string name="settings_security_lock_minimised">Lock when minimised</string>
+    <string name="settings_security_lock_minimised_desc">Minimising the window locks the vault and closes open sessions.</string>
+    <string name="settings_security_lock_device">Lock with the device</string>
+    <string name="settings_security_lock_device_desc">Locking the device locks the vault and closes open sessions.</string>
     <string name="settings_security_2fa">Two-factor authentication</string>
     <string name="settings_security_2fa_desc">TOTP via an authenticator app.</string>
     <string name="settings_security_report_team_sessions">Report sessions on shared hosts</string>

@@ -240,26 +240,13 @@ class VaultGateIdleLockTest {
     @Test
     fun `a teardown that throws on the background lock is contained and recorded`() = runComposeUiTest {
         val log = IdleLockSecurityLog()
-        val owner = object : LifecycleOwner {
-            override val lifecycle: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
-        }.also { it.lifecycle.currentState = Lifecycle.State.STARTED }
-        setContent {
-            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                VaultGate(
-                    vault = FakeFreshVault(),
-                    securityLog = log,
-                    autoLockIdleMs = null,
-                    onBeforeLock = { error("a tunnel refused to close") },
-                    createForm = { _, onCreate, _ ->
-                        LaunchedEffect(Unit) { onCreate(PASSWORD.toCharArray(), PASSWORD.toCharArray()) }
-                    },
-                    unlockForm = { _, _, _, _, _ -> Text(LOCKED) },
-                ) { FocusedContent() }
-            }
-        }
-        waitUntil { onAllNodesWithText(UNLOCKED).fetchSemanticsNodes().isNotEmpty() }
+        val window = minimisableGate(
+            autoLockIdleMs = { null },
+            securityLog = log,
+            onBeforeLock = { error("a tunnel refused to close") },
+        )
 
-        owner.lifecycle.currentState = Lifecycle.State.CREATED
+        window.currentState = Lifecycle.State.CREATED
         waitForIdle()
 
         onNodeWithText(LOCKED).assertIsDisplayed()
@@ -269,6 +256,37 @@ class VaultGateIdleLockTest {
             log.events.map { it.type }.filter { it == SecurityEventType.LockIncomplete },
             "the background lock did not finish and left no trace",
         )
+    }
+
+    /**
+     * Issue #397: minimising the window locked the vault whatever Settings → Security said, closing
+     * every session with it. Turning the background lock off keeps the vault open.
+     */
+    @Test
+    fun `the background lock switched off keeps the vault open when the window is minimised`() = runComposeUiTest {
+        val window = minimisableGate(autoLockIdleMs = { HOUR_MS }, lockOnBackground = { false })
+
+        window.currentState = Lifecycle.State.CREATED
+        waitForIdle()
+
+        onNodeWithText(UNLOCKED).assertIsDisplayed()
+    }
+
+    /**
+     * The lifecycle observer outlives a settings change, so it must read the switch when the window
+     * goes down, not the value it was registered under.
+     */
+    @Test
+    fun `the background lock switched back on applies without a restart`() = runComposeUiTest {
+        var lockOnBackground by mutableStateOf(false)
+        val window = minimisableGate(autoLockIdleMs = { null }, lockOnBackground = { lockOnBackground })
+
+        lockOnBackground = true
+        waitForIdle()
+        window.currentState = Lifecycle.State.CREATED
+        waitForIdle()
+
+        onNodeWithText(LOCKED).assertIsDisplayed()
     }
 
     /** The other half of the property: silence still locks, or the timeout would be decoration. */
@@ -299,6 +317,7 @@ class VaultGateIdleLockTest {
                     vault = FakeFreshVault(),
                     securityLog = securityLog,
                     autoLockIdleMs = IDLE_MS,
+                    lockOnBackground = true,
                     workInFlight = workInFlight,
                     onBeforeLock = onBeforeLock,
                     createForm = { _, onCreate, _ ->
@@ -309,6 +328,42 @@ class VaultGateIdleLockTest {
             }
         }
         waitUntil { onAllNodesWithText(UNLOCKED).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /**
+     * [unlockedGate] under a lifecycle the test drives: moving it to `CREATED` is minimising the
+     * window. Both settings are read in composition, so a snapshot-state source changes them while
+     * the vault stays unlocked.
+     */
+    private fun ComposeUiTest.minimisableGate(
+        autoLockIdleMs: () -> Long?,
+        lockOnBackground: () -> Boolean = { true },
+        securityLog: SecurityLog? = null,
+        onBeforeLock: () -> Unit = {},
+    ): LifecycleRegistry {
+        val owner = object : LifecycleOwner {
+            override val lifecycle: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
+        }.also { it.lifecycle.currentState = Lifecycle.State.STARTED }
+        // Outside the composition: a vault built in it is a new identity on every recomposition, and
+        // the gate rebuilds its controller — and every effect keyed on it — around a new vault.
+        val vault = FakeFreshVault()
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                VaultGate(
+                    vault = vault,
+                    securityLog = securityLog,
+                    autoLockIdleMs = autoLockIdleMs(),
+                    lockOnBackground = lockOnBackground(),
+                    onBeforeLock = onBeforeLock,
+                    createForm = { _, onCreate, _ ->
+                        LaunchedEffect(Unit) { onCreate(PASSWORD.toCharArray(), PASSWORD.toCharArray()) }
+                    },
+                    unlockForm = { _, _, _, _, _ -> Text(LOCKED) },
+                ) { FocusedContent() }
+            }
+        }
+        waitUntil { onAllNodesWithText(UNLOCKED).fetchSemanticsNodes().isNotEmpty() }
+        return owner.lifecycle
     }
 }
 
@@ -385,6 +440,7 @@ private fun TypingContent() {
 }
 
 private const val IDLE_MS = 60_000L
+private const val HOUR_MS = 60 * 60_000L
 private const val REPAINT_MS = 100L
 private const val PASSWORD = "correct horse battery"
 private const val UNLOCKED = "session"
