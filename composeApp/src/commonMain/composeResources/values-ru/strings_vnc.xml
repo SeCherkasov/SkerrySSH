@@ -6,6 +6,17 @@
     <string name="vnc_error_auth">Сервер требует способ аутентификации, который Skerry не поддерживает.</string>
     <string name="vnc_error_protocol">Сервер прислал неожиданный VNC-поток.</string>
     <string name="vnc_error_cert_rejected">Сертификат сервера не принят. Подключитесь снова, чтобы его увидеть.</string>
+    <string name="rdp_error_credentials">Неверное имя пользователя или пароль.</string>
+    <string name="rdp_error_account_restricted">Учётная запись отключена, заблокирована или истекла.</string>
+    <string name="rdp_error_password_expired">Срок действия пароля истёк. Смените его на сервере и подключитесь снова.</string>
+    <string name="rdp_error_logon_not_allowed">Учётной записи запрещён вход через удалённый рабочий стол.</string>
+    <string name="rdp_error_license">Сервер не смог выдать лицензию на сеанс.</string>
+    <string name="rdp_error_server_refused">Сервер отказал в сеансе.</string>
+    <string name="rdp_error_security_check">Сервер не прошёл проверку безопасности NLA. Соединение может быть перехвачено.</string>
+    <string name="rdp_error_legacy_security">Сервер разрешает только устаревшую защиту RDP. Включите на сервере TLS или NLA.</string>
+    <string name="rdp_error_negotiation">Сервер отклонил предложенные протоколы защиты.</string>
+    <string name="rdp_error_tls">Не удалось установить TLS-соединение с сервером.</string>
+    <string name="rdp_error_protocol">Сервер прислал неожиданный поток RDP.</string>
     <string name="vnc_quality">Качество</string>
     <string name="vnc_quality_auto">Авто</string>
     <string name="vnc_quality_low">Низкое</string>

@@ -56,5 +56,5 @@ object UnavailableLicenseCrypto : RdpLicenseCrypto {
     override fun rsaPublicKeyOf(certificateDer: ByteArray): RdpRsaPublicKey? = unavailable()
 
     private fun unavailable(): Nothing =
-        throw RdpAuthException("the server asked for a license outside the licensing phase")
+        throw RdpAuthException(RdpAuthFailure.License, "the server asked for a license outside the licensing phase")
 }

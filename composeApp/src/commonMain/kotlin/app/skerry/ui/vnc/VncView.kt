@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.graphics.RemoteDesktopQuality
@@ -210,7 +212,7 @@ private fun CenterNotice(icon: String, message: String, color: Color = Skerry.co
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Sym(icon, size = 28.sp, color = color)
-            Txt(message, color = color, size = 13.sp)
+            Txt(message, Modifier.padding(horizontal = 24.dp), color = color, size = 13.sp, align = TextAlign.Center)
         }
     }
 }

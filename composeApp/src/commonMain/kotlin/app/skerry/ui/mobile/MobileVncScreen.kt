@@ -67,6 +67,7 @@ import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.vnc.VncTouchSurface
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.text.style.TextAlign
 import app.skerry.ui.vnc.remoteDesktopAnnouncement
 import app.skerry.ui.vnc.vncFailureText
 import kotlinx.coroutines.delay
@@ -299,7 +300,7 @@ internal fun VncImeField(screen: RemoteDesktopScreenState, onClosed: () -> Unit)
 @Composable
 private fun CenterText(text: String, color: Color) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Txt(text, color = color, size = 13.sp)
+        Txt(text, Modifier.padding(horizontal = 24.dp), color = color, size = 13.sp, align = TextAlign.Center)
     }
 }
 

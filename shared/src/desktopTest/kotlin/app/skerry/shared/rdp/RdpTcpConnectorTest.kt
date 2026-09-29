@@ -16,6 +16,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -76,6 +77,26 @@ class RdpTcpConnectorTest {
         // Accepted, and answered never. Coroutine cancellation cannot interrupt the blocking read
         // that follows, so without a read timeout this call never returns at all.
         serve { }
+
+        assertFailsWith<SocketTimeoutException> {
+            runBlocking {
+                RdpTcpConnector(
+                    certificateVerifier = RecordingVerifier(),
+                    negotiationTimeoutMillis = 250,
+                ).connect(host = server.inetAddress.hostAddress, port = server.localPort)
+            }
+        }
+    }
+
+    @Test
+    fun `a handshake that times out is a network failure, not a tls one`() {
+        // Confirmed, then silent: the handshake waits for a ServerHello that never comes. Telling
+        // the user TLS failed would send them looking at cipher suites for a dead link.
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            Thread.sleep(2_000)
+        }
 
         assertFailsWith<SocketTimeoutException> {
             runBlocking {
@@ -270,7 +291,9 @@ class RdpTcpConnectorTest {
         // Kills the connection the moment the certificate has been offered.
         val verifier = RecordingVerifier { raw.get(TIMEOUT_MS, TimeUnit.MILLISECONDS).close() }
 
-        assertFailsWith<IOException> { connect(verifier = verifier) }
+        // TLS alert or a reset, depending on where the kill lands; either way not a certificate.
+        val failure = assertFails { connect(verifier = verifier) }
+        assertFalse(failure is RdpCertificateRejectedException, "reported as a rejected certificate")
 
         assertEquals(1, verifier.verified.size)
         assertTrue(verifier.remembered.isEmpty(), "a failed handshake recorded its certificate")
@@ -297,16 +320,19 @@ class RdpTcpConnectorTest {
 
     @Test
     fun `a handshake that fails for its own reasons is not reported as a rejected certificate`() {
-        // Confirmed, then hung up on before TLS. The connector has to pass that failure through as
-        // it is — reporting a certificate problem would send the user looking at the wrong thing.
+        // Confirmed, then hung up on before TLS. Reporting a certificate problem would send the user
+        // looking at the wrong thing; the handshake failure is what they are told about.
         serve { socket ->
             DataInputStream(socket.getInputStream()).let { readPacket(it) }
             socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
             socket.close()
         }
 
-        // RdpCertificateRejectedException is not an IOException, so this pins both halves.
-        assertFailsWith<IOException> { connect() }
+        val failure = assertFailsWith<RdpTlsException> { connect() }
+
+        // Walked, not read off `cause`: coroutine stack-trace recovery may wrap a copy around it.
+        val chain = generateSequence<Throwable>(failure) { it.cause }
+        assertTrue(chain.any { it is IOException }, "the socket's own failure stays in the chain")
     }
 
     @Test
@@ -342,7 +368,10 @@ class RdpTcpConnectorTest {
             }
         }
 
-        assertFailsWith<RdpProtocolException> { connect() }
+        // To the user this is the same refusal as SSL_NOT_ALLOWED_BY_SERVER: the fix is on the server.
+        val failure = assertFailsWith<RdpNegotiationException> { connect() }
+
+        assertEquals(RdpNegotiationFailure.SSL_NOT_ALLOWED_BY_SERVER, failure.reason)
     }
 
     @Test
