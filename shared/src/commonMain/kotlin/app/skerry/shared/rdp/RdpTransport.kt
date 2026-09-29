@@ -14,9 +14,11 @@ interface RdpTransport {
     /**
      * Connect to [target] and log on with [credentials].
      *
-     * @throws RdpAuthException the credentials were refused
-     * @throws RdpCertificateRejectedException the server's TLS certificate was not trusted
-     * @throws RdpNegotiationException the server refused the security protocols offered
+     * A failure may arrive wrapped in an [RdpConnectException] naming the step it happened at, so the
+     * reasons below are found in the cause chain rather than caught by type:
+     * [RdpAuthException] (the credentials were refused), [RdpCertificateRejectedException] (the
+     * server's TLS certificate was not trusted), [RdpNegotiationException] (the server refused the
+     * security protocols offered).
      */
     suspend fun connect(target: RdpTarget, credentials: RdpCredentials): RdpSession
 }

@@ -69,7 +69,7 @@ import app.skerry.ui.vnc.VncTouchSurface
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.style.TextAlign
 import app.skerry.ui.vnc.remoteDesktopAnnouncement
-import app.skerry.ui.vnc.vncFailureText
+import app.skerry.ui.vnc.remoteDesktopErrorText
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -119,7 +119,7 @@ fun MobileVncScreen(state: MobileDesignState) {
                 ReportOutputVisibility(ui.screen)
                 VncTouchSurface(ui.screen)
             }
-            is RemoteDesktopUiState.Error -> CenterText(vncFailureText(ui.failure), Skerry.colors.sunset)
+            is RemoteDesktopUiState.Error -> CenterText(remoteDesktopErrorText(ui), Skerry.colors.sunset)
             is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncTouchSurface(ui.screen, interactive = false)
                 CenterText(

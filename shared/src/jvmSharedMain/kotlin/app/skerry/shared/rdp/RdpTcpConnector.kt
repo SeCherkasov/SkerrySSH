@@ -113,7 +113,9 @@ class RdpTcpConnector(
         requestedProtocols: Int = RdpSecurityProtocol.SSL or RdpSecurityProtocol.HYBRID,
         cookie: String? = null,
         loadBalanceInfo: String? = null,
+        onStage: (RdpConnectStage) -> Unit = {},
     ): RdpConnection = withContext(Dispatchers.IO) {
+        onStage(RdpConnectStage.Tcp)
         val socket = openSocket(host, port)
         socket.soTimeout = negotiationTimeoutMillis
         // Cancellation cannot interrupt the blocking reads below, but closing the socket under them
@@ -122,6 +124,7 @@ class RdpTcpConnector(
             if (cause != null) runCatching { socket.close() }
         }
         try {
+            onStage(RdpConnectStage.Negotiation)
             val plainSink = RdpSink { bytes ->
                 socket.getOutputStream().apply {
                     write(bytes)
@@ -147,6 +150,7 @@ class RdpTcpConnector(
             if (selected and requestedProtocols == 0) {
                 throw RdpProtocolException("server selected protocol $selected, which was not offered")
             }
+            onStage(RdpConnectStage.Tls)
             val secure = upgradeToTls(socket, host, port)
             RdpConnection(secure.socket, selected, negotiation, secure.publicKey)
         } catch (e: Throwable) {

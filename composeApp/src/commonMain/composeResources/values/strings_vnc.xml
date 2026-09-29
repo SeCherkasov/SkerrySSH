@@ -2,7 +2,7 @@
     <string name="vnc_connecting">Connecting…</string>
     <string name="vnc_session_closed">Session closed</string>
     <string name="vnc_connection_lost">Connection lost</string>
-    <string name="vnc_connect_failed">Failed to connect</string>
+    <string name="vnc_connect_failed">Failed to connect.</string>
     <string name="vnc_error_auth">The server requires an authentication method Skerry doesn't support.</string>
     <string name="vnc_error_protocol">The server sent an unexpected VNC stream.</string>
     <string name="vnc_error_cert_rejected">Server certificate not accepted. Connect again to see it.</string>
@@ -83,4 +83,19 @@
     <string name="rd_surface_release">%1$s releases the keyboard</string>
     <!-- Same funnel on the remote-desktop screen (issue #228) -->
     <string name="rd_keyboard_input">Remote desktop input</string>
+    <string name="rdp_stage_line">Step: %1$s.</string>
+    <string name="rdp_stage_line_drop">Step: %1$s. %2$s</string>
+    <string name="rdp_stage_tcp">TCP connection</string>
+    <string name="rdp_stage_negotiation">security negotiation (X.224)</string>
+    <string name="rdp_stage_tls">TLS handshake</string>
+    <string name="rdp_stage_nla">NLA (CredSSP)</string>
+    <string name="rdp_stage_mcs">MCS connection</string>
+    <string name="rdp_stage_licensing">logon and licensing</string>
+    <string name="rdp_stage_capabilities">capability exchange</string>
+    <string name="rdp_stage_finalization">session finalization</string>
+    <string name="rdp_drop_closed">The server closed the connection.</string>
+    <string name="rdp_drop_timeout">The server stopped responding.</string>
+    <string name="rdp_drop_reset">The connection was reset.</string>
+    <string name="rdp_drop_refused">Connection refused.</string>
+    <string name="rdp_drop_unresolved">Host not found.</string>
 </resources>

@@ -44,6 +44,43 @@ class RdpConnectTest {
     }
 
     @Test
+    fun `the sequence names each step as it starts`() = runTest {
+        val server = ModelServer()
+        val stages = mutableListOf<RdpConnectStage>()
+
+        RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto, stages::add).run()
+
+        assertEquals(
+            listOf(
+                RdpConnectStage.Mcs,
+                RdpConnectStage.Licensing,
+                RdpConnectStage.Capabilities,
+                RdpConnectStage.Finalization,
+            ),
+            stages,
+        )
+    }
+
+    @Test
+    fun `a refusal is heard after the step it belongs to has been named`() = runTest {
+        // The transport labels a failure with the last step it heard; a refusal during licensing
+        // and one during the capability exchange must not share a label.
+        val licensing = mutableListOf<RdpConnectStage>()
+        val refusing = ModelServer(licenseErrorCode = 0x00000002)
+        assertFailsWith<RdpAuthException> {
+            RdpConnectionSequence(refusing.source, refusing.sink, settings, logon, FakeLicenseCrypto, licensing::add).run()
+        }
+        assertEquals(RdpConnectStage.Licensing, licensing.last())
+
+        val capabilities = mutableListOf<RdpConnectStage>()
+        val server = ModelServer(errorInfo = 0x00000009)
+        assertFailsWith<RdpAuthException> {
+            RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto, capabilities::add).run()
+        }
+        assertEquals(RdpConnectStage.Capabilities, capabilities.last())
+    }
+
+    @Test
     fun `remoteFx off keeps its codec out of the confirm active a server offer cannot revive`() = runTest {
         // The model server offers RemoteFX; the profile declined it. The RemoteFX GUID must be
         // absent — this is the escape hatch F-32 exists for, and only the wire proves it. NSCodec

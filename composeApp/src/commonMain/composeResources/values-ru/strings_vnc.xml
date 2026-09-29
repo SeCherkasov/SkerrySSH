@@ -2,7 +2,7 @@
     <string name="vnc_connecting">Подключение…</string>
     <string name="vnc_session_closed">Сессия завершена</string>
     <string name="vnc_connection_lost">Соединение потеряно</string>
-    <string name="vnc_connect_failed">Не удалось подключиться</string>
+    <string name="vnc_connect_failed">Не удалось подключиться.</string>
     <string name="vnc_error_auth">Сервер требует способ аутентификации, который Skerry не поддерживает.</string>
     <string name="vnc_error_protocol">Сервер прислал неожиданный VNC-поток.</string>
     <string name="vnc_error_cert_rejected">Сертификат сервера не принят. Подключитесь снова, чтобы его увидеть.</string>
@@ -82,4 +82,19 @@
     <string name="rd_surface">Удалённый рабочий стол: %1$s. %2$s</string>
     <string name="rd_surface_release">%1$s отпускает клавиатуру</string>
     <string name="rd_keyboard_input">Ввод в удалённый рабочий стол</string>
+    <string name="rdp_stage_line">Этап: %1$s.</string>
+    <string name="rdp_stage_line_drop">Этап: %1$s. %2$s</string>
+    <string name="rdp_stage_tcp">TCP-соединение</string>
+    <string name="rdp_stage_negotiation">согласование безопасности (X.224)</string>
+    <string name="rdp_stage_tls">TLS-рукопожатие</string>
+    <string name="rdp_stage_nla">NLA (CredSSP)</string>
+    <string name="rdp_stage_mcs">подключение MCS</string>
+    <string name="rdp_stage_licensing">вход и лицензирование</string>
+    <string name="rdp_stage_capabilities">обмен возможностями</string>
+    <string name="rdp_stage_finalization">завершение подключения</string>
+    <string name="rdp_drop_closed">Сервер закрыл соединение.</string>
+    <string name="rdp_drop_timeout">Сервер перестал отвечать.</string>
+    <string name="rdp_drop_reset">Соединение сброшено.</string>
+    <string name="rdp_drop_refused">В подключении отказано.</string>
+    <string name="rdp_drop_unresolved">Хост не найден.</string>
 </resources>

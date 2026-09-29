@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
+import app.skerry.shared.rdp.RdpConnectStage
+import app.skerry.shared.rdp.RdpDrop
 import app.skerry.ui.vnc.VncFailure
+import app.skerry.ui.vnc.rdpConnectFailureOf
 import app.skerry.ui.vnc.vncFailureOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +34,14 @@ sealed interface RemoteDesktopUiState {
      * Connect failed. [failure] is the localization contract — the raw [detail] (wire diagnostics,
      * always English) is for logs, never the message shown on its own.
      */
-    data class Error(val failure: VncFailure, val detail: String = "") : RemoteDesktopUiState
+    data class Error(
+        val failure: VncFailure,
+        val detail: String = "",
+        /** The RDP connect step the failure happened at, when the transport named one. */
+        val stage: RdpConnectStage? = null,
+        /** How the network ended that step, when it was the network that ended it. */
+        val drop: RdpDrop? = null,
+    ) : RemoteDesktopUiState
 
     /**
      * The session closed not on our initiative (server drop / EOF). [screen] is the frozen last
@@ -106,7 +116,8 @@ class RemoteDesktopController(
             } catch (e: Exception) {
                 releaseSession()
                 // Typed reason for the UI; the wire text stays as diagnostics only.
-                uiState = RemoteDesktopUiState.Error(vncFailureOf(e), e.message.orEmpty())
+                val step = rdpConnectFailureOf(e)
+                uiState = RemoteDesktopUiState.Error(vncFailureOf(e), e.message.orEmpty(), step?.stage, step?.drop)
             }
         }
     }

@@ -1,9 +1,11 @@
 package app.skerry.ui.vnc
 
 import androidx.compose.runtime.Composable
+import app.skerry.shared.io.findCause
 import app.skerry.shared.rdp.RdpAuthException
 import app.skerry.shared.rdp.RdpAuthFailure
 import app.skerry.shared.rdp.RdpCertificateRejectedException
+import app.skerry.shared.rdp.RdpConnectException
 import app.skerry.shared.rdp.RdpNegotiationException
 import app.skerry.shared.rdp.RdpNegotiationFailure
 import app.skerry.shared.rdp.RdpProtocolException
@@ -97,27 +99,24 @@ enum class VncFailure {
  * deep would read as the generic "failed to connect" this exists to avoid.
  */
 fun vncFailureOf(e: Throwable): VncFailure {
-    e.find<RdpCertificateRejectedException>()?.let { return VncFailure.CertificateRejected }
-    e.find<RdpAuthException>()?.let { return rdpAuthFailure(it.reason) }
-    e.find<RdpNegotiationException>()?.let {
+    e.findCause<RdpCertificateRejectedException>()?.let { return VncFailure.CertificateRejected }
+    e.findCause<RdpAuthException>()?.let { return rdpAuthFailure(it.reason) }
+    e.findCause<RdpNegotiationException>()?.let {
         return if (it.reason == RdpNegotiationFailure.SSL_NOT_ALLOWED_BY_SERVER) {
             VncFailure.RdpLegacySecurity
         } else {
             VncFailure.RdpNegotiation
         }
     }
-    e.find<RdpTlsException>()?.let { return VncFailure.RdpTls }
-    e.find<RdpProtocolException>()?.let { return VncFailure.RdpProtocol }
-    e.find<VncAuthException>()?.let { return VncFailure.Auth }
-    e.find<VncProtocolException>()?.let { return VncFailure.Protocol }
+    e.findCause<RdpTlsException>()?.let { return VncFailure.RdpTls }
+    e.findCause<RdpProtocolException>()?.let { return VncFailure.RdpProtocol }
+    e.findCause<VncAuthException>()?.let { return VncFailure.Auth }
+    e.findCause<VncProtocolException>()?.let { return VncFailure.Protocol }
     return VncFailure.Other
 }
 
-/** The first [T] in [this] and its causes, bounded so a cyclic chain cannot hang the UI. */
-private inline fun <reified T : Throwable> Throwable.find(): T? =
-    generateSequence(this) { it.cause }.take(MAX_CAUSE_DEPTH).firstNotNullOfOrNull { it as? T }
-
-private const val MAX_CAUSE_DEPTH = 8
+/** The step an RDP connect failed at and how it ended, if the transport recorded one in [e]'s chain. */
+fun rdpConnectFailureOf(e: Throwable): RdpConnectException? = e.findCause()
 
 private fun rdpAuthFailure(reason: RdpAuthFailure): VncFailure = when (reason) {
     RdpAuthFailure.Credentials -> VncFailure.RdpCredentials
@@ -142,7 +141,7 @@ private fun rdpAuthFailure(reason: RdpAuthFailure): VncFailure = when (reason) {
  */
 @Composable
 fun remoteDesktopAnnouncement(ui: RemoteDesktopUiState): String = when (ui) {
-    is RemoteDesktopUiState.Error -> vncFailureText(ui.failure)
+    is RemoteDesktopUiState.Error -> remoteDesktopErrorText(ui)
     is RemoteDesktopUiState.Disconnected ->
         stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost)
     else -> ""

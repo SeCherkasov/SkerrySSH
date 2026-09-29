@@ -29,6 +29,8 @@ class RdpConnectionSequence(
      * session that already holds a licence.
      */
     licenseCrypto: RdpLicenseCrypto = UnavailableLicenseCrypto,
+    /** Told each step of [run] as it starts, so a failure can name the step it happened at. */
+    private val onStage: (RdpConnectStage) -> Unit = {},
 ) {
     private val license = LicenseExchange(licenseCrypto, logon, settings.clientName)
 
@@ -39,10 +41,12 @@ class RdpConnectionSequence(
      * @throws RdpProtocolException the server departed from the sequence
      */
     suspend fun run(): RdpSessionState {
+        onStage(RdpConnectStage.Mcs)
         val serverData = basicSettingsExchange()
         val userId = channelConnection(serverData)
         val channels = settings.channels.zip(serverData.channelIds.toTypedArray()).toMap()
 
+        onStage(RdpConnectStage.Licensing)
         sink.write(
             Mcs.sendDataRequest(
                 userId,
@@ -58,6 +62,7 @@ class RdpConnectionSequence(
         )
         awaitLicensing(userId, serverData.ioChannelId)
 
+        onStage(RdpConnectStage.Capabilities)
         val capabilities = awaitDemandActive(serverData.ioChannelId)
         sink.write(
             Mcs.sendDataRequest(
@@ -73,6 +78,7 @@ class RdpConnectionSequence(
                 ),
             ),
         )
+        onStage(RdpConnectStage.Finalization)
         finalize(userId, serverData.ioChannelId, capabilities.shareId)
         return RdpSessionState(userId, serverData.ioChannelId, channels, capabilities)
     }
