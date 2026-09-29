@@ -1,6 +1,8 @@
 package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopUpdate
+import app.skerry.shared.rdp.RdpAuthException
+import app.skerry.shared.rdp.RdpAuthFailure
 import app.skerry.shared.rdp.RdpCertificateOffer
 import app.skerry.shared.rdp.RdpCertificateRejectedException
 import app.skerry.ui.vnc.VncFailure
@@ -57,6 +59,18 @@ class RemoteDesktopControllerTest {
         assertTrue(state is RemoteDesktopUiState.Error)
         assertEquals(VncFailure.Other, state.failure)
         assertEquals("refused", state.detail)
+    }
+
+    @Test
+    fun a_refused_rdp_logon_reaches_the_error_state_with_its_reason() = runTest {
+        val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+
+        controller.connect { throw RdpAuthException(RdpAuthFailure.Credentials, "the user name or password is incorrect") }
+        advanceUntilIdle()
+
+        val state = controller.uiState
+        assertTrue(state is RemoteDesktopUiState.Error)
+        assertEquals(VncFailure.RdpCredentials, state.failure)
     }
 
     @Test

@@ -6,6 +6,17 @@
     <string name="vnc_error_auth">服务器要求 Skerry 不支持的身份验证方式。</string>
     <string name="vnc_error_protocol">服务器发送了意外的 VNC 数据流。</string>
     <string name="vnc_error_cert_rejected">未接受服务器证书。重新连接以再次查看。</string>
+    <string name="rdp_error_credentials">用户名或密码错误。</string>
+    <string name="rdp_error_account_restricted">账户已被禁用、锁定或已过期。</string>
+    <string name="rdp_error_password_expired">密码已过期。请在服务器上修改后重新连接。</string>
+    <string name="rdp_error_logon_not_allowed">该账户不允许通过远程桌面登录。</string>
+    <string name="rdp_error_license">服务器无法为会话授予许可证。</string>
+    <string name="rdp_error_server_refused">服务器拒绝了会话。</string>
+    <string name="rdp_error_security_check">服务器未通过 NLA 安全校验。连接可能已被拦截。</string>
+    <string name="rdp_error_legacy_security">服务器仅允许旧版 RDP 安全层。请在服务器上启用 TLS 或 NLA。</string>
+    <string name="rdp_error_negotiation">服务器拒绝了提供的安全协议。</string>
+    <string name="rdp_error_tls">与服务器的 TLS 握手失败。</string>
+    <string name="rdp_error_protocol">服务器发送了意外的 RDP 数据流。</string>
     <string name="vnc_quality">画质</string>
     <string name="vnc_quality_auto">自动</string>
     <string name="vnc_quality_low">低</string>

@@ -80,9 +80,11 @@ class RdpConnectTest {
     fun `a licensing refusal is reported as an authentication failure`() = runTest {
         val server = ModelServer(licenseErrorCode = 0x00000002)
 
-        assertFailsWith<RdpAuthException> {
+        val failure = assertFailsWith<RdpAuthException> {
             RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto).run()
         }
+
+        assertEquals(RdpAuthFailure.License, failure.reason)
     }
 
     @Test
@@ -97,15 +99,16 @@ class RdpConnectTest {
 
     @Test
     fun `an error info PDU during the capability exchange explains the refusal`() = runTest {
-        // 0x0000000C = the account may not log on remotely, the answer a server gives a user who
-        // authenticated fine but is not in Remote Desktop Users.
-        val server = ModelServer(errorInfo = 0x0000000C)
+        // ERRINFO_SERVER_INSUFFICIENT_PRIVILEGES: the answer a server gives a user who authenticated
+        // fine but is not in Remote Desktop Users.
+        val server = ModelServer(errorInfo = 0x00000009)
 
         val failure = assertFailsWith<RdpAuthException> {
             RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto).run()
         }
 
         assertEquals("the account does not have permission to log on remotely", failure.message)
+        assertEquals(RdpAuthFailure.LogonNotAllowed, failure.reason)
     }
 
     @Test

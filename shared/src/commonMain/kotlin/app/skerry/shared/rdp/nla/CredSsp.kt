@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp.nla
 
 import app.skerry.shared.rdp.RdpAuthException
+import app.skerry.shared.rdp.RdpAuthFailure
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpSink
 import app.skerry.shared.rdp.RdpSource
@@ -40,7 +41,7 @@ class CredSspClient(
         // Both sides drop to the lower of the two versions; the field decides how the key is bound.
         val version = minOf(CLIENT_VERSION, challengeRequest.version)
         if (version < MIN_SERVER_VERSION) {
-            throw RdpAuthException("server offers CredSSP version $version, which predates public key binding")
+            throw RdpAuthException(RdpAuthFailure.SecurityCheck, "server offers CredSSP version $version, which predates public key binding")
         }
 
         val authenticated = ntlm.authenticate(challenge)
@@ -60,16 +61,16 @@ class CredSspClient(
         val confirmation = TsRequest.read(source)
         confirmation.failIfError()
         val sealedAnswer = confirmation.pubKeyAuth
-            ?: throw RdpAuthException("server did not answer the public key binding")
+            ?: throw RdpAuthException(RdpAuthFailure.SecurityCheck, "server did not answer the public key binding")
         val answer = try {
             session.unseal(sealedAnswer)
         } catch (e: RdpProtocolException) {
             // A signature failure here is not a parse problem: it means the peer that finished the
             // NTLM exchange is not the peer holding the TLS key.
-            throw RdpAuthException("server failed the CredSSP binding check (${e.message})")
+            throw RdpAuthException(RdpAuthFailure.SecurityCheck, "server failed the CredSSP binding check (${e.message})", e)
         }
         if (!constantTimeEquals(answer, serverBinding(version, publicKey, nonce))) {
-            throw RdpAuthException("server returned a public key that does not match the TLS session")
+            throw RdpAuthException(RdpAuthFailure.SecurityCheck, "server returned a public key that does not match the TLS session")
         }
 
         // Only now, with the channel proven to end at the server we authenticated to, does the
@@ -107,7 +108,7 @@ class CredSspClient(
     private fun TsRequest.failIfError() {
         val code = errorCode ?: return
         if (code == 0) return
-        throw RdpAuthException(credSspErrorText(code))
+        throw RdpAuthException(credSspFailure(code), credSspErrorText(code))
     }
 
     private companion object {
@@ -123,6 +124,15 @@ class CredSspClient(
         const val CLIENT_TO_SERVER_MAGIC = "CredSSP Client-To-Server Binding Hash"
         const val SERVER_TO_CLIENT_MAGIC = "CredSSP Server-To-Client Binding Hash"
     }
+}
+
+/** Which of the user-facing reasons an NTSTATUS from a CredSSP server amounts to. */
+fun credSspFailure(code: Int): RdpAuthFailure = when (code) {
+    STATUS_LOGON_FAILURE -> RdpAuthFailure.Credentials
+    STATUS_ACCOUNT_DISABLED, STATUS_ACCOUNT_LOCKED_OUT, STATUS_ACCOUNT_EXPIRED -> RdpAuthFailure.AccountRestricted
+    STATUS_PASSWORD_EXPIRED, STATUS_PASSWORD_MUST_CHANGE -> RdpAuthFailure.PasswordExpired
+    STATUS_LOGON_TYPE_NOT_GRANTED -> RdpAuthFailure.LogonNotAllowed
+    else -> RdpAuthFailure.ServerRefused
 }
 
 /**

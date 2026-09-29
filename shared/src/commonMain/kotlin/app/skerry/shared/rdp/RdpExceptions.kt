@@ -12,7 +12,49 @@ class RdpProtocolException(message: String) : Exception(message)
  * runs before the RDP connection sequence. Distinct from [RdpProtocolException]: this one is the
  * user's to fix (wrong password, wrong domain, locked account).
  */
-class RdpAuthException(message: String) : Exception(message)
+class RdpAuthException(
+    val reason: RdpAuthFailure,
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
+/**
+ * Why the logon was refused, as a contract the UI translates. The message keeps the protocol's own
+ * wording for diagnostics; this is what decides which sentence the user reads.
+ */
+enum class RdpAuthFailure {
+    /** Wrong user name or password (STATUS_LOGON_FAILURE). */
+    Credentials,
+
+    /** The account exists but is disabled, locked out or expired. */
+    AccountRestricted,
+
+    /** The password has expired or must be changed before the next logon. */
+    PasswordExpired,
+
+    /** The account may not log on through Remote Desktop. */
+    LogonNotAllowed,
+
+    /** The server could not license the session. */
+    License,
+
+    /** The server ended the logon for a reason of its own (Set Error Info, an unmapped NTSTATUS). */
+    ServerRefused,
+
+    /**
+     * CredSSP could not tie the logon to the TLS channel. The password itself is never sent, but the
+     * NTLM response may already have been — an interception is not ruled out.
+     */
+    SecurityCheck,
+}
+
+/**
+ * The TLS handshake that every accepted protocol starts with did not complete: no shared version
+ * or cipher suite, or the server aborted the handshake. Kept apart from a refused certificate
+ * ([RdpCertificateRejectedException]), which is the user's own decision, and from a timeout or a
+ * reset, which stay plain I/O failures.
+ */
+class RdpTlsException(message: String, cause: Throwable) : Exception(message, cause)
 
 /**
  * The server handed the connection to another machine (MS-RDPBCGR 2.2.13). Not a failure: it is how

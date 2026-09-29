@@ -169,7 +169,7 @@ class RdpConnectionSequence(
                     if (errorCode == LICENSE_STATUS_VALID_CLIENT || errorCode == LICENSE_ERR_NO_LICENSE_SERVER) {
                         return
                     }
-                    throw RdpAuthException("the server refused the session license (error $errorCode)")
+                    throw RdpAuthException(RdpAuthFailure.License, "the server refused the session license (error $errorCode)")
                 }
 
                 LicenseExchange.LICENSE_REQUEST -> {
@@ -233,7 +233,7 @@ class RdpConnectionSequence(
         val data = RdpShare.readDataHeader(reader)
         if (data.pduType2 != RdpShare.PDUTYPE2_SET_ERROR_INFO) return
         val errorInfo = reader.u32le()
-        if (errorInfo != 0) throw RdpAuthException(rdpErrorInfoText(errorInfo))
+        if (errorInfo != 0) throw rdpErrorInfoException(errorInfo)
     }
 
     /**
@@ -275,7 +275,7 @@ class RdpConnectionSequence(
                 RdpShare.PDUTYPE2_FONT_MAP -> return
                 RdpShare.PDUTYPE2_SET_ERROR_INFO -> {
                     val errorInfo = reader.u32le()
-                    if (errorInfo != 0) throw RdpAuthException(rdpErrorInfoText(errorInfo))
+                    if (errorInfo != 0) throw rdpErrorInfoException(errorInfo)
                 }
 
                 else -> Unit
@@ -321,20 +321,47 @@ class RdpConnectionSequence(
     }
 }
 
+/** A refused logon reported through Set Error Info, typed for the UI and worded for the log. */
+fun rdpErrorInfoException(code: Int): RdpAuthException =
+    RdpAuthException(rdpErrorInfoFailure(code), rdpErrorInfoText(code))
+
+/** Which of the user-facing reasons a Set Error Info code amounts to. */
+fun rdpErrorInfoFailure(code: Int): RdpAuthFailure =
+    ERROR_INFO[code]?.failure
+        ?: if (code in ERRINFO_LICENSE_FIRST..ERRINFO_LICENSE_LAST) RdpAuthFailure.License else RdpAuthFailure.ServerRefused
+
 /**
  * The Set Error Info PDU codes a user can act on (MS-RDPBCGR 2.2.5.1.1). Everything else keeps its
  * hex value — better an unfamiliar code than a wrong explanation.
  */
-fun rdpErrorInfoText(code: Int): String = when (code) {
-    0x00000001 -> "the session was ended by an administrator"
-    0x00000002 -> "the session was disconnected by an administrator"
-    0x00000003 -> "the session ended because it was idle"
-    0x00000004 -> "the session ended because it reached its time limit"
-    0x00000005 -> "another user logged on and took the session"
-    0x00000009 -> "the server ran out of memory"
-    0x0000000A -> "the server denied the connection"
-    0x0000000C -> "the account does not have permission to log on remotely"
-    0x00000010 -> "the license expired"
-    0x00000012 -> "the server is out of connection licenses"
-    else -> "the server ended the session (0x${code.toUInt().toString(16)})"
-}
+fun rdpErrorInfoText(code: Int): String =
+    ERROR_INFO[code]?.text
+        ?: if (code in ERRINFO_LICENSE_FIRST..ERRINFO_LICENSE_LAST) {
+            "the server could not license the session (0x${code.toUInt().toString(16)})"
+        } else {
+            "the server ended the session (0x${code.toUInt().toString(16)})"
+        }
+
+private class ErrorInfo(val failure: RdpAuthFailure, val text: String)
+
+/** One table for both halves, so the log text and the user's reason cannot drift apart. */
+private val ERROR_INFO = mapOf(
+    0x00000001 to ErrorInfo(RdpAuthFailure.ServerRefused, "an administrator disconnected the session"),
+    0x00000002 to ErrorInfo(RdpAuthFailure.ServerRefused, "an administrator logged the session off"),
+    0x00000003 to ErrorInfo(RdpAuthFailure.ServerRefused, "the session ended because it was idle"),
+    0x00000004 to ErrorInfo(RdpAuthFailure.ServerRefused, "the logon timed out"),
+    0x00000005 to ErrorInfo(RdpAuthFailure.ServerRefused, "another connection took over the session"),
+    0x00000006 to ErrorInfo(RdpAuthFailure.ServerRefused, "the server ran out of memory"),
+    0x00000007 to ErrorInfo(RdpAuthFailure.ServerRefused, "the server denied the connection"),
+    0x00000009 to ErrorInfo(RdpAuthFailure.LogonNotAllowed, "the account does not have permission to log on remotely"),
+    0x0000000A to ErrorInfo(RdpAuthFailure.ServerRefused, "the server requires the credentials to be entered again"),
+    0x0000000B to ErrorInfo(RdpAuthFailure.ServerRefused, "the user disconnected the session"),
+    0x0000000C to ErrorInfo(RdpAuthFailure.ServerRefused, "the user logged off"),
+    0x00000101 to ErrorInfo(RdpAuthFailure.License, "no license server is available"),
+    0x00000102 to ErrorInfo(RdpAuthFailure.License, "the server has no license for this client"),
+    0x0000010A to ErrorInfo(RdpAuthFailure.License, "the server is not licensed for remote connections"),
+)
+
+/** ERRINFO_LICENSE_INTERNAL .. ERRINFO_LICENSE_NO_REMOTE_CONNECTIONS. */
+private const val ERRINFO_LICENSE_FIRST = 0x00000100
+private const val ERRINFO_LICENSE_LAST = 0x0000010A

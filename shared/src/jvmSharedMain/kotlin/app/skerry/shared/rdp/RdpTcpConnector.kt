@@ -8,6 +8,7 @@ import java.net.Socket
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
@@ -103,6 +104,7 @@ class RdpTcpConnector(
      *
      * @throws RdpNegotiationException the server refused every protocol we offered
      * @throws RdpCertificateRejectedException the verifier turned down the server's certificate
+     * @throws RdpTlsException the TLS handshake failed for any other reason than the network
      * @throws RdpProtocolException the answer was malformed, or named a protocol we never offered
      */
     suspend fun connect(
@@ -135,8 +137,12 @@ class RdpTcpConnector(
             if (selected == RdpSecurityProtocol.RDP) {
                 // Standard RDP Security: RC4 over a plaintext socket, with a key exchange broken
                 // beyond repair. We never offer it, so a server selecting it is either ancient or
-                // downgrading us — either way the answer is no, not "connect anyway".
-                throw RdpProtocolException("server selected Standard RDP Security, which is not supported")
+                // downgrading us — either way the answer is no, not "connect anyway". To the user it
+                // is the same refusal as a server that answers with SSL_NOT_ALLOWED_BY_SERVER.
+                throw RdpNegotiationException(
+                    reason = RdpNegotiationFailure.SSL_NOT_ALLOWED_BY_SERVER,
+                    message = "server selected Standard RDP Security, which is not supported",
+                )
             }
             if (selected and requestedProtocols == 0) {
                 throw RdpProtocolException("server selected protocol $selected, which was not offered")
@@ -174,11 +180,17 @@ class RdpTcpConnector(
         secure.enabledProtocols = secure.supportedProtocols.filter { it in TLS_FLOOR }.toTypedArray()
         try {
             secure.startHandshake()
-        } catch (e: IOException) {
+        } catch (e: SSLException) {
             runCatching { secure.close() }
             // Our own refusal surfaces here as a generic TLS failure; the caller needs the
             // certificate that was turned down, not the alert it produced. The alert stays as the
             // cause — a rejection and a broken handshake read the same way in a bug report.
+            throw trust.rejected?.let { RdpCertificateRejectedException(it, cause = e) }
+                ?: RdpTlsException("TLS handshake failed: ${e.message}", e)
+        } catch (e: IOException) {
+            runCatching { secure.close() }
+            // A timeout or a reset during the handshake is the network's failure, not TLS's, and
+            // stays the plain IOException it is.
             throw trust.rejected?.let { RdpCertificateRejectedException(it, cause = e) } ?: e
         }
         // Fails closed: null means the handshake completed without the trust manager being asked

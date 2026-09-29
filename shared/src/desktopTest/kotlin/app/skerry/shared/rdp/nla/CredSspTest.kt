@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp.nla
 
 import app.skerry.shared.rdp.RdpAuthException
+import app.skerry.shared.rdp.RdpAuthFailure
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpSink
 import app.skerry.shared.rdp.RdpSource
@@ -57,6 +58,7 @@ class CredSspTest {
         }
 
         assertTrue(failure.message!!.contains("does not match"), failure.message)
+        assertEquals(RdpAuthFailure.SecurityCheck, failure.reason)
         assertEquals(null, server.authInfo)
     }
 
@@ -64,10 +66,11 @@ class CredSspTest {
     fun `a tampered binding answer is refused before the credentials are sent`() {
         val server = ModelServer(crypto, credentials, serverKey, corruptBindingAnswer = true)
 
-        assertFailsWith<RdpAuthException> {
+        val failure = assertFailsWith<RdpAuthException> {
             runBlocking { CredSspClient(credentials, crypto).authenticate(server.source, server.sink, serverKey) }
         }
 
+        assertEquals(RdpAuthFailure.SecurityCheck, failure.reason)
         assertEquals(null, server.authInfo)
     }
 
@@ -80,6 +83,7 @@ class CredSspTest {
         }
 
         assertEquals("the user name or password is incorrect", failure.message)
+        assertEquals(RdpAuthFailure.Credentials, failure.reason)
         assertEquals(null, server.authInfo)
     }
 
@@ -87,10 +91,11 @@ class CredSspTest {
     fun `a server too old for public key binding is refused`() {
         val server = ModelServer(crypto, credentials, serverKey, serverVersion = 1)
 
-        assertFailsWith<RdpAuthException> {
+        val failure = assertFailsWith<RdpAuthException> {
             runBlocking { CredSspClient(credentials, crypto).authenticate(server.source, server.sink, serverKey) }
         }
 
+        assertEquals(RdpAuthFailure.SecurityCheck, failure.reason)
         assertEquals(null, server.authInfo)
     }
 
