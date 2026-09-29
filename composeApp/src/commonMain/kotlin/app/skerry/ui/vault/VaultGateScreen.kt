@@ -98,8 +98,9 @@ import org.jetbrains.compose.resources.stringResource
 private const val AUTO_LOCK_IDLE_MS = 5 * 60 * 1000L
 
 /**
- * Whether to lock the vault when the app goes to background (`ON_STOP`) — a platform policy. Desktop:
- * always. Android: only if the device is actually locked (keyguard) — switching to a system picker/shade
+ * Whether to lock the vault when the app goes to background (`ON_STOP`) — a platform policy, asked only
+ * while the user keeps the background lock on (Settings → Security). Desktop: always (the window was
+ * minimised). Android: only if the device is actually locked (keyguard) — switching to a system picker/shade
  * doesn't lock the vault, else file picking would break the session. The idle timer ([AUTO_LOCK_IDLE_MS])
  * and process exit (a fresh start is always locked) cover the rest.
  */
@@ -126,9 +127,13 @@ fun VaultGate(
     // create/change password, biometrics enable/disable, biometric unlock. `null` — not logging (mock/preview).
     securityLog: SecurityLog? = null,
     // Idle auto-lock threshold (Settings → Security). From settings: changing it recomposes VaultGate and
-    // restarts the idle timer. `null` — idle timer off ([AutoLockDuration.Never]); background lock remains
-    // (deviceMandatesAutoLock).
+    // restarts the idle timer. `null` — idle timer off ([AutoLockDuration.Never]); the background lock is
+    // [lockOnBackground]'s.
     autoLockIdleMs: Long? = AUTO_LOCK_IDLE_MS,
+    // Background lock switch (Settings → Security, issue #397). Independent of [autoLockIdleMs]:
+    // "Never" there turns off the idle timer only. No default: a call site that forgets it would
+    // silently ignore the user's switch.
+    lockOnBackground: Boolean,
     // Whether unattended work the user started is running right now — an SFTP transfer, a runbook
     // run. While it is, the idle timer defers the lock instead of firing it: locking closes the
     // sessions the work lives on, and losing a half-finished transfer to a timeout is not a
@@ -277,12 +282,15 @@ fun VaultGate(
 
     // Background auto-lock: other hands on an unlocked device must not get an open vault after minimizing.
     val lifecycleOwner = LocalLifecycleOwner.current
+    // Read at ON_STOP: the observer outlives a settings change and must not act on the value it was
+    // registered under.
+    val lockOnBackgroundNow by rememberUpdatedState(lockOnBackground)
     DisposableEffect(lifecycleOwner, controller) {
         val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_STOP || !lockOnBackgroundNow) return@LifecycleEventObserver
             // Don't lock during a biometric prompt: it may send ON_STOP, and locking mid-authentication
             // would lose its successful result (see biometricInFlight).
-            if (event == Lifecycle.Event.ON_STOP &&
-                controller.state == VaultGateState.Unlocked &&
+            if (controller.state == VaultGateState.Unlocked &&
                 !controller.biometricInFlight &&
                 deviceMandatesAutoLock()
             ) {

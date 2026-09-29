@@ -81,6 +81,8 @@ import app.skerry.ui.generated.resources.settings_security_2fa
 import app.skerry.ui.generated.resources.settings_security_2fa_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock
 import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_lock_minimised
+import app.skerry.ui.generated.resources.settings_security_lock_minimised_desc
 import app.skerry.ui.generated.resources.settings_security_master_password
 import app.skerry.ui.generated.resources.settings_security_master_password_desc
 import app.skerry.ui.generated.resources.settings_security_no_events
@@ -237,6 +239,15 @@ internal fun SecuritySection(
         }
         Box(Modifier.width(170.dp)) { AutoLockPicker(state.settings.autoLock, onPick = state.settings::chooseAutoLock) }
     }
+    HLine()
+
+    // Background lock, separate from the idle threshold above (issue #397).
+    SettingToggleRow(
+        stringResource(Res.string.settings_security_lock_minimised),
+        stringResource(Res.string.settings_security_lock_minimised_desc),
+        on = state.settings.lockOnBackground,
+        onToggle = state.settings::toggleLockOnBackground,
+    )
     HLine()
 
     // Two-factor auth isn't implemented yet: SOON badge instead of a fake "enabled" state.

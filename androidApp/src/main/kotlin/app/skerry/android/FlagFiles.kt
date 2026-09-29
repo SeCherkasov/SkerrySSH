@@ -7,12 +7,13 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * An on/off setting kept as "true"/"false" in its own file under the app's files dir. Missing or
- * unreadable reads as [default]; writes are best-effort, off the UI thread.
+ * An on/off setting kept as "true"/"false" in its own file under the app's files dir. Anything but an
+ * explicit "true"/"false" reads as [default] — a write torn by a kill leaves an empty file, and that is
+ * not the user's choice; writes are best-effort, off the UI thread.
  */
 internal class FlagFile(val name: String, val default: Boolean) {
     fun read(dir: File): Boolean =
-        runCatching { File(dir, name).readText().trim().toBoolean() }.getOrDefault(default)
+        runCatching { File(dir, name).readText().trim().toBooleanStrictOrNull() }.getOrNull() ?: default
 }
 
 internal fun LifecycleOwner.writeFlag(dir: File, flag: FlagFile, enabled: Boolean) {
@@ -38,6 +39,9 @@ internal val FLAG_JUMP_VIA_SHELL_OFFERED = FlagFile("experimental_jump_shell", d
 
 /** Reporting sessions on team-shared hosts: `teams_report_sessions`, default on. */
 internal val FLAG_REPORT_TEAM_SESSIONS = FlagFile("teams_report_sessions", default = true)
+
+/** Locking the vault when the device locks: `lock_on_background`, default on (issue #397). */
+internal val FLAG_LOCK_ON_BACKGROUND = FlagFile("lock_on_background", default = true)
 
 /** Terminal shrink-to-fit: `terminal_autofit`, default off. */
 internal val FLAG_TERMINAL_AUTO_FIT = FlagFile("terminal_autofit", default = false)

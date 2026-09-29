@@ -79,6 +79,8 @@ class DesktopSettingsState(
     private val onLocalShellPathChange: (String) -> Unit = {},
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
+    initialLockOnBackground: Boolean = true,
+    private val onLockOnBackgroundChange: (Boolean) -> Unit = {},
     initialShowRecent: Boolean = true,
     private val onShowRecentChange: (Boolean) -> Unit = {},
     initialRecentLimit: Int = MAX_RECENT_HOSTS,
@@ -111,6 +113,9 @@ class DesktopSettingsState(
 
     /** Idle auto-lock threshold (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
+
+    /** Lock the vault when the window is minimised (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
+    var lockOnBackground: Boolean by mutableStateOf(initialLockOnBackground); private set
 
     /** UI language (Appearance → Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
@@ -234,6 +239,12 @@ class DesktopSettingsState(
         if (duration == autoLock) return
         autoLock = duration
         onAutoLockChange(duration)
+    }
+
+    /** Toggle the background lock and report outward (for persistence). */
+    fun toggleLockOnBackground() {
+        lockOnBackground = !lockOnBackground
+        onLockOnBackgroundChange(lockOnBackground)
     }
 
     /** Choose the UI language and report outward (for persistence). */

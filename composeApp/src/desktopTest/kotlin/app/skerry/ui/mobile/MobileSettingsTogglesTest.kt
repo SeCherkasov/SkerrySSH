@@ -12,6 +12,7 @@ import app.skerry.ui.desktop.runMobileShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_custom_term_theme
+import app.skerry.ui.generated.resources.settings_security_lock_device
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions
 import app.skerry.ui.generated.resources.settings_terminal_autofit
 import app.skerry.ui.generated.resources.settings_terminal_prod_warnings
@@ -82,6 +83,19 @@ class MobileSettingsTogglesTest {
         waitForIdle()
 
         assertTrue(shell.state.reportTeamSessions != before)
+    }
+
+    /** Issue #397: desktop parity — the background lock is a switch of its own, on by default. */
+    @Test
+    fun `the lock with the device switch reaches the setting`() = runMobileShell { shell ->
+        shell.state.push(MobileRoute.Security)
+        waitForIdle()
+        assertTrue(shell.state.lockOnBackground, "on by default")
+
+        onSwitch(Res.string.settings_security_lock_device).performScrollTo().performClick()
+        waitForIdle()
+
+        assertFalse(shell.state.lockOnBackground)
     }
 }
 

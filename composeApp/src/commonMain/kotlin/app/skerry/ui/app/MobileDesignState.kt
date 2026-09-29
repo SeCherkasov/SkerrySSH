@@ -200,6 +200,8 @@ class MobileDesignState(
     // back; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
+    initialLockOnBackground: Boolean = true,
+    private val onLockOnBackgroundChange: (Boolean) -> Unit = {},
     // Terminal behaviour (More -> Appearance -> Terminal): scrollback depth and default cursor style.
     // Read from persistence at startup, written back via the callbacks. Defaults (10,000 lines,
     // blinking block, no-op) are for previews/tests. Both apply to NEW sessions on connect (see
@@ -474,6 +476,9 @@ class MobileDesignState(
     /** Idle auto-lock threshold (More -> Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
+    /** Lock the vault when the device locks (More -> Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
+    var lockOnBackground: Boolean by mutableStateOf(initialLockOnBackground); private set
+
     /** Scrollback depth for new sessions, lines (More -> Appearance -> Terminal). Applies to new sessions. */
     var terminalScrollback: Int by mutableStateOf(initialTerminalScrollback); private set
 
@@ -485,6 +490,12 @@ class MobileDesignState(
         if (duration == autoLock) return
         autoLock = duration
         onAutoLockChange(duration)
+    }
+
+    /** Toggle the background lock and report outward (for persistence). */
+    fun toggleLockOnBackground() {
+        lockOnBackground = !lockOnBackground
+        onLockOnBackgroundChange(lockOnBackground)
     }
 
     /** Choose the terminal font and report outward (for persistence). Repeating the same value is a no-op. */

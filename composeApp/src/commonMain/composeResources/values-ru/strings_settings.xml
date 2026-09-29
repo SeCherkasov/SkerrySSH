@@ -161,6 +161,10 @@
     <string name="settings_autolock_15m">Через 15 минут</string>
     <string name="settings_autolock_30m">Через 30 минут</string>
     <string name="settings_autolock_never">Никогда</string>
+    <string name="settings_security_lock_minimised">Блокировать при сворачивании</string>
+    <string name="settings_security_lock_minimised_desc">Сворачивание окна блокирует хранилище и закрывает открытые сессии.</string>
+    <string name="settings_security_lock_device">Блокировать вместе с устройством</string>
+    <string name="settings_security_lock_device_desc">Блокировка устройства блокирует хранилище и закрывает открытые сессии.</string>
     <string name="settings_security_2fa">Двухфакторная аутентификация</string>
     <string name="settings_security_2fa_desc">TOTP через приложение-аутентификатор.</string>
     <string name="settings_security_report_team_sessions">Сообщать о сессиях на общих хостах</string>

@@ -300,6 +300,7 @@ fun MobileDesignApp(
                     // Auto-lock threshold from settings: changing it recomposes VaultGate and restarts
                     // the idle timer; Never (idleMs == null) disables it.
                     autoLockIdleMs = state.autoLock.idleMs,
+                    lockOnBackground = state.lockOnBackground,
                     // Unattended work the user started defers the idle lock — see [IdleLockPolicy].
                     workInFlight = {
                         liveSessions?.writeInFlight == true || deps.runbookRunner?.stepInFlight == true

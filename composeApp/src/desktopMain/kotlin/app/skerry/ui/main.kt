@@ -485,6 +485,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             prefs.set("terminal_highlight_input", true)
             prefs.set("terminal_highlight_output", false)
             prefs.set("auto_lock", AutoLockDuration.DEFAULT.id)
+            prefs.set("lock_on_background", true)
         }
         hosts.reload()
         snippets.reload()
@@ -693,6 +694,8 @@ fun main(args: Array<String>) {
                             onConfirmProductionWarningsChange = { prefs.set("terminal_prod_warnings", it) },
                             initialAutoLock = prefs.id("auto_lock", AutoLockDuration.DEFAULT, AutoLockDuration::fromId),
                             onAutoLockChange = { prefs.set("auto_lock", it.id) },
+                            initialLockOnBackground = prefs.bool("lock_on_background", true),
+                            onLockOnBackgroundChange = { prefs.set("lock_on_background", it) },
                             initialShowRecent = prefs.bool("recent_show", true),
                             onShowRecentChange = { prefs.set("recent_show", it) },
                             initialRecentLimit = prefs.int("recent_limit", DesktopSettingsState.MAX_RECENT_HOSTS),

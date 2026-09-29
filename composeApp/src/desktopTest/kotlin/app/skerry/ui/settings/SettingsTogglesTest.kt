@@ -28,6 +28,7 @@ import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.settings_experimental_jump_shell
+import app.skerry.ui.generated.resources.settings_security_lock_minimised
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions
 import app.skerry.ui.generated.resources.term_recent_section
 import app.skerry.ui.generated.resources.theme_light
@@ -35,6 +36,7 @@ import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.theme.ThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -139,6 +141,16 @@ class SettingsTogglesTest {
         switch(Res.string.settings_security_report_team_sessions).performScrollTo().performClick()
         waitForIdle()
         assertEquals(!before, shell.state.settings.reportTeamSessions)
+    }
+
+    /** Issue #397: the background lock is a switch of its own, on until the user turns it off. */
+    @Test
+    fun `the lock on minimise is switched from the security tab`() = runDesktopShell { shell ->
+        assertTrue(shell.state.settings.lockOnBackground, "on by default")
+        openSettings(SettingsTab.Security)
+        switch(Res.string.settings_security_lock_minimised).performScrollTo().performClick()
+        waitForIdle()
+        assertFalse(shell.state.settings.lockOnBackground)
     }
 
     /** Experimental features live in their own tab, just above the trash, not among stable settings. */
