@@ -172,16 +172,11 @@ class SshjTransportTest {
      * `toUpperCase()`/`toLowerCase()` map `i` to `İ` and `I` to `ı`. Algorithm names, key-type
      * tags and fingerprints on the whole SSH path go through code we do not own, so the same
      * connection is made under `Locale.ROOT` and under Turkish and must come out identical. The
-     * client key is EC: `ecdsa-sha2-nistp256` is a name with an `i` in it, `ssh-rsa` is not.
+     * server's host key is EC, so `ecdsa-sha2-nistp256` — a name with an `i` in it — is negotiated,
+     * offered and fingerprinted under both.
      */
     @Test
     fun `key auth, host-key offer and exec are unchanged with the default locale set to Turkish`() = runTest {
-        val ecKey = KeyPairGenerator.getInstance("EC")
-            .apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }.generateKeyPair()
-        server.publickeyAuthenticator = PublickeyAuthenticator { user, key, _ ->
-            user == USER && key.encoded.contentEquals(ecKey.public.encoded)
-        }
-
         suspend fun handshakeUnder(locale: java.util.Locale): Pair<String?, String?> {
             val saved = java.util.Locale.getDefault()
             java.util.Locale.setDefault(locale)
@@ -193,7 +188,7 @@ class SshjTransportTest {
                     seenFingerprint = offer.fingerprint
                     null
                 }
-                val connection = SshjTransport(recording).connect(target(), SshAuth.PublicKey(pkcs8Pem(ecKey)))
+                val connection = SshjTransport(recording).connect(target(), SshAuth.PublicKey(pkcs8Pem(authorizedKey)))
                 try {
                     val result = connection.exec("echo hello")
                     assertEquals(0, result.exitCode)
