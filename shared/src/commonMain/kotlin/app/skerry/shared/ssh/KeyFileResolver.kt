@@ -92,3 +92,16 @@ fun keyFileSiblingRef(ref: String): String? =
     ref.trim().takeIf { it.isNotEmpty() && !SCHEME.containsMatchIn(it) }?.let { "$it-cert.pub" }
 
 private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.\\-]*://")
+
+/**
+ * [ref] as typed or pasted, trimmed and without one pair of quotes wrapping the whole of it: Windows
+ * Explorer's "Copy as path" yields `"C:\Users\…\id_ed25519"`, and the quotes are not part of any
+ * file name (#396). A quote that doesn't close around the whole ref is left alone.
+ */
+fun normalizeKeyFileRef(ref: String): String {
+    val trimmed = ref.trim()
+    val wrapped = trimmed.length >= 2 && trimmed.first() == trimmed.last() && trimmed.first() in QUOTES
+    return if (wrapped) trimmed.substring(1, trimmed.length - 1).trim() else trimmed
+}
+
+private const val QUOTES = "\"'"

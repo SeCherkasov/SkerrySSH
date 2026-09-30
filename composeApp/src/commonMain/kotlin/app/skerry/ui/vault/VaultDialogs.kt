@@ -118,6 +118,7 @@ import app.skerry.ui.design.Chip
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.shared.ssh.keyFileSiblingRef
+import app.skerry.shared.ssh.normalizeKeyFileRef
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Txt
@@ -226,7 +227,7 @@ internal fun LinkKeyFileDialog(
     var certRef by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    val valid = name.isNotBlank() && keyRef.isNotBlank()
+    val valid = name.isNotBlank() && normalizeKeyFileRef(keyRef).isNotEmpty()
     val browseTitle = stringResource(Res.string.vault_link_key_file)
 
     VaultDialogScaffold(stringResource(Res.string.vault_link_key_file), stringResource(Res.string.vault_dialog_key_file_subtitle), onDismiss) {
@@ -241,8 +242,8 @@ internal fun LinkKeyFileDialog(
                 scope.launch { pickSecretFileRef(browseTitle)?.let { certRef = it } }
             }
         }
-        if (certRef.isBlank()) {
-            val sibling = keyFileSiblingRef(keyRef)
+        if (normalizeKeyFileRef(certRef).isEmpty()) {
+            val sibling = keyFileSiblingRef(normalizeKeyFileRef(keyRef))
             Txt(
                 if (sibling != null) stringResource(Res.string.vault_hint_cert_sibling, sibling)
                 else stringResource(Res.string.vault_hint_cert_sibling_opaque),
@@ -256,7 +257,7 @@ internal fun LinkKeyFileDialog(
             confirmLabel = stringResource(Res.string.vault_link),
             confirmEnabled = valid,
             onDismiss = onDismiss,
-            onConfirm = { onCreate(name.trim(), keyRef.trim(), certRef.trim().ifBlank { null }, passphrase.ifBlank { null }) },
+            onConfirm = { onCreate(name.trim(), normalizeKeyFileRef(keyRef), normalizeKeyFileRef(certRef).ifBlank { null }, passphrase.ifBlank { null }) },
         )
     }
 }

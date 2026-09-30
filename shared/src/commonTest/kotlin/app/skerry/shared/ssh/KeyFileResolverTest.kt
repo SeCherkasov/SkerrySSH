@@ -196,4 +196,19 @@ class KeyFileResolverTest {
 
         assertNull(PEM.takeIf { it in auth.toString() }, "auth.toString() leaked the private key")
     }
+
+    @Test
+    fun `a pasted path loses the quotes a file manager wraps it in`() {
+        // Windows Explorer's "Copy as path" yields `"C:\Users\dev\.ssh\id_ed25519"` (#396).
+        assertEquals("C:\\Users\\dev\\.ssh\\id_ed25519", normalizeKeyFileRef("  \"C:\\Users\\dev\\.ssh\\id_ed25519\" "))
+        assertEquals("/home/dev/.ssh/id rsa", normalizeKeyFileRef("'/home/dev/.ssh/id rsa'"))
+    }
+
+    @Test
+    fun `quotes that do not wrap the whole path are kept`() {
+        assertEquals("\"half", normalizeKeyFileRef("\"half"))
+        assertEquals("/keys/it's", normalizeKeyFileRef("/keys/it's"))
+        assertEquals("\"a'", normalizeKeyFileRef("\"a'"))
+        assertEquals("\"", normalizeKeyFileRef("\""))
+    }
 }
