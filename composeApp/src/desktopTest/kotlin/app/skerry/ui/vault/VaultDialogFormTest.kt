@@ -14,6 +14,7 @@ import app.skerry.ui.desktop.onField
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_field_certificate
+import app.skerry.ui.generated.resources.vault_field_cert_path
 import app.skerry.ui.generated.resources.vault_field_key_path
 import app.skerry.ui.generated.resources.vault_field_name
 import app.skerry.ui.generated.resources.vault_field_note
@@ -123,6 +124,26 @@ class VaultDialogFormTest {
         }
         assertEquals(NAME, created?.first)
         assertEquals(KEY_PATH, created?.second)
+    }
+
+    /** Explorer's "Copy as path" wraps the path in quotes; stored as-is it named no file (#396). */
+    @Test
+    fun `a pasted path in quotes is linked without them`() {
+        var created: Triple<String, String, String?>? = null
+        runForm({
+            LinkKeyFileDialog(onDismiss = {}, onCreate = { name, keyRef, certRef, _ -> created = Triple(name, keyRef, certRef) })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_key_path).performTextInput("\"\"")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_key_path).performTextReplacement("\"$KEY_PATH\"")
+            onField(Res.string.vault_field_cert_path).performTextInput("\"$KEY_PATH-cert.pub\"")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(KEY_PATH, created?.second)
+        assertEquals("$KEY_PATH-cert.pub", created?.third)
     }
 
     /** Saving the same name and note is a sync push with nothing in it, so the button stays shut. */

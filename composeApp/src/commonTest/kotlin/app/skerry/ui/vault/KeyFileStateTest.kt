@@ -1,10 +1,15 @@
 package app.skerry.ui.vault
 
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.shared.vault.SecretFileReader
 import app.skerry.shared.vault.SecretFileResult
 import app.skerry.shared.vault.SshCertificateInfo
 import app.skerry.shared.vault.SshCertificateInspector
+import okio.FileMetadata
+import okio.FileSystem
+import okio.ForwardingFileSystem
+import okio.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -137,5 +142,25 @@ class KeyFileStateTest {
 
         assertEquals(listOf("content://doc/42"), probed)
         assertNull(state.certificateRef)
+    }
+
+    @Test
+    fun `a ref the OS cannot name a file by reads as a missing key, not as a broken certificate`() {
+        // #396: `"C:\keys\id"` pasted with its quotes. The real reader, over a filesystem that
+        // rejects the path the way the JVM does on Windows, must answer instead of throwing out of
+        // the vault list's produceState — and the sibling it can't name is no certificate at all.
+        val rejecting = object : ForwardingFileSystem(FileSystem.SYSTEM) {
+            override fun metadataOrNull(path: Path): FileMetadata? = throw IllegalArgumentException("Illegal char")
+        }
+
+        val state = inspectKeyFile(
+            CredentialSecret.KeyFile("\"C:\\keys\\id\""),
+            files = OkioSecretFileReader(rejecting, homeDir = null),
+            inspector = inspector,
+        )
+
+        assertFalse(state.keyReadable)
+        assertNull(state.certificateRef)
+        assertFalse(state.certificateExpected)
     }
 }

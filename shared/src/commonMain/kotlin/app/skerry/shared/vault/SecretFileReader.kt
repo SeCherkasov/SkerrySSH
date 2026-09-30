@@ -80,6 +80,10 @@ class OkioSecretFileReader(
             fileSystem.metadataOrNull(path) ?: return SecretFileResult.NotFound
         } catch (e: IOException) {
             return SecretFileResult.Failed(e.message)
+        } catch (_: IllegalArgumentException) {
+            // The JVM's InvalidPathException: a ref the OS can't name a file by (`"`, `<`, `|` on
+            // Windows, NUL anywhere) points at nothing. Escaping from here crashed the vault (#396).
+            return SecretFileResult.NotFound
         }
         if (!meta.isRegularFile) return SecretFileResult.NotFound
         if ((meta.size ?: 0L) > maxBytes) return SecretFileResult.TooLarge

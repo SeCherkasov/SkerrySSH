@@ -2,12 +2,14 @@ package app.skerry.shared.vault
 
 import okio.ForwardingFileSystem
 import okio.IOException
+import okio.FileMetadata
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.Source
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 
 class OkioSecretFileReaderTest {
@@ -82,6 +84,21 @@ class OkioSecretFileReaderTest {
         assertIs<SecretFileResult.Denied>(
             OkioSecretFileReader(refusing, homeDir = null).read("/keys/locked"),
         )
+    }
+
+    @Test
+    fun `a ref the platform cannot turn into a path reports not found instead of throwing`() {
+        // On the JVM okio resolves through Paths.get, which throws InvalidPathException — an
+        // IllegalArgumentException, not an IOException — for a ref like `"C:\keys\id"` (Windows
+        // Explorer's "Copy as path" adds the quotes). Escaping from here crashed the vault (#396).
+        val rejecting = object : ForwardingFileSystem(fs) {
+            override fun metadataOrNull(path: Path): FileMetadata? =
+                throw IllegalArgumentException("Illegal char <\"> at index 0")
+        }
+        val reader = OkioSecretFileReader(rejecting, homeDir = null)
+
+        assertIs<SecretFileResult.NotFound>(reader.read("\"C:\\keys\\id\""))
+        assertFalse(reader.probe("\"C:\\keys\\id\""))
     }
 
     @Test
