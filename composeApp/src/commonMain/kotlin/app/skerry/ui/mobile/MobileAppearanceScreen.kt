@@ -377,7 +377,7 @@ private fun MobileAppThemeCard(
     }
 }
 
-/** UI language dropdown (System / English / Russian). */
+/** UI language dropdown: System, then every [UiLanguage] by its autonym. */
 @Composable
 private fun MobileLanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     var open by remember { mutableStateOf(false) }

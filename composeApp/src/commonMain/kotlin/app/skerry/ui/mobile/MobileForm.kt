@@ -31,6 +31,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.text.style.TextDirection
@@ -45,7 +46,7 @@ import androidx.compose.ui.text.style.TextDirection
 internal fun MobileFormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier) {
         Txt(
-            label.uppercase(),
+            labelUppercase(label),
             color = Skerry.colors.faint,
             size = 10.5.sp,
             weight = FontWeight.SemiBold,

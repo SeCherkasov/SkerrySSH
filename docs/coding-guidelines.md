@@ -6,10 +6,11 @@ writing code — every rule here is a class of defect we already paid for in the
 pre-release review and the 2026-07-03/04 refactor (~115 files, −7646 lines). The goal is to write it
 right the first time so a third such pass isn't needed.
 
-The rules here that can be decided without judgement — translations complete in en + ru + zh, no
-hardcoded UI literal, `Txt`/`Sym` instead of raw `Text`/`Icon`, design tokens instead of hex, no
-Kotest or MockK, dependencies through the version catalog, `atomicWriteUtf8` on secret paths, a key
-binding shipping with its Settings row — are enforced by `tools/harness/checks.py` and block the
+The rules here that can be decided without judgement — translations complete in en + ru + zh + tr
+with the placeholders English has, no hardcoded UI literal, caps via `labelUppercase`, `Txt`/`Sym`
+instead of raw `Text`/`Icon`, design tokens instead of hex, no Kotest or MockK, dependencies through
+the version catalog, `atomicWriteUtf8` on secret paths, a key binding shipping with its Settings row —
+are enforced by `tools/harness/checks.py` and block the
 commit. The rest is on you and on the reviewers. Nothing here is duplicated there; the checks read
 these rules, they do not restate them.
 
@@ -166,8 +167,11 @@ The most expensive defect class of the refactor. No exceptions to these:
 
 - **No hex colours in screens** — `D.*` tokens only (the refactor replaced ~70 hardcoded colours).
   Need a new shade? Add a token, checked against the prototype's `:root` block.
-- **No string literals in the UI** — everything through resources, en + ru + zh at once.
-- A locale quotes with its own marks: `“ ”` in en and zh, `« »` in ru, never the straight `"`,
+- **No string literals in the UI** — everything through resources, en + ru + zh + tr at once.
+- **Caps through `labelUppercase`**, never `String.uppercase()`: that one is `Locale.ROOT`, and a
+  Turkish label drawn with it reads `ISTEMCI` for `İSTEMCİ`. A protocol token (key type, hex) takes
+  `// harness-allow: label-case`.
+- A locale quotes with its own marks: `“ ”` in en, zh and tr, `« »` in ru, never the straight `"`,
   and corner brackets nowhere. In `composeResources` (not `androidApp/src/main/res`, which is
   AAPT and behaves the Android way) the plugin decodes `\n`, `\t`, `\uXXXX` and `\\` and nothing
   else, so an Android-style `\"` or `\'` is drawn with the backslash on it — and substitution is
@@ -201,7 +205,7 @@ The most expensive defect class of the refactor. No exceptions to these:
 2. Did any file grow past ~500 lines because of my edits?
 3. Does every `catch` around suspend code rethrow `CancellationException`? Guard flags in `finally`?
 4. Nothing blocking on the UI thread? Shared state under a mutex/transaction?
-5. Colours via tokens, strings via resources (en + ru + zh), text via `Txt`, icons via `Sym`,
+5. Colours via tokens, strings via resources (en + ru + zh + tr), text via `Txt`, icons via `Sym`,
    forms via shared state?
 6. Secret-bearing files through `atomicWriteUtf8`? Validation before side effects?
 7. Is the new code covered by tests (cancellation and races included), and is the dead code gone?

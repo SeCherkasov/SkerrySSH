@@ -1,0 +1,147 @@
+<resources>
+    <!-- Vault lock / unlock / create / reset -->
+    <string name="shell_lock_title">Skerry kilitli</string>
+    <string name="shell_unlock_subtitle_desktop">Limanın kilidini açmak için ana şifrenizi girin</string>
+    <string name="shell_unlock_subtitle_mobile">Ana şifrenizi girin</string>
+    <string name="shell_master_password">Ana şifre</string>
+    <string name="shell_unlock">Kilidi aç</string>
+    <string name="shell_forgot_password">Ana şifreyi sıfırla</string>
+    <string name="shell_use_biometrics">Biyometri kullan</string>
+    <string name="shell_footer_never_leaves">Ana şifre bu cihazda kalır</string>
+    <string name="shell_footer_never_leaves_short">Bu cihazdan asla çıkmaz</string>
+
+    <string name="shell_create_title">Ana şifre belirleyin</string>
+    <string name="shell_create_subtitle">Bu kasayı şifreler ve cihazdan asla çıkmaz. Kurtarma yok.</string>
+    <string name="shell_repeat_password">Şifreyi yineleyin</string>
+    <string name="shell_create_vault">Kasa oluştur</string>
+    <string name="shell_pairing_link">Başka bir cihazdan mı bağlıyorsunuz? Eşleştirme kodu kullanın</string>
+    <string name="shell_no_recovery_ack">Ana şifrenin kurtarılamayacağını veya sıfırlanamayacağını anlıyorum. Kaybedersem bu kasa gider.</string>
+
+    <string name="shell_password_strength">Şifre gücü: %1$s</string>
+    <string name="shell_password_strength_weak">Zayıf</string>
+    <string name="shell_password_strength_fair">Orta</string>
+    <string name="shell_password_strength_good">İyi</string>
+    <string name="shell_password_strength_strong">Güçlü</string>
+    <string name="shell_password_min_length">Kasayı oluşturmak için en az %1$d karakter kullanın</string>
+    <string name="shell_password_blank">Şifre yalnızca boşluklardan oluşamaz</string>
+
+    <string name="shell_quick_unlock_title">Hızlı kilit açma</string>
+    <string name="shell_quick_unlock_subtitle">Skerry'yi ana şifre yerine parmak izinizle açın.</string>
+    <string name="shell_not_now">Şimdi değil</string>
+
+    <string name="shell_corrupted_title">Depolama hasarlı</string>
+    <string name="shell_corrupted_subtitle">Kasa dosyası okunamıyor veya şifresi çözülemiyor. Skerry'yi yeniden kullanmak için sıfırlayın.</string>
+
+    <string name="shell_reset_skerry">Skerry'yi sıfırla</string>
+    <string name="shell_reset_subtitle">Kalıcıdır. Kayıtlı şifreler, anahtarlar ve kimlikler silinir. Kurtarma yok.</string>
+    <string name="shell_reset_scope_secrets_title">Yalnızca gizli bilgiler</string>
+    <string name="shell_reset_scope_secrets_subtitle">Sunucu profilleri ve known_hosts korunur.</string>
+    <string name="shell_reset_scope_all_title">Her şeyi sil</string>
+    <string name="shell_reset_scope_all_subtitle">Sunucu profilleri, known_hosts ve ayarlar da silinir.</string>
+    <string name="shell_reset_confirm_placeholder">Onaylamak için yazın: %1$s</string>
+    <string name="shell_reset_permanently">Kalıcı olarak sıfırla</string>
+
+    <!-- Common actions -->
+    <string name="shell_cancel">İptal</string>
+    <string name="shell_save">Kaydet</string>
+    <string name="shell_create">Oluştur</string>
+    <string name="shell_connect">Bağlan</string>
+    <string name="shell_delete">Sil</string>
+
+    <!-- Group dialog -->
+    <string name="shell_group_rename_title">Grubu yeniden adlandır</string>
+    <string name="shell_group_new_title">Yeni grup</string>
+    <string name="shell_group_rename_subtitle">Bu gruptaki sunucular yeni adla birlikte taşınır.</string>
+    <string name="shell_group_new_subtitle">Boş bir grup oluşturur. Sunucuları içine sürükleyin veya bağlantı eklerken seçin.</string>
+    <string name="shell_group_name_placeholder">Grup adı</string>
+    <string name="shell_group_delete">Grubu sil</string>
+
+    <!-- Password dialog -->
+    <string name="shell_connect_to">Bağlan: %1$s</string>
+    <string name="shell_password_caps">ŞİFRE</string>
+    <string name="shell_password_host_placeholder">bağlantı şifresi</string>
+    <string name="shell_not_stored_once">Saklanmaz · bir kez kullanılır</string>
+    <string name="shell_use_saved_secret">VEYA KAYITLI BİR GİZLİ BİLGİ KULLAN</string>
+
+    <!-- Delete host dialog -->
+    <string name="shell_delete_host_title">“%1$s” silinsin mi?</string>
+    <string name="shell_delete_host_body">Sunucularınızdan kaldırılır. Kayıtlı kimlik bilgileri kasada kalır. Bu işlem geri alınamaz.</string>
+
+    <!-- Mobile host detail -->
+    <string name="shell_host">Sunucu</string>
+    <string name="shell_host_not_found">Sunucu bulunamadı</string>
+    <string name="shell_quick_sftp">SFTP</string>
+    <string name="shell_quick_tunnels">Tüneller</string>
+    <string name="shell_quick_snippets">Kod parçacıkları</string>
+    <string name="shell_details">Ayrıntılar</string>
+    <string name="shell_edit_host">Sunucuyu düzenle</string>
+    <string name="shell_duplicate_host">Sunucuyu çoğalt</string>
+    <string name="shell_delete_host">Sunucuyu sil</string>
+
+    <!-- Mobile hosts list -->
+    <string name="shell_hosts">Sunucular</string>
+    <string name="shell_search_hosts">Sunucu, etiket, IP ara…</string>
+
+    <!-- Mobile route placeholder -->
+    <string name="shell_route_team">Ekip</string>
+
+    <!-- Desktop chrome -->
+    <string name="shell_this_session">bu oturum</string>
+    <string name="shell_disconnect_title">“%1$s” bağlantısı kesilsin mi?</string>
+    <string name="shell_disconnect_message">Oturum ve terminali kapatılacak.</string>
+    <string name="shell_disconnect">Bağlantıyı kes</string>
+    <string name="shell_disconnect_all_title">Bu sekmedeki tüm oturumların bağlantısı kesilsin mi?</string>
+    <string name="shell_disconnect_all_message">Şu oturumlar kapatılacak: %1$s</string>
+    <string name="shell_close_pane_title">Bölme kapatılsın mı?</string>
+    <string name="shell_close_pane_message">Şu oturum kapatılacak: %1$s</string>
+    <string name="shell_replace_pane_title">Bu bölmenin oturumu “%1$s” ile değiştirilsin mi?</string>
+    <string name="shell_close_panel">Bölmeyi kapat</string>
+    <string name="shell_lock">Kilitle</string>
+    <string name="shell_settings">Ayarlar</string>
+    <string name="shell_status_connected">Bağlı</string>
+    <string name="shell_status_disconnected">Bağlantı kesildi</string>
+    <string name="shell_status_encoding">UTF-8 · LF</string>
+    <string name="shell_tip_add_pane">Bölme ekle</string>
+    <string name="shell_tip_new_tab">Yeni sekme</string>
+    <string name="shell_tip_close_tab">Kapat: %1$s</string>
+    <string name="shell_tip_more_actions">Diğer eylemler</string>
+    <string name="shell_tip_sync_panes">Bölmeler arasında eşzamanlı girdi</string>
+    <string name="shell_tip_files">Dosyalar (SFTP)</string>
+    <string name="shell_tip_snippets">Kod parçacıkları</string>
+    <string name="shell_tip_record">Oturumu kaydet</string>
+    <string name="shell_tip_record_stop">Kaydı durdur</string>
+    <string name="shell_tip_play">Kaydı oynat</string>
+    <string name="shell_tip_minimize">Simge durumuna küçült</string>
+    <string name="shell_tip_maximize">Ekranı kapla</string>
+    <string name="shell_tip_restore">Geri yükle</string>
+    <string name="shell_tip_close_window">Pencereyi kapat</string>
+    <string name="shell_tip_close">Kapat</string>
+    <string name="shell_tip_show_options">Seçenekleri göster</string>
+    <string name="shell_tip_show_hosts">Sunucuları göster</string>
+    <string name="shell_tip_hide_hosts">Sunucuları gizle</string>
+    <string name="shell_tip_back">Geri</string>
+    <string name="shell_tip_remove">Kaldır</string>
+    <string name="shell_tip_pause">Duraklat</string>
+    <string name="shell_tip_replay">Yeniden oynat</string>
+    <string name="shell_tip_monitor">İzleme</string>
+    <string name="shell_view_terminal">Terminal</string>
+    <string name="shell_view_files">Dosyalar</string>
+    <string name="shell_view_monitor">İzleme</string>
+    <string name="shell_view_runbook">Runbook</string>
+    <string name="shell_view_player">Kayıt</string>
+    <string name="shell_view_desktop">Uzak masaüstü</string>
+    <string name="shell_tip_disconnect">Bağlantıyı kes</string>
+    <string name="shell_no_hosts_yet">Henüz sunucu yok</string>
+    <string name="shell_add_first_host">Burada görmek için bir bağlantı ekleyin.</string>
+    <string name="shell_kbdint_title">Ek doğrulama</string>
+    <string name="shell_kbdint_jump">Atlama sunucusu tarafından istendi</string>
+    <string name="shell_kbdint_continue">Devam et</string>
+    <string name="shell_kbdint_asks">Sunucu soruyor:</string>
+
+    <!-- Sessions root tab -->
+    <string name="shell_sessions_title">Oturumlar</string>
+    <string name="shell_sessions_count">%1$d açık</string>
+    <string name="shell_sessions_none">Açık oturum yok</string>
+    <string name="shell_sessions_none_hint">Katalogdan bağlanın — oturum siz kapatana kadar burada kalır.</string>
+    <string name="shell_sessions_close">Oturumu kapat</string>
+</resources>

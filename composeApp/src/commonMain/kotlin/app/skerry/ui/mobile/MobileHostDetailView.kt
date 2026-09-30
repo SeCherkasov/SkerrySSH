@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.opensFileSessions
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.HostSection
@@ -312,7 +313,7 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
 @Composable
 private fun HostsDetailLabel(name: String) {
     Txt(
-        name.uppercase(),
+        labelUppercase(name),
         color = Skerry.colors.faint,
         size = 11.5.sp,
         weight = FontWeight.SemiBold,

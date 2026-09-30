@@ -118,7 +118,9 @@ fun deviceLabel(device: RemoteDevice, unnamed: String): String =
 fun accountInitials(accountId: String): String {
     val local = accountId.substringBefore('@')
     val letters = local.filter { it.isLetterOrDigit() }
-    return if (letters.isEmpty()) "S" else letters.take(2).uppercase()
+    // Root casing on purpose: the letters come from an id, so an account draws the same avatar in
+    // every UI language.
+    return if (letters.isEmpty()) "S" else letters.take(2).uppercase() // harness-allow: label-case
 }
 
 /** Host from the server URL for the subtitle (no scheme/port/path). null if it can't be parsed. */

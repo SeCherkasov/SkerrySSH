@@ -26,6 +26,7 @@ import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_account_id_label
@@ -90,7 +91,7 @@ internal fun elideFingerprint(value: String): String {
 private fun IdentityRow(label: String, value: String, mono: FontFamily, copied: Boolean, display: String = value, onCopied: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
-            Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Txt(labelUppercase(label), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
             Txt(display, color = Skerry.colors.cyanBright, size = 13.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
         if (copied) {

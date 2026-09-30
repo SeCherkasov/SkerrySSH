@@ -286,7 +286,7 @@ private fun codePoint(high: Char, low: Char): Int =
     0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
 
 private fun StringBuilder.appendEscaped(code: Int) {
-    append(ESCAPE_OPEN).append(code.toString(16).uppercase().padStart(4, '0')).append('>')
+    append(ESCAPE_OPEN).append(code.toString(16).uppercase().padStart(4, '0')).append('>') // harness-allow: label-case
 }
 
 /**

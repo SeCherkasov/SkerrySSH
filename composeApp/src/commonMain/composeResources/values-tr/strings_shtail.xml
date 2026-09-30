@@ -1,0 +1,45 @@
+<resources>
+    <string name="shtail_nav_ai">AI</string>
+    <string name="shtail_nav_sync">Eşitleme</string>
+    <string name="shtail_nav_security">Güvenlik</string>
+    <string name="shtail_nav_appearance">Görünüm</string>
+    <string name="shtail_nav_terminal">Terminal</string>
+    <string name="shtail_nav_keyboard">Klavye</string>
+    <string name="shtail_nav_about">Hakkında</string>
+
+    <string name="shtail_host_address">Adres</string>
+    <string name="shtail_host_port">Port</string>
+    <string name="shtail_host_auth">Kimlik doğrulama</string>
+    <string name="shtail_host_saved_credential">Kayıtlı kimlik bilgisi</string>
+    <string name="shtail_host_ask_on_connect">Bağlanırken sor</string>
+    <string name="shtail_host_group">Grup</string>
+    <string name="shtail_host_jump">Atlama sunucusu</string>
+    <string name="shtail_host_notes">Notlar</string>
+
+    <string name="shtail_ungrouped">Grupsuz</string>
+
+    <string name="shtail_group_label">Grup</string>
+
+    <string name="shtail_group_unnamed">Adsız klasör</string>
+
+    <string name="shtail_chip_all">Tümü</string>
+
+    <string name="shtail_group_collapse">Daralt: %1$s</string>
+    <string name="shtail_group_expand">Genişlet: %1$s</string>
+    <string name="shtail_group_state_collapsed">Daraltıldı</string>
+    <string name="shtail_group_state_expanded">Genişletildi</string>
+
+    <string name="shtail_group_rename">Yeniden adlandır: %1$s</string>
+
+    <string name="shtail_group_rename_records">Bu gruptaki her şey yeni adla birlikte taşınır.</string>
+
+    <string name="shtail_search_clear">Aramayı temizle</string>
+
+    <string name="shtail_known_changed">değişti</string>
+    <string name="shtail_known_key_changed_title">Anahtar değişti: %1$s</string>
+    <string name="shtail_known_mismatch_body">%1$s parmak izi kayıtlı olanla eşleşmiyor. Yeniden bağlanmadan önce doğrulayın; uyuşmazlık araya girme anlamına gelebilir.</string>
+
+    <string name="shtail_new_tab">Yeni sekme</string>
+    <string name="shtail_nav_experimental">Deneysel</string>
+    <string name="shtail_nav_trash">Çöp kutusu</string>
+</resources>

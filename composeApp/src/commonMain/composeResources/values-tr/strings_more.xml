@@ -1,0 +1,25 @@
+<resources>
+    <string name="more_title">Diğer</string>
+    <string name="more_port_forwarding">Port yönlendirme</string>
+    <string name="more_known_hosts">Bilinen sunucular</string>
+    <string name="more_team">Ekip</string>
+    <string name="more_ai_privacy">AI asistanı</string>
+    <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
+    <string name="more_ai_subtitle_local">Yerel</string>
+    <string name="more_ai_subtitle_off">Kapalı</string>
+    <string name="more_sync">Eşitleme</string>
+    <string name="more_lock">Skerry'yi kilitle</string>
+    <string name="more_sync_local_only">Yalnızca yerel</string>
+    <string name="more_sync_synced">Eşitlendi</string>
+    <string name="more_sync_syncing">Eşitleniyor…</string>
+    <string name="more_sync_linked_locked">Bağlantılı · kilitli</string>
+    <string name="more_sync_error">Eşitleme hatası</string>
+    <string name="more_biometric_prompt_title">Biyometrik kilit açmayı etkinleştir</string>
+    <string name="more_biometric_prompt_cancel">İptal</string>
+    <string name="more_biometric_prompt_subtitle">Skerry'nin kilidini biyometriyle açın — ana şifre gerekmez.</string>
+    <string name="more_biometric_verify_title">Biyometrik kilit açmayı denetle</string>
+    <string name="more_biometric_verify_subtitle">Kilit açmanın çalıştığını denetlemek için bir dokunuş daha.</string>
+    <string name="more_about">Hakkında</string>
+    <string name="more_experimental">Deneysel</string>
+    <string name="more_trash">Çöp kutusu</string>
+</resources>

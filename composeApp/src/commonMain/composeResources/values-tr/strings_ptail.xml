@@ -1,0 +1,15 @@
+<resources>
+    <string name="ptail_dynamic_proxy">dinamik proxy</string>
+    <string name="ptail_ports_active">%1$d etkin</string>
+    <string name="ptail_all_verified">Tümü doğrulandı</string>
+    <string name="ptail_changed">%1$d değişti</string>
+    <string name="ptail_err_host_not_trusted">Sunucu anahtarına güvenilmiyor</string>
+    <string name="ptail_err_auth_failed">Kimlik doğrulama başarısız</string>
+    <string name="ptail_err_forward_failed">Port yönlendirme başarısız</string>
+    <string name="ptail_err_connection_failed">Bağlantı başarısız</string>
+
+    <!-- Throughput templates: unit name and decimal separator are part of the translation -->
+    <string name="ptail_rate_bytes">%1$d B/sn</string>
+    <string name="ptail_rate_kb">%1$d KB/sn</string>
+    <string name="ptail_rate_mb">%1$d,%2$d MB/sn</string>
+</resources>

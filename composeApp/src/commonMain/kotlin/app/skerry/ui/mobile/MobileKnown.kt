@@ -46,4 +46,4 @@ internal fun mobileKnownBannerTitle(mismatch: HostKeyMismatch): String =
 /** Banner body: which key type changed, prompting verification. */
 @Composable
 internal fun mobileKnownBannerBody(mismatch: HostKeyMismatch): String =
-    stringResource(Res.string.shtail_known_mismatch_body, mobileKnownKeyType(mismatch.keyType).uppercase())
+    stringResource(Res.string.shtail_known_mismatch_body, mobileKnownKeyType(mismatch.keyType).uppercase()) // harness-allow: label-case

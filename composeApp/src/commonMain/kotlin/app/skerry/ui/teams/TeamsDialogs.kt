@@ -43,6 +43,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.shared.team.pinNotice
 import app.skerry.shared.team.TeamRole
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_invite_role
 import app.skerry.ui.generated.resources.lib_teams_create_subtitle
@@ -275,7 +276,7 @@ fun InviteMemberDialog(
             )
         }
         if (assignableRoles.isNotEmpty()) {
-            Txt(stringResource(Res.string.lib_teams_invite_role).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+            Txt(labelUppercase(stringResource(Res.string.lib_teams_invite_role)), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
             RoleChips(assignableRoles, role) { role = it }
         }
         Row(

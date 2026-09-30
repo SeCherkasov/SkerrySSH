@@ -1,0 +1,55 @@
+<resources>
+    <!-- SFTP / dosya aktarımı: @Composable dışı ertelenmiş dizeler (F tuşu paneli + denetleyici hataları) -->
+
+    <!-- F tuşu paneli etiketleri (mc/Total Commander alt çubuğu) -->
+    <string name="ftail_fkey_rename">Adlandır</string>
+    <string name="ftail_fkey_view">Görüntüle</string>
+    <string name="ftail_fkey_edit">Düzenle</string>
+    <string name="ftail_fkey_copy">Kopyala</string>
+    <string name="ftail_fkey_move">Taşı</string>
+    <string name="ftail_fkey_mkdir">Klasör</string>
+    <string name="ftail_fkey_delete">Sil</string>
+    <string name="ftail_fkey_refresh">Yenile</string>
+    <string name="ftail_fkey_quit">Çık</string>
+    <string name="ftail_fkey_save">Kaydet</string>
+    <string name="ftail_fkey_search">Ara</string>
+
+    <!-- Denetleyici / efekt hata yedekleri -->
+    <string name="ftail_open_failed">SFTP açılamadı</string>
+    <string name="ftail_transfer_error">Aktarım hatası</string>
+    <string name="ftail_delete_source_failed">Taşıma sonrası kaynak silinemedi</string>
+    <string name="ftail_file_fallback">dosya</string>
+
+    <!-- Tipli dosya tarayıcısı / aktarım hataları -->
+    <string name="ftail_err_local_io">Yerel dosya sistemi hatası</string>
+    <string name="ftail_err_sftp">SFTP hatası</string>
+    <string name="ftail_err_illegal_name">Güvenli olmayan dosya adı</string>
+    <string name="ftail_err_open_source">Seçilen dosya açılamadı</string>
+    <string name="ftail_err_open_target">Kayıt hedefi açılamadı</string>
+    <string name="ftail_err_session_closed">Oturum başlamadan kapandı</string>
+    <string name="ftail_err_too_large">Dosya açılamayacak kadar büyük</string>
+    <string name="ftail_err_tree_too_large">Klasör ağacı aktarım için çok derin veya çok büyük</string>
+    <string name="ftail_err_dir_too_large">Klasör ağacı çok derin veya klasörde çok fazla öğe var</string>
+    <string name="ftail_err_unexpected">Beklenmeyen hata</string>
+
+    <!-- Görüntüleyici/düzenleyici (F3/F4) hataları -->
+    <string name="ftail_edit_err_read">Dosya okunamadı</string>
+    <string name="ftail_edit_err_too_large">Dosya düzenleyici için çok büyük</string>
+    <string name="ftail_edit_err_binary">İkili dosya — metin olarak düzenlenemez</string>
+    <string name="ftail_edit_err_write">Dosya kaydedilemedi</string>
+
+    <!-- Yerel dosya sistemi kaynağı: panel başlığı ve yol çubuğu -->
+    <string name="ftail_local_label">Bu cihaz</string>
+
+    <!-- Boyut şablonları: birim adı ve ondalık ayırıcı çeviriye dahildir -->
+    <string name="ftail_size_bytes">%1$d B</string>
+    <string name="ftail_size_kb">%1$d,%2$d KB</string>
+    <string name="ftail_size_mb">%1$d,%2$d MB</string>
+    <string name="ftail_size_gb">%1$d,%2$d GB</string>
+    <string name="ftail_size_tb">%1$d,%2$d TB</string>
+    <string name="ftail_size_pb">%1$d,%2$d PB</string>
+
+    <!-- Aktarım şeridi: toplu sayaçlı dosya adı ve aktarılan/toplam -->
+    <string name="ftail_transfer_counter">%1$s (%2$d/%3$d)</string>
+    <string name="ftail_transfer_progress">%1$s / %2$s</string>
+</resources>

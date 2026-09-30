@@ -60,18 +60,18 @@ class WebFrontendRoutesTest {
     }
 
     @Test
-    fun `the three dictionaries carry the same keys`() {
+    fun `every dictionary carries the same keys as English`() {
         val source = javaClass.getResource("/web/assets/dict.js")?.readText()
         assertTrue(source != null && source.isNotEmpty(), "dict.js missing from server resources")
 
-        val keys = listOf("en", "ru", "zh").associateWith { lang -> dictionaryKeys(source, lang) }
+        val keys = listOf("en", "ru", "zh", "tr").associateWith { lang -> dictionaryKeys(source, lang) }
         assertTrue(keys.getValue("en").isNotEmpty(), "no keys parsed out of the English dictionary")
-        // English is the fallback and the source of truth; a key missing from ru or zh silently
-        // degrades that language to English, which is exactly the kind of gap nobody notices.
-        assertEquals(emptySet(), keys.getValue("en") - keys.getValue("ru"), "keys missing from ru")
-        assertEquals(emptySet(), keys.getValue("en") - keys.getValue("zh"), "keys missing from zh")
-        assertEquals(emptySet(), keys.getValue("ru") - keys.getValue("en"), "keys in ru that en does not have")
-        assertEquals(emptySet(), keys.getValue("zh") - keys.getValue("en"), "keys in zh that en does not have")
+        // English is the fallback and the source of truth; a key missing from another language
+        // silently degrades it to English, which is exactly the kind of gap nobody notices.
+        for (lang in listOf("ru", "zh", "tr")) {
+            assertEquals(emptySet(), keys.getValue("en") - keys.getValue(lang), "keys missing from $lang")
+            assertEquals(emptySet(), keys.getValue(lang) - keys.getValue("en"), "keys in $lang that en does not have")
+        }
     }
 
     /** Keys of one dictionary literal in dict.js: from `  <lang>: {` to the line that closes it. */

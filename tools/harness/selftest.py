@@ -574,6 +574,20 @@ class TestChecks(SandboxCase):
                        "val d = TextStyle(w)\n")
         self.assertEqual(self._findings("design-primitives"), [])
 
+    def test_root_uppercase_on_a_ui_label_is_blocked(self):
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "fun a() { Txt(label.uppercase()) }\n")
+        self.assertEqual(len(self._findings("label-case")), 1)
+
+    def test_label_uppercase_and_tokens_are_fine(self):
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt",
+                       "fun a() { Txt(labelUppercase(label)) }\n"
+                       "val t = keyType.uppercase() // harness-allow: label-case\n"
+                       "val u = text.uppercase(locale)\n")
+        self.box.write("composeApp/src/commonMain/kotlin/app/skerry/ui/design/LabelCase.kt",
+                       "fun x(t: String) = t.uppercase()\n")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val h = hex.uppercase()\n")
+        self.assertEqual(self._findings("label-case"), [])
+
     def test_hardcoded_ui_string_is_blocked(self):
         self.box.write("composeApp/src/commonMain/kotlin/S.kt", "fun a() { Txt(\"Connect\") }\n")
         self.assertEqual(len(self._findings("i18n-hardcoded")), 1)
@@ -933,13 +947,15 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-ru/strings.xml",
                        '<resources><string name="a">А</string></resources>')
         self.box.write(f"{base}/values-zh/strings.xml", "<resources></resources>")
+        self.box.write(f"{base}/values-tr/strings.xml",
+                       '<resources><string name="a">A</string></resources>')
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1)
         self.assertIn("values-zh", found[0].message)
 
     def test_i18n_complete_is_clean(self):
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru", "values-zh"):
+        for locale in ("values", "values-ru", "values-zh", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         self.assertEqual(self._findings("i18n-parity"), [])
@@ -953,8 +969,9 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values/strings.xml", both("one", "other"))
         self.box.write(f"{base}/values-ru/strings.xml", both("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", "<resources></resources>")
+        self.box.write(f"{base}/values-tr/strings.xml", both("one", "other"))
         found = self._findings("i18n-parity")
-        self.assertEqual(len(found), 2, "a plural and an array ship in three languages like a string")
+        self.assertEqual(len(found), 2, "a plural and an array ship in every language like a string")
         self.assertTrue(all("values-zh" in f.message for f in found))
 
     def test_a_plural_does_not_define_a_string_of_the_same_name(self):
@@ -965,6 +982,7 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values/strings.xml", body("one", "other"))
         self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
                        "val t = stringResource(Res.string.count)\n")
         found = self._findings("i18n-parity")
@@ -973,7 +991,7 @@ class TestChecks(SandboxCase):
 
     def test_undefined_string_key_is_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru", "values-zh"):
+        for locale in ("values", "values-ru", "values-zh", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
@@ -992,8 +1010,9 @@ class TestChecks(SandboxCase):
                        '<item quantity="one">А</item><item quantity="few">А</item>'
                        '<item quantity="many">А</item><item quantity="other">А</item>'
                        '</plurals></resources>')
-        self.box.write(f"{base}/values-zh/strings.xml",
-                       '<resources><string name="a">A</string></resources>')
+        for locale in ("values-zh", "values-tr"):
+            self.box.write(f"{base}/{locale}/strings.xml",
+                           '<resources><string name="a">A</string></resources>')
         messages = [f.message for f in self._findings("i18n-parity")]
         self.assertEqual(len(messages), 2, "a plural does not translate a string of the same name")
         self.assertTrue(any(m.startswith("`a` has no values-ru") for m in messages), messages)
@@ -1009,9 +1028,25 @@ class TestChecks(SandboxCase):
                        '<resources><plurals name="n"><item quantity="other">A</item></plurals></resources>')
         self.box.write(f"{base}/values-zh/strings.xml",
                        '<resources><plurals name="n"><item quantity="other">A</item></plurals></resources>')
+        self.box.write(f"{base}/values-tr/strings.xml",
+                       '<resources><plurals name="n"><item quantity="one">A</item>'
+                       '<item quantity="other">A</item></plurals></resources>')
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1, "Chinese needs `other` alone; Russian needs one/few/many too")
         self.assertIn("one, few, many", found[0].message)
+
+    def test_a_turkish_plural_needs_one_as_well_as_other(self):
+        base = "composeApp/src/commonMain/composeResources"
+        def body(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d</item>' for c in categories)
+            return f'<resources><plurals name="n">{items}</plurals></resources>'
+        self.box.write(f"{base}/values/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
+        self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write(f"{base}/values-tr/strings.xml", body("other"))
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1, "CLDR gives Turkish `one` — Chinese's lone `other` is not enough")
+        self.assertIn("values-tr", found[0].message)
 
     def test_undefined_plural_and_array_keys_are_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
@@ -1022,6 +1057,7 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values/strings.xml", body("one", "other"))
         self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
                        "val a = pluralStringResource(Res.plurals.here, 1)\n"
                        "val b = stringArrayResource(Res.array.also)\n"
@@ -1036,14 +1072,14 @@ class TestChecks(SandboxCase):
         base = "composeApp/src/commonMain/composeResources"
         self.box.write(f"{base}/values/strings.xml",
                        '<resources><string translatable="false" name="a">A</string></resources>')
-        for locale in ("values-ru", "values-zh"):
+        for locale in ("values-ru", "values-zh", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml", "<resources></resources>")
         found = self._findings("i18n-parity")
-        self.assertEqual(len(found), 2, "a key the pattern misses is silently exempt from parity")
+        self.assertEqual(len(found), 3, "a key the pattern misses is silently exempt from parity")
 
     def test_an_unreadable_resource_file_says_so(self):
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru"):
+        for locale in ("values", "values-ru", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         os.makedirs(os.path.join(self.cwd, base, "values-zh/strings.xml"))
@@ -1058,7 +1094,7 @@ class TestChecks(SandboxCase):
         # The likeliest way a locale file becomes unreadable is an editor saving it in cp1251, and
         # that raises UnicodeDecodeError, not OSError — the warning built for it has to fire.
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru"):
+        for locale in ("values", "values-ru", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         path = os.path.join(self.cwd, base, "values-zh", "strings.xml")
@@ -1072,7 +1108,7 @@ class TestChecks(SandboxCase):
         # An unreadable source hides a `Res.` usage, not a translation — a different warning from
         # the locale one, and the two counters must not be folded together.
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru", "values-zh"):
+        for locale in ("values", "values-ru", "values-zh", "values-tr"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         path = os.path.join(self.cwd, "composeApp/src/commonMain/kotlin/S.kt")
@@ -1082,6 +1118,30 @@ class TestChecks(SandboxCase):
         warnings = [f for f in self._findings("i18n-parity") if f.severity == checks.WARN]
         self.assertEqual(len(warnings), 1)
         self.assertIn("source file(s) could not be read", warnings[0].message)
+
+    def test_a_translation_that_drops_a_placeholder_is_blocked(self):
+        # Turkish reorders the sentence around the host name ("“%1$s” silinsin mi?"); a
+        # translation that loses the placeholder passes every key check and draws no host at all.
+        base = "composeApp/src/commonMain/composeResources"
+        self.box.write(f"{base}/values/strings.xml",
+                       '<resources><string name="a">Delete “%1$s”?</string>'
+                       '<plurals name="p"><item quantity="one">%1$d file</item>'
+                       '<item quantity="other">%1$d files</item></plurals></resources>')
+        self.box.write(f"{base}/values-ru/strings.xml",
+                       '<resources><string name="a">Удалить «%1$s»?</string>'
+                       '<plurals name="p"><item quantity="one">%1$d файл</item>'
+                       '<item quantity="few">%1$d файла</item><item quantity="many">%1$d файлов</item>'
+                       '<item quantity="other">%1$d файла</item></plurals></resources>')
+        self.box.write(f"{base}/values-zh/strings.xml",
+                       '<resources><string name="a">删除“%1$s”？</string>'
+                       '<plurals name="p"><item quantity="other">%1$d 个文件</item></plurals></resources>')
+        self.box.write(f"{base}/values-tr/strings.xml",
+                       '<resources><string name="a">Silinsin mi?</string>'
+                       '<plurals name="p"><item quantity="one">%1$d dosya</item>'
+                       '<item quantity="other">dosyalar</item></plurals></resources>')
+        messages = [f.message for f in self._findings("i18n-parity")]
+        self.assertEqual(len(messages), 2, messages)
+        self.assertTrue(all("values-tr" in m and "%1$" in m for m in messages), messages)
 
     def test_an_empty_plural_form_is_not_a_form(self):
         base = "composeApp/src/commonMain/composeResources"
@@ -1095,6 +1155,7 @@ class TestChecks(SandboxCase):
                        '<item quantity="many">%1$d файлов</item>'
                        '<item quantity="other">%1$d файла</item></plurals></resources>')
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1, "an item with no text draws a blank where the number goes")
         self.assertIn("few", found[0].message)

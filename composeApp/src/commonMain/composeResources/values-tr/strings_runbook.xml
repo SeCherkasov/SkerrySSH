@@ -1,0 +1,130 @@
+<resources>
+    <!-- Runbooks -->
+    <string name="runbook_section">Runbook'lar</string>
+    <string name="runbook_new">Yeni runbook</string>
+    <string name="runbook_untitled">Adsız runbook</string>
+    <string name="runbook_palette_placeholder">Runbook çalıştır…</string>
+    <string name="runbook_toolbar_tip">Runbook çalıştır</string>
+    <string name="runbook_search">Runbook ara…</string>
+    <string name="runbook_select_or_create">Bir runbook seçin veya yeni bir tane oluşturun.</string>
+    <string name="runbook_empty">Henüz runbook yok</string>
+    <string name="runbook_no_matches">Eşleşme yok</string>
+    <string name="runbook_none_runnable">Çalıştırılacak adımı olan runbook yok</string>
+    <string name="runbook_empty_mobile">Henüz runbook yok. Bir prosedür yazmak için + simgesine dokunun.</string>
+    <string name="runbook_field_name">Ad</string>
+    <string name="runbook_field_description">Açıklama</string>
+    <string name="runbook_field_tags">Etiketler</string>
+    <string name="runbook_ph_name">API'yi yeniden başlat</string>
+    <string name="runbook_ph_tags">#ops</string>
+    <string name="runbook_ph_description">Bu prosedür ne yapar ve ne zaman iptal edilmeli.</string>
+    <string name="runbook_steps">Adımlar</string>
+    <string name="runbook_step_n">Adım %1$d</string>
+    <string name="runbook_step_title">Adım adı</string>
+    <string name="runbook_step_command">Komut</string>
+    <string name="runbook_step_add">Adım ekle</string>
+    <string name="runbook_step_remove">Adımı kaldır</string>
+    <string name="runbook_step_up">Yukarı taşı</string>
+    <string name="runbook_step_down">Aşağı taşı</string>
+    <string name="runbook_step_confirm">Çalıştırmadan önce sor</string>
+    <string name="runbook_step_continue_on_error">Başarısız olursa devam et</string>
+    <string name="runbook_step_interactive">Etkileşimli</string>
+    <string name="runbook_save">Kaydet</string>
+    <string name="runbook_delete">Sil</string>
+    <string name="runbook_delete_title">Runbook'u sil</string>
+    <string name="runbook_delete_message">“%1$s” ve çalıştırma geçmişi silinecek.</string>
+    <string name="runbook_run">Çalıştır</string>
+    <string name="runbook_run_needs_save">Çalıştırmak için düzenlenen prosedürü kaydedin</string>
+    <string name="runbook_run_title">Runbook çalıştır</string>
+    <string name="runbook_run_needs_session">Önce bağlanın — runbook bir terminalde çalışır.</string>
+    <string name="runbook_run_busy">Başka bir runbook zaten çalışıyor.</string>
+    <string name="runbook_run_no_steps">Önce bir adım kaydedin — runbook kayıtlı adımlarını çalıştırır.</string>
+    <string name="runbook_step_count">Adım: %1$d</string>
+
+    <!-- Run panel -->
+    <string name="runbook_panel_running">Çalışıyor</string>
+    <string name="runbook_panel_stalled">Henüz çıktı ve durum yok — kabuk girdi bekliyor olabilir. Terminali kontrol edin.</string>
+    <string name="runbook_panel_waiting">Sizi bekliyor</string>
+    <string name="runbook_panel_done">Tamamlandı</string>
+    <string name="runbook_panel_done_with_failures">Hatalarla tamamlandı</string>
+    <string name="runbook_panel_failed">Hata nedeniyle durdu</string>
+    <string name="runbook_panel_stopped">Durduruldu</string>
+    <string name="runbook_panel_run_step">Bu adımı çalıştır</string>
+    <string name="runbook_panel_complete_step">Adımı tamamla</string>
+    <string name="runbook_panel_skip_step">Atla</string>
+    <string name="runbook_panel_stop">Çalıştırmayı durdur</string>
+    <string name="runbook_panel_close">Kapat</string>
+    <string name="runbook_panel_collapse">Paneli daralt</string>
+    <string name="runbook_panel_expand">Paneli genişlet</string>
+    <string name="runbook_panel_exit_code">çıkış %1$d</string>
+    <string name="runbook_panel_status_unreadable">durum okunamadı</string>
+    <string name="runbook_panel_progress">%1$d / %2$d</string>
+    <string name="runbook_panel_shell_note">Adımlar bu oturumun kabuğunda çalışır; çıkış kodu hiçbir şey yazdırmadan bant dışı olarak geri gelir.</string>
+    <string name="runbook_panel_transfer_failed">Aktarım başarısız: %1$s</string>
+    <string name="runbook_panel_no_sftp">Bu oturumda SFTP kanalı yok.</string>
+
+    <!-- Library screen -->
+    <string name="runbook_edit">Düzenle</string>
+    <string name="runbook_cancel">İptal</string>
+    <plurals name="runbook_count">
+        <item quantity="one">%1$d runbook</item>
+        <item quantity="other">%1$d runbook</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="one">%1$d adım</item>
+        <item quantity="other">%1$d adım</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">Komut</string>
+    <string name="runbook_kind_transfer">Dosya</string>
+    <string name="runbook_step_local">Yerel yol</string>
+    <string name="runbook_step_remote">Uzak yol</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">Yükle</string>
+    <string name="runbook_direction_download">İndir</string>
+    <string name="runbook_transfer_note">Aktarımlar aynı oturumun SFTP kanalını kullanır.</string>
+    <string name="runbook_vars_hint">${{name}} çalıştırmadan önce bir değer sorar; ${{vault:girdi}} ve ${{clipboard}} kendiliğinden doldurulur.</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">Çalıştırma ilkesi</string>
+    <string name="runbook_policy_stop">İlk hatada durdur</string>
+    <string name="runbook_policy_watchdog">Zaman aşımı bekçisi</string>
+    <string name="runbook_policy_watchdog_value">%1$d dk</string>
+    <string name="runbook_policy_watchdog_off">Kapalı</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">runbook</string>
+    <string name="runbook_run_step_of">adım %1$d / %2$d</string>
+    <string name="runbook_run_output">Çıktı</string>
+    <string name="runbook_run_no_output">Henüz çıktı yok</string>
+    <string name="runbook_run_output_lost">Çıktı yakalanamadı — adım sırasında terminal arabelleği değişti</string>
+    <string name="runbook_run_back">Terminale dön</string>
+    <string name="runbook_run_open">Çalıştırmayı aç</string>
+    <string name="runbook_status_waiting">bekliyor</string>
+    <string name="runbook_status_running">çalışıyor</string>
+    <string name="runbook_status_skipped">atlandı</string>
+    <string name="runbook_status_stopped">durduruldu</string>
+    <string name="runbook_status_failed">başarısız</string>
+    <string name="runbook_status_failed_count">Başarısız adım: %1$d</string>
+    <string name="runbook_status_confirm">onay bekliyor</string>
+    <string name="runbook_status_interactive">etkileşimli — kendiniz tamamlayın</string>
+    <string name="runbook_dur_seconds">%1$s sn</string>
+    <string name="runbook_dur_minutes">%1$d dk %2$d sn</string>
+    <string name="runbook_transfer_of">%1$s / %2$s</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Önceki çalıştırmalar</string>
+    <string name="runbook_history_empty">Henüz çalıştırma yok</string>
+    <string name="runbook_history_failed_at">%1$d. adımda başarısız</string>
+    <string name="runbook_history_last">son çalıştırma: %1$s</string>
+
+    <!-- Runbooks help dialog -->
+    <string name="runbook_help_title">Runbook'lar</string>
+    <string name="runbook_help_intro">Runbook, tek bir oturumun kabuğunda adım adım çalıştırılan sıralı bir prosedürdür. Çıkış kodları çalıştırmanın nasıl devam edeceğini belirler; ${{…}} değerleri başlangıçta bir kez toplanır ve tüm adımlarca paylaşılır.</string>
+    <string name="runbook_help_flags">Adım seçenekleri</string>
+    <string name="runbook_help_flag_confirm">siz onaylayana kadar adımdan önce duraklar</string>
+    <string name="runbook_help_flag_continue">hata kaydedilir ve çalıştırma devam eder</string>
+    <string name="runbook_help_flag_interactive">satır olduğu gibi gönderilir ve adımı siz tamamlarsınız — terminali tutan TUI programları ve menüler için</string>
+    <string name="runbook_help_examples">Örnekler</string>
+</resources>

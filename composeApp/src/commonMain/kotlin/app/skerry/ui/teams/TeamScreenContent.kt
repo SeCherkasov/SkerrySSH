@@ -54,6 +54,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.boundedVisibleText
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
@@ -327,7 +328,7 @@ private fun ScopeStrip(
 ) {
     Column(Modifier.padding(horizontal = 22.dp, vertical = 14.dp)) {
         Txt(
-            stringResource(Res.string.lib_teams_scopes).uppercase(),
+            labelUppercase(stringResource(Res.string.lib_teams_scopes)),
             color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
             modifier = Modifier.padding(bottom = 10.dp),
         )

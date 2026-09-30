@@ -1,0 +1,31 @@
+<resources>
+    <!-- Eşitleme göstergesi -->
+    <string name="stail_sync_online">Eşitleme çevrimiçi</string>
+    <string name="stail_sync_offline">Eşitleme çevrimdışı</string>
+    <string name="stail_syncing">Eşitleniyor…</string>
+    <string name="stail_sync_paused">Eşitleme duraklatıldı</string>
+    <string name="stail_sync_error">Eşitleme hatası</string>
+
+    <!-- Hesap kartı -->
+    <string name="stail_local_vault">Yerel kasa</string>
+    <string name="stail_encrypted_on_device">Bu cihazda şifrelenmiş</string>
+    <string name="stail_synced_host">Eşitlendi · %1$s</string>
+    <string name="stail_synced">Eşitlendi</string>
+    <string name="stail_linked_locked">Bağlantılı · kilitli</string>
+
+    <!-- Biyometriyi yeniden kaydetme istemi -->
+    <string name="stail_reenroll_prompt_title">Biyometrik kilit açmayı yeniden etkinleştir</string>
+    <string name="stail_reenroll_prompt_cancel">İptal</string>
+    <string name="stail_reenroll_prompt_subtitle">Hızlı kilit açmayı yeni hesap anahtarına bağlamak için biyometrinizi doğrulayın.</string>
+
+    <!-- Eşitleme hataları (SyncFailureReason) -->
+    <string name="stail_sync_fail_rekey">Kasa, hesap şifresiyle yeniden şifrelenemedi</string>
+    <string name="stail_sync_fail_key_adopt">Hesap anahtarı benimsenemedi</string>
+    <!-- %1$s — yerelleştirilmiş neden, %2$s — ham teknik ayrıntı -->
+    <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
+
+    <!-- Ekran okuyucu duyuruları -->
+    <!-- %1$s — yerelleştirilmiş hata metni -->
+    <string name="stail_sync_announce_error">Eşitleme hatası. %1$s</string>
+    <string name="stail_sync_announce_disconnected">Eşitleme bağlantısı kesildi</string>
+</resources>

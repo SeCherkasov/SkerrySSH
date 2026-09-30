@@ -23,6 +23,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_history
 import app.skerry.ui.generated.resources.lib_teams_history_empty
@@ -56,7 +57,7 @@ internal fun TeamActivityPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Txt(
-                    stringResource(Res.string.lib_teams_recent_activity).uppercase(),
+                    labelUppercase(stringResource(Res.string.lib_teams_recent_activity)),
                     color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
                 )
                 GhostButton(stringResource(Res.string.lib_teams_history), onClick = onOpenFull, icon = "history")

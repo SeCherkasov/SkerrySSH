@@ -45,6 +45,10 @@ class StringEscapeTest {
             assertEquals("断开“my-host”？", getString(Res.string.shell_disconnect_title, HOST))
             assertEquals("删除“my-host”？", getString(Res.string.shell_delete_host_title, HOST))
         }
+        inLocale("tr") {
+            assertEquals("“my-host” bağlantısı kesilsin mi?", getString(Res.string.shell_disconnect_title, HOST))
+            assertEquals("“my-host” silinsin mi?", getString(Res.string.shell_delete_host_title, HOST))
+        }
     }
 
     @Test
@@ -59,7 +63,7 @@ class StringEscapeTest {
     }
 
     /**
-     * A locale quotes with its own marks: “ ” in English and Chinese, « » in Russian, corner
+     * A locale quotes with its own marks: “ ” in English, Chinese and Turkish, « » in Russian, corner
      * brackets nowhere. Mixed marks are what the escape sweep leaves behind — a string can lose the
      * backslash and still end up with another language's quotes around the host name.
      */
@@ -162,6 +166,9 @@ class StringEscapeTest {
             "en" to "\"«»„「」’‘『』",
             "ru" to "\"“”„「」’‘『』",
             "zh" to "\"«»„「」’‘『』",
+            // Turkish suffixes a proper noun with a plain apostrophe (Skerry'nin), so ’ is foreign
+            // here for the same reason it is in English.
+            "tr" to "\"«»„「」’‘『』",
         )
 
         /**

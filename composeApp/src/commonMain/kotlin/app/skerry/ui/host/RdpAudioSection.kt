@@ -19,6 +19,7 @@ import app.skerry.ui.app.LocalAudioOutputs
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.Res
@@ -70,7 +71,7 @@ fun RdpAudioSection(form: NewConnectionFormState) {
         if (!form.rdpAudioOutput) return@Column
         Box(Modifier.size(12.dp))
         Txt(
-            stringResource(Res.string.conn_audio_output_device).uppercase(),
+            labelUppercase(stringResource(Res.string.conn_audio_output_device)),
             color = Skerry.colors.faint,
             size = 10.5.sp,
             weight = FontWeight.SemiBold,

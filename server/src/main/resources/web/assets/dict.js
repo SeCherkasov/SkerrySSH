@@ -1,6 +1,6 @@
 "use strict";
 /*
-  Skerry Sync web frontend — the en/ru/zh dictionaries. One file, because three would be three more
+  Skerry Sync web frontend — the en/ru/zh/tr dictionaries. One file, because three would be three more
   script tags for the same bytes: the page needs every language at once to switch without a reload.
 
   Copy rule: a string earns its place by carrying a label, a number, or a fact that is not already on
@@ -9,7 +9,7 @@
   translated value would be a divergence, not a courtesy.
 */
 
-const LANGS = ["en", "ru", "zh"];
+const LANGS = ["en", "ru", "zh", "tr"];
 const LANG_KEY = "skerry.lang";
 
 const DICT = {
@@ -556,6 +556,188 @@ const DICT = {
     "n.viewers":  { other: "{n} 位观看者" },
 
     "t.now":  "刚刚",
+    "unit.b": "B", "unit.kib": "KiB", "unit.mib": "MiB"
+  },
+
+  tr: {
+    "title.public":    "Skerry Sync — sunucu",
+    "title.account":   "Skerry Sync — hesap",
+    "title.operator":  "Skerry Sync — operatör konsolu",
+    "zone.account":    "Hesap",
+    "zone.operator":   "Operatör",
+    "zone.account.d":  "Cihazlar, ekipler, saklanan kayıtlar",
+    "zone.operator.d": "Toplamlar, hesaplar, denetim günlüğü",
+
+    "front.doors":     "Girişler",
+    "front.lead":      "Sunucu yalnızca şifreli metin saklar. Anahtarlar cihazlarınızda türetilir ve sunucuya asla ulaşmaz.",
+    "sec.overview":    "Genel bakış",
+    "sec.devices":     "Cihazlar",
+    "sec.teams":       "Ekipler",
+    "sec.sessions":    "Canlı oturumlar",
+    "sec.storage":     "Depolama",
+    "sec.log":         "Günlük",
+    "sec.security":    "Güvenlik",
+    "sec.stats":       "Sunucu",
+    "sec.accounts":    "Hesaplar",
+    "sec.audit":       "Denetim günlüğü",
+    "sec.health":      "Sistem durumu",
+
+    "instance.version":      "Sürüm",
+    "instance.storage":     "Depolama",
+    "instance.storage.val": "Yalnızca şifreli metin",
+    "instance.status.up":    "Erişilebilir",
+    "instance.status.down":  "Erişilemiyor",
+    "instance.reg":          "Kayıt",
+    "instance.reg.open":     "Açık",
+    "instance.reg.closed":   "Kapalı",
+    "instance.transport":    "Aktarım",
+    "instance.transport.plain": "TLS yok — belirteçler ve sarılmış anahtarlar ağda açık metin olarak gider",
+
+    "connect.url":     "Sunucu URL'si",
+    "connect.s1":      "URL'yi istemciye yapıştırın",
+    "connect.s1d":     "Ayarlar → Eşitleme → Kendi barındırdığınız eşitleme sunucusu.",
+    "connect.s2":      "Oturum açın veya hesap oluşturun",
+    "connect.s2d":     "Sunucu şifreyi değil, bir SRP doğrulayıcısını alır.",
+    "connect.s3":      "Diğer cihazlarınızı ekleyin",
+    "connect.s3d":     "Oturum açık bir cihazdan tek kullanımlık kod; veri anahtarı şifreli olarak aktarılır.",
+    "connect.copy":    "Kopyala",
+    "connect.copied":  "Kopyalandı",
+    "connect.copy.manual": "Seçildi — kopyalayın",
+
+    "gate.account.h":  "Oturum aç",
+    "gate.account.p":  "Web şifresi uygulamada belirlenir. Ana şifre değildir ve kasayı açamaz.",
+    "gate.acct.ph":    "you@example.com",
+    "gate.acct.label": "Hesap kimliği",
+    "gate.pw.ph":      "Web şifresi",
+    "gate.account.go": "Oturum aç",
+    "gate.account.hint": "Unuttunuz mu? Uygulamada yenisini belirleyin: Ayarlar → Eşitleme → Web erişimi.",
+    "gate.account.err": "Hesap veya şifre yanlış.",
+    "gate.operator.h": "Operatör konsolu",
+    "gate.operator.p": "Sunucu meta verileri: toplamlar, cihazlar, denetim olayları.",
+    "gate.operator.ph": "SKERRY_ADMIN_TOKEN",
+    "gate.operator.go": "Kilidi aç",
+    "gate.operator.err": "Geçersiz belirteç.",
+    "gate.throttled":  "Çok fazla deneme. Bir dakika sonra yeniden deneyin.",
+    "gate.back":       "Geri",
+
+    "act.signout":     "Oturumu kapat",
+    "act.lock":        "Kilitle",
+    "act.refresh":     "Yenile",
+    "act.revoke":      "Erişimi kaldır",
+    "act.open":        "Aç",
+    "act.delete":      "Sil",
+    "act.purge":       "Mezar taşlarını temizle",
+    "act.close":       "Kapat",
+    "act.enter":       "Gir",
+
+    "ov.h":            "Genel bakış",
+    "ov.devices":      "Cihazlar",
+    "ov.records":      "Kayıtlar",
+    "ov.storage":      "Şifreli metin",
+    "ov.lastsync":     "Son eşitleme",
+    "ov.devices.sub":  "{n} etkin",
+    "ov.records.sub":  "{n} mezar taşı",
+
+    "dev.h":           "Cihazlar",
+    "dev.p":           "Erişimi kaldırmak cihazın belirteçlerini geçersiz kılar ve soketlerini kapatır.",
+    "dev.revoked.hidden": { one: "Erişimi kaldırılmış {n} cihaz listelenmiyor.", other: "Erişimi kaldırılmış {n} cihaz listelenmiyor." },
+    "dev.name":        "Cihaz",
+    "dev.platform":    "Platform",
+    "dev.created":     "Eklenme",
+    "dev.seen":        "Son görülme",
+    "dev.cursor":      "Eşitleme imleci",
+    "dev.state":       "Durum",
+    "dev.current":     "Bu oturum",
+    "dev.st.ok":       "ETKİN",
+    "dev.st.stale":    "ESKİ",
+    "dev.st.revoked":  "ERİŞİM KALDIRILDI",
+
+    "team.h":          "Ekipler",
+    "team.p":          "Ekip adları şifreli metnin içindedir; sunucu yalnızca tanımlayıcıları tutar.",
+    "team.role":       "Rol",
+    "team.state":      "Üyelik",
+    "team.members":    "Üyeler",
+    "team.epoch":      "Anahtar sürümü",
+    "team.st.active":  "ETKİN",
+    "team.st.invited": "DAVET EDİLDİ",
+    "team.back":       "Tüm ekipler",
+    "team.acct":       "Hesap",
+    "team.since":      "Üyelik başlangıcı",
+    "team.scope":      "Erişim",
+    "team.scopes":     "Erişim",
+    "team.log":        "Günlük",
+    "team.scope.p":    "Erişim kuralı, bir üyenin açabileceği kayıtları daraltır. Adı zarfın içinde taşınır, sunucuya asla gitmez.",
+    "team.grants":     "Verilen",
+    "team.act.who":    "Hesap",
+
+    "ses.h":           "Canlı oturumlar",
+    "ses.p":           "Çerçeveler aktarıcıdan önce ekip anahtarıyla mühürlenir.",
+    "ses.started":     "Başlangıç",
+    "ses.empty":       "Burada bir şey yok.",
+
+    "st.h":            "Depolama",
+    "st.p":            "Önizleme, şifreli metnin gerçek başlangıcıdır.",
+    "st.id":           "Kayıt",
+    "st.type":         "Tür",
+    "st.ver":          "Sürüm",
+    "st.size":         "Boyut",
+    "st.device":       "Kaynak",
+    "st.preview":      "Şifreli metin",
+    "st.note":         "Tür ve boyut açık metindir — eşitleme bunlara göre sıralar. Geri kalan her şey blob'un içindedir.",
+
+    "log.h":           "Günlük",
+    "log.p":           "Yalnızca meta veri olayları.",
+    "log.when":        "Zaman",
+    "log.event":       "Olay",
+    "log.device":      "Cihaz",
+    "log.detail":      "Ayrıntı",
+    "page.size":       "Göster",
+    "page.range":      "{from}–{to} / {total}",
+    "page.prev":       "Önceki sayfa",
+    "page.next":       "Sonraki sayfa",
+
+    "sc.h":            "Güvenlik",
+    "sc.all":          "Tüm cihazlarda oturumu kapat",
+    "sc.alld":         "Bu web oturumu dahil tüm belirteçleri geçersiz kılar.",
+    "sc.all.go":       "Tüm erişimleri kaldır",
+
+    "op.h":            "Sunucu",
+    "op.p":            "Bu sunucudaki tüm hesaplar.",
+    "op.accounts":     "Hesaplar",
+    "op.devices":      "Cihazlar",
+    "op.records":      "Kayıtlar",
+    "op.storage":      "Şifreli metin",
+    "op.acc.h":        "Hesaplar",
+    "op.acc.p":        "Satır, cihazlarına ve kayıtlarına genişler.",
+    "op.acc.id":       "Hesap",
+    "op.acc.created":  "Oluşturulma",
+    "op.acc.devices":  "Cihazlar",
+    "op.acc.records":  "Kayıtlar",
+    "op.acc.size":     "Boyut",
+    "op.acc.seen":     "Son görülme",
+    "op.observ.h":     "Sistem durumu",
+    "op.observ.db":    "db",
+    "op.observ.age":   "süre",
+    "op.observ.never": "hiç",
+    "op.audit.h":      "Denetim günlüğü",
+    "op.acct":         "Hesap",
+
+    "state.loading":   "Yükleniyor…",
+    "err.net":         "Sunucudan yanıt yok.",
+    "err.http":        "Hata {code}.",
+    "err.session":     "Oturumun süresi doldu. İşlem çalıştırılmadı.",
+    "err.render":      "Sayfa çizilemedi. Yeniden yükleyin.",
+
+    "dlg.revoke":      "{name} cihazının erişimi kaldırılsın mı?\n\nBelirteçleri artık çalışmaz ve açık soketleri kapanır. Önceden eşitlenmiş kayıtlar cihazda kalır.",
+    "dlg.signout":     "Tüm cihazlarda oturum kapatılsın mı?\n\nBu tarayıcı oturumu dahil, bu hesabın tüm belirteçleri geçersiz kılınır.",
+    "dlg.signout.partial": "{total} cihazdan {n} tanesinin erişimi kaldırıldı, ardından bir hata nedeniyle durdu — geri kalanlarda oturum hâlâ açık.",
+    "dlg.purge":       "{acct} hesabının mezar taşları temizlensin mi?\n\nYalnızca tüm cihazların zaten geçtiği silme işaretleri kaldırılır; hiçbir kayıt geri gelmez.",
+    "dlg.delete":      "{acct} silinsin mi?\n\nKayıtları, cihazları ve eşleştirme oturumları geri alınamaz biçimde kaldırılır. Sahip olduğu ekipler başka bir üyeye devredilir veya onunla birlikte silinir.",
+
+    "n.members":  { one: "{n} üye",  other: "{n} üye" },
+    "n.viewers":  { one: "{n} izleyici",  other: "{n} izleyici" },
+
+    "t.now":  "az önce",
     "unit.b": "B", "unit.kib": "KiB", "unit.mib": "MiB"
   }
 };

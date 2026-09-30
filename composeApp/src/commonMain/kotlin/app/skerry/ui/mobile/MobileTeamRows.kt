@@ -26,6 +26,7 @@ import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
@@ -81,7 +82,7 @@ internal fun MobileSharedSection(
 
 @Composable
 internal fun MobileTeamsSectionLabel(text: String) {
-    Txt(text.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp))
+    Txt(labelUppercase(text), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp))
 }
 
 @Composable
