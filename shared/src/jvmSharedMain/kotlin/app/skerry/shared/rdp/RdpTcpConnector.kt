@@ -1,10 +1,14 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.io.causeChain
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.security.cert.CertificateException
+import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLContext
@@ -13,6 +17,8 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -97,6 +103,9 @@ class RdpTcpConnector(
             tcpNoDelay = true
         }
     },
+    // Injectable for tests: the refusal it exists to recover from comes from BoringSSL, which the
+    // desktop JVM the tests run on does not have.
+    private val handshake: (SSLSocket) -> Unit = { it.startHandshake() },
 ) {
     /**
      * Negotiate [requestedProtocols] with the server at [host]:[port] and upgrade the socket to the
@@ -115,15 +124,49 @@ class RdpTcpConnector(
         loadBalanceInfo: String? = null,
         onStage: (RdpConnectStage) -> Unit = {},
     ): RdpConnection = withContext(Dispatchers.IO) {
+        val first = TlsAttempt(rsaKeyExchange = false)
+        try {
+            attempt(host, port, requestedProtocols, cookie, loadBalanceInfo, onStage, first)
+        } catch (e: RdpTlsException) {
+            // Windows signs its own Remote Desktop certificate for key encipherment only, and
+            // BoringSSL (Android) refuses such a key for an ECDHE suite, where it has to sign. The
+            // handshake is dead by then, so the retry is a new connection, offering only the suites
+            // that certificate was made for. JSSE never raises this, so the desktop never retries.
+            if (!e.isKeyUsageRefusal()) throw e
+            currentCoroutineContext().ensureActive()
+            try {
+                // A certificate the user already answered for in the refused handshake is not put to
+                // them a second time within the same connect.
+                val retry = TlsAttempt(rsaKeyExchange = true, approvedFingerprint = first.approved?.fingerprintSha256)
+                attempt(host, port, requestedProtocols, cookie, loadBalanceInfo, onStage, retry)
+            } catch (retry: Exception) {
+                // The refusal is why the retry happened; a report that shows only the retry's
+                // failure cannot tell a server without RSA suites from a retry that never ran.
+                retry.addSuppressed(e)
+                throw retry
+            }
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun attempt(
+        host: String,
+        port: Int,
+        requestedProtocols: Int,
+        cookie: String?,
+        loadBalanceInfo: String?,
+        onStage: (RdpConnectStage) -> Unit,
+        tls: TlsAttempt,
+    ): RdpConnection {
         onStage(RdpConnectStage.Tcp)
         val socket = openSocket(host, port)
         socket.soTimeout = negotiationTimeoutMillis
         // Cancellation cannot interrupt the blocking reads below, but closing the socket under them
         // can; on success the connection owns the socket and this handler is gone by then.
-        val closeOnCancel = coroutineContext.job.invokeOnCompletion { cause ->
+        val closeOnCancel = currentCoroutineContext().job.invokeOnCompletion { cause ->
             if (cause != null) runCatching { socket.close() }
         }
-        try {
+        return try {
             onStage(RdpConnectStage.Negotiation)
             val plainSink = RdpSink { bytes ->
                 socket.getOutputStream().apply {
@@ -151,7 +194,7 @@ class RdpTcpConnector(
                 throw RdpProtocolException("server selected protocol $selected, which was not offered")
             }
             onStage(RdpConnectStage.Tls)
-            val secure = upgradeToTls(socket, host, port)
+            val secure = upgradeToTls(socket, host, port, tls)
             RdpConnection(secure.socket, selected, negotiation, secure.publicKey)
         } catch (e: Throwable) {
             runCatching { socket.close() }
@@ -162,6 +205,20 @@ class RdpTcpConnector(
     }
 
     private class SecureSocket(val socket: SSLSocket, val publicKey: ByteArray)
+
+    /** One TLS handshake of a connect: what it offers, and the certificate it saw approved. */
+    private class TlsAttempt(val rsaKeyExchange: Boolean, val approvedFingerprint: String? = null) {
+        var approved: RdpCertificateOffer? = null
+    }
+
+    /** Answers yes, without asking, for the one certificate approved earlier in the same connect. */
+    private class AlreadyApproved(
+        private val delegate: RdpCertificateVerifier,
+        private val fingerprint: String,
+    ) : RdpCertificateVerifier by delegate {
+        override fun verify(offer: RdpCertificateOffer): Boolean =
+            offer.fingerprintSha256 == fingerprint || delegate.verify(offer)
+    }
 
     /**
      * Wrap [plain] in TLS, with [certificateVerifier] taking the trust decision from inside the
@@ -174,21 +231,24 @@ class RdpTcpConnector(
      * proven it holds the matching key — recording there would let anyone able to answer the
      * connection register a certificate copied from elsewhere.
      */
-    private fun upgradeToTls(plain: Socket, host: String, port: Int): SecureSocket {
-        val trust = RdpVerifyingTrustManager(certificateVerifier, platformTrustManager(), host, port)
+    private fun upgradeToTls(plain: Socket, host: String, port: Int, tls: TlsAttempt): SecureSocket {
+        val verifier = tls.approvedFingerprint?.let { AlreadyApproved(certificateVerifier, it) } ?: certificateVerifier
+        val trust = RdpVerifyingTrustManager(verifier, platformTrustManager(), host, port)
         val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         val secure = context.socketFactory.createSocket(plain, host, port, true) as SSLSocket
         secure.useClientMode = true
         // Not left to the platform's defaults: Android's lag behind the desktop JVM's, and the floor
         // a remote-desktop session is protected by should not depend on which one is running it.
         secure.enabledProtocols = secure.supportedProtocols.filter { it in TLS_FLOOR }.toTypedArray()
+        if (tls.rsaKeyExchange) offerRsaKeyExchangeOnly(secure)
         try {
-            secure.startHandshake()
+            handshake(secure)
         } catch (e: SSLException) {
             runCatching { secure.close() }
             // Our own refusal surfaces here as a generic TLS failure; the caller needs the
             // certificate that was turned down, not the alert it produced. The alert stays as the
             // cause — a rejection and a broken handshake read the same way in a bug report.
+            tls.approved = trust.accepted
             throw trust.rejected?.let { RdpCertificateRejectedException(it, cause = e) }
                 ?: RdpTlsException("TLS handshake failed: ${e.message}", e)
         } catch (e: IOException) {
@@ -201,6 +261,7 @@ class RdpTcpConnector(
         // at all — an anonymous suite, or a resumed session (impossible here, the context is new).
         val offer = trust.accepted
             ?: throw RdpProtocolException("TLS handshake produced no server certificate")
+        if (tls.rsaKeyExchange) refuseNeedlessRsaKeyExchange(secure, offer)
         if (!certificateVerifier.remember(offer)) {
             // Another first-time connection to this host settled on a different certificate while
             // this handshake ran. One of the two is the one the host is now known by; this is not.
@@ -208,6 +269,56 @@ class RdpTcpConnector(
             throw RdpCertificateRejectedException(offer)
         }
         return SecureSocket(secure, offer.publicKey)
+    }
+
+    /**
+     * A deliberate step down — no forward secrecy — taken only for a certificate that allows nothing
+     * else, and checked for that once the handshake shows the certificate.
+     */
+    private fun offerRsaKeyExchangeOnly(secure: SSLSocket) {
+        // TLS 1.3 has no RSA key exchange; GCM where the platform has it, CBC only where it does not.
+        val rsa = secure.supportedCipherSuites.filter { it.startsWith(RSA_KEY_EXCHANGE_AES) }
+        val suites = rsa.filter { GCM in it }.ifEmpty { rsa }
+        val protocols = secure.enabledProtocols.filter { it == TLS_12 }
+        if (suites.isEmpty() || protocols.isEmpty()) {
+            throw RdpTlsException(
+                "no TLS 1.2 RSA key exchange to retry with",
+                SSLException("platform offers no TLS_RSA_WITH_AES suite over TLS 1.2"),
+            )
+        }
+        secure.enabledProtocols = protocols.toTypedArray()
+        secure.enabledCipherSuites = suites.toTypedArray()
+    }
+
+    /**
+     * BoringSSL would have taken a certificate that may sign for ECDHE, so the refusal that sent us
+     * to the RSA retry was not this server's: whoever answered the first attempt wanted the weaker
+     * exchange. Refused before it is remembered.
+     */
+    private fun refuseNeedlessRsaKeyExchange(secure: SSLSocket, offer: RdpCertificateOffer) {
+        val refusal = try {
+            if (encipherOnly(offer)) return
+            RdpTlsException(
+                "the RSA key exchange was retried for a certificate that did not need it",
+                SSLException("server certificate allows digitalSignature"),
+            )
+        } catch (e: RdpTlsException) {
+            e
+        }
+        runCatching { secure.close() }
+        throw refusal
+    }
+
+    /** Whether the leaf's key usage forbids signing, the one case BoringSSL refuses for ECDHE. */
+    private fun encipherOnly(offer: RdpCertificateOffer): Boolean {
+        val leaf = try {
+            CertificateFactory.getInstance("X.509")
+                .generateCertificate(ByteArrayInputStream(offer.derChain.first())) as X509Certificate
+        } catch (e: CertificateException) {
+            throw RdpTlsException("server certificate could not be parsed", e)
+        }
+        val usage = leaf.keyUsage ?: return false
+        return !usage[DIGITAL_SIGNATURE] && usage.getOrElse(KEY_ENCIPHERMENT) { false }
     }
 
     private fun platformTrustManager(): X509TrustManager? =
@@ -222,5 +333,18 @@ class RdpTcpConnector(
     private companion object {
         /** The only TLS versions this client offers; anything older is not negotiable. */
         val TLS_FLOOR = setOf("TLSv1.2", "TLSv1.3")
+        const val TLS_12 = "TLSv1.2"
+        const val RSA_KEY_EXCHANGE_AES = "TLS_RSA_WITH_AES_"
+        const val GCM = "_GCM_"
+
+        /** Bit positions in [X509Certificate.getKeyUsage] (RFC 5280 4.2.1.3). */
+        const val DIGITAL_SIGNATURE = 0
+        const val KEY_ENCIPHERMENT = 2
+
+        /** BoringSSL's name for a certificate whose key usage does not allow the negotiated suite. */
+        const val KEY_USAGE_REFUSAL = "KEY_USAGE_BIT_INCORRECT"
+
+        fun RdpTlsException.isKeyUsageRefusal(): Boolean =
+            causeChain().any { it.message?.contains(KEY_USAGE_REFUSAL) == true }
     }
 }

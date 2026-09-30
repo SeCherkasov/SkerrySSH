@@ -13,6 +13,7 @@ import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.GeneralName
 import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.asn1.x509.KeyUsage
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
@@ -29,15 +30,17 @@ object RdpTestCertificates {
         commonName: String = "rdp-test",
         dnsNames: List<String> = emptyList(),
         ipAddresses: List<String> = emptyList(),
-    ): SSLContext = serverWithCertificate(commonName, dnsNames, ipAddresses).first
+        keyUsage: Int? = null,
+    ): SSLContext = serverWithCertificate(commonName, dnsNames, ipAddresses, keyUsage).first
 
     /** A server-side [SSLContext] and the certificate it presents, for a client meant to trust exactly that one. */
     fun serverWithCertificate(
         commonName: String = "rdp-test",
         dnsNames: List<String> = emptyList(),
         ipAddresses: List<String> = emptyList(),
+        keyUsage: Int? = null,
     ): Pair<SSLContext, X509Certificate> {
-        val issued = selfSigned(commonName, dnsNames, ipAddresses)
+        val issued = selfSigned(commonName, dnsNames, ipAddresses, keyUsage = keyUsage)
         val keyStore = KeyStore.getInstance("PKCS12").apply {
             load(null, null)
             setKeyEntry("server", issued.privateKey, PASSWORD, arrayOf(issued.certificate))
@@ -77,6 +80,7 @@ object RdpTestCertificates {
         ipAddresses: List<String>,
         distinguishedName: String? = null,
         malformedAlternativeNames: Boolean = false,
+        keyUsage: Int? = null,
     ): Issued {
         val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
         val now = System.currentTimeMillis()
@@ -105,6 +109,8 @@ object RdpTestCertificates {
                 GeneralNames(alternatives.toTypedArray()),
             )
         }
+        // The bits of org.bouncycastle.asn1.x509.KeyUsage; absent means the extension is left out.
+        if (keyUsage != null) builder.addExtension(Extension.keyUsage, true, KeyUsage(keyUsage))
         val holder = builder.build(JcaContentSignerBuilder("SHA256withRSA").build(keyPair.private))
         return Issued(JcaX509CertificateConverter().getCertificate(holder), keyPair.private)
     }
