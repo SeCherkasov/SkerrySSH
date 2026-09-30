@@ -24,6 +24,21 @@ class SshjCertificateInspectorTest {
         assertEquals(CertificateFixtures.CA_FINGERPRINT, info.caFingerprintSha256)
     }
 
+    /** What lets an import refuse a certificate issued for some other key than the one beside it. */
+    @Test
+    fun `reports the fingerprint of the key the certificate is issued for`() {
+        val keys = BouncyCastleSshKeyGenerator()
+
+        assertEquals(
+            keys.inspect(CertificateFixtures.ED25519_PRIVATE_KEY)?.fingerprintSha256,
+            inspector.inspect(CertificateFixtures.ED25519_CERT)?.keyFingerprintSha256,
+        )
+        assertEquals(
+            keys.inspect(CertificateFixtures.RSA_PRIVATE_KEY)?.fingerprintSha256,
+            inspector.inspect(CertificateFixtures.RSA_CERT)?.keyFingerprintSha256,
+        )
+    }
+
     @Test
     fun `reads metadata from rsa certificate including real bit length`() {
         val info = inspector.inspect(CertificateFixtures.RSA_CERT)

@@ -7,11 +7,12 @@
     <string name="vault_generate_key">Generate key</string>
     <string name="vault_add_password">Add password</string>
     <string name="vault_import_certificate">Import certificate</string>
+    <string name="vault_import_key">Import key</string>
 
 
     <!-- Empty category states. -->
     <string name="vault_empty_ssh_title">No SSH keys yet</string>
-    <string name="vault_empty_ssh_hint">Generate a key to attach to hosts.</string>
+    <string name="vault_empty_ssh_hint">Generate or import a key to attach to hosts.</string>
     <string name="vault_empty_passwords_title">No passwords yet</string>
     <string name="vault_empty_passwords_hint">Add a password — it's stored encrypted and reusable across hosts.</string>
     <string name="vault_empty_certificates_title">No certificates yet</string>
@@ -78,6 +79,13 @@
     <string name="vault_cert_valid_summary">%1$s · %2$s · valid until %3$s</string>
     <string name="vault_import">Import</string>
 
+    <!-- Import key dialog (the certificate import above, with the certificate optional). -->
+    <string name="vault_dialog_import_key_subtitle">The private key is sealed in your vault. The certificate is optional.</string>
+    <string name="vault_key_read_error">Couldn't read this key — wrong passphrase, or not an OpenSSH or PEM private key.</string>
+    <string name="vault_key_valid_summary">%1$s · %2$s</string>
+    <string name="vault_key_readable">Key readable: %1$s</string>
+    <string name="vault_cert_key_mismatch">This certificate is issued for a different key.</string>
+
     <!-- Confirm master password before a secret leaves the vault (clipboard copy or key export). -->
     <string name="vault_confirm_master_title">Confirm master password</string>
     <string name="vault_confirm_master_subtitle">Enter your master password to copy this secret to the clipboard.</string>
@@ -134,6 +142,7 @@
     <string name="vault_hint_cert_sibling_opaque">Empty: no certificate — the key authenticates on its own</string>
     <string name="vault_browse">Browse…</string>
     <string name="vault_link">Link</string>
+    <string name="vault_key_path_is_key">This is the key itself, not a path. Use Import key instead.</string>
     <string name="vault_badge_file">FILE</string>
     <string name="vault_badge_file_missing">FILE MISSING</string>
     <string name="vault_label_key_path">KEY FILE</string>
@@ -190,7 +199,7 @@
     <string name="vault_help_title">Vault</string>
     <string name="vault_help_intro">Credentials for connections, stored encrypted under the master password. Sync moves only encrypted records.</string>
     <string name="vault_help_categories">Categories</string>
-    <string name="vault_help_keys">generated here or linked from a file; used to authenticate to hosts</string>
+    <string name="vault_help_keys">generated here, imported by pasting, or linked from a file; used to authenticate to hosts</string>
     <string name="vault_help_passwords">host and login passwords; copies are recorded in the usage log</string>
     <string name="vault_help_certificates">SSH certificates imported from files, paired with a key</string>
     <string name="vault_help_snippets">In snippets</string>

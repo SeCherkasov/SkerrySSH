@@ -28,6 +28,16 @@ import app.skerry.ui.generated.resources.vault_edit
 import app.skerry.ui.generated.resources.vault_field_note
 import app.skerry.ui.generated.resources.vault_save
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.SshKeyType
+import app.skerry.shared.vault.SshjCertificateInspector
+import app.skerry.ui.app.LocalSshCertificateInspector
+import app.skerry.ui.app.LocalSshKeyGenerator
+import app.skerry.ui.generated.resources.vault_field_name
+import app.skerry.ui.generated.resources.vault_field_private_key_pem
+import app.skerry.ui.generated.resources.vault_import_key
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalVault
@@ -131,6 +141,41 @@ class VaultSecretsTest {
         assertEquals(FOLDER, saved.group, "the folder picked in the keychain never reached the record")
     }
 
+    /**
+     * The import end to end on the desktop keychain, with the real sshj reader behind it: the action
+     * opens the key import (not the certificate one), a pasted key is read, and it lands as a plain
+     * key in SSH keys — issue #396's ask, instead of a path to a file.
+     */
+    @Test
+    fun `a key pasted through Import key is stored as a key`() {
+        val keys = BouncyCastleSshKeyGenerator()
+        val credentials = seededVault(keys)
+        val pasted = keys.generate(SshKeyType.ED25519).privateKeyPem
+        runForm({
+            CompositionLocalProvider(
+                LocalCredentials provides credentials,
+                LocalVault provides EmptyVault,
+                LocalSshKeyGenerator provides keys,
+                LocalSshCertificateInspector provides SshjCertificateInspector(),
+            ) {
+                VaultView(collapse = NoFolderCollapse)
+            }
+        }) {
+            onNodeWithText(string(Res.string.vault_import_key)).performClick()
+            waitForIdle()
+            onField(Res.string.vault_field_name).performTextInput(IMPORTED)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(pasted)
+            waitUntil(timeoutMillis = 10_000) {
+                onNodeWithTag(UiTags.FORM_SAVE).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null
+            }
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+
+        val saved = credentials.credentials.first { it.label == IMPORTED }.secret
+        assertEquals(CredentialSecret.PrivateKey(pasted.trim(), null), saved)
+    }
+
     /** The keychain id behind a label — what a host actually points at. */
     private fun DesktopShell.credentialId(label: String): String =
         credentials.credentials.first { it.label == label }.id
@@ -155,4 +200,5 @@ private object NoFolderCollapse : FolderCollapse {
     override fun toggleGroupCollapsed(name: String) = Unit
 }
 private const val FOLDER = "client-acme"
+private const val IMPORTED = "pasted-key"
 private const val NOTE = "rotate before the audit"

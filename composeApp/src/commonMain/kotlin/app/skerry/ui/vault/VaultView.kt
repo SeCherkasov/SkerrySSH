@@ -61,6 +61,7 @@ import app.skerry.ui.generated.resources.vault_item_count
 import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.generated.resources.vault_generate_key
 import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_import_key
 import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_sidebar_header
 import app.skerry.ui.host.rowLabel
@@ -155,7 +156,7 @@ private fun LiveVaultView(credentials: CredentialManagerController, collapse: Fo
     var showHelp by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     val secretFiles = LocalSecretFileReader.current
-    var showImportCert by remember { mutableStateOf(false) }
+    var importMode by remember { mutableStateOf<ImportKeyMode?>(null) }
     var showLinkKeyFile by remember { mutableStateOf(false) }
     var pendingEditCred by remember { mutableStateOf<Credential?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
@@ -175,11 +176,12 @@ private fun LiveVaultView(credentials: CredentialManagerController, collapse: Fo
                     category = category,
                     itemCount = allCreds.size,
                     canGenerate = generator != null,
-                    canImportCert = inspector != null,
+                    canImportKey = generator != null,
+                    canImportCert = generator != null && inspector != null,
                     canLinkFile = secretFiles != null,
                     onGenerate = { showGenerate = true },
                     onAddPassword = { showAddPassword = true },
-                    onImportCert = { showImportCert = true },
+                    onImport = { importMode = it },
                     onLinkKeyFile = { showLinkKeyFile = true },
                     onHelp = { showHelp = true },
                 )
@@ -279,22 +281,18 @@ private fun LiveVaultView(credentials: CredentialManagerController, collapse: Fo
                 },
             )
         }
-        if (showImportCert && inspector != null) {
-            ImportCertificateDialog(
+        val importing = importMode
+        if (importing != null && generator != null) {
+            ImportKeyDialog(
+                mode = importing,
+                generator = generator,
                 inspector = inspector,
-                onDismiss = { showImportCert = false },
+                onDismiss = { importMode = null },
                 onCreate = { name, pem, cert, passphrase ->
-                    selectedId = credentials.save(
-                        CredentialDraft(
-                            label = name,
-                            kind = CredentialKind.CERTIFICATE,
-                            privateKeyPem = pem,
-                            certificate = cert,
-                            passphrase = passphrase ?: "",
-                        ),
-                    )
-                    category = VaultCategoryKind.CERTIFICATES
-                    showImportCert = false
+                    val draft = importedKeyDraft(name, pem, cert, passphrase)
+                    selectedId = credentials.save(draft)
+                    category = draft.importCategory()
+                    importMode = null
                 },
             )
         }
@@ -441,11 +439,12 @@ private fun VaultHeader(
     category: VaultCategoryKind,
     itemCount: Int,
     canGenerate: Boolean,
+    canImportKey: Boolean,
     canImportCert: Boolean,
     canLinkFile: Boolean,
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
-    onImportCert: () -> Unit,
+    onImport: (ImportKeyMode) -> Unit,
     onLinkKeyFile: () -> Unit,
     onHelp: (() -> Unit)? = null,
 ) {
@@ -466,12 +465,13 @@ private fun VaultHeader(
                 // secret lands in depends on whether it names a certificate.
                 VaultCategoryKind.SSH_KEYS -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (canLinkFile) GhostButton(stringResource(Res.string.vault_link_key_file), onClick = onLinkKeyFile)
+                    if (canImportKey) GhostButton(stringResource(Res.string.vault_import_key), onClick = { onImport(ImportKeyMode.KEY) })
                     if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
                 }
                 VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add")
                 VaultCategoryKind.CERTIFICATES -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (canLinkFile) GhostButton(stringResource(Res.string.vault_link_key_file), onClick = onLinkKeyFile)
-                    if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
+                    if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = { onImport(ImportKeyMode.CERTIFICATE) }, icon = "add")
                 }
             }
         },

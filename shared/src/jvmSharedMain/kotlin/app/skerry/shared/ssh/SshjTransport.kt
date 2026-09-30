@@ -1,5 +1,7 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.vault.MAX_KDF_ROUNDS
+import app.skerry.shared.vault.kdfCostAcceptable
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.PrivateKey
@@ -275,9 +277,7 @@ class SshjTransport(
                     is SshAuth.PublicKey -> {
                         // loadKeys treats the strings as key content (not a path); passphrase is a
                         // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
-                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                        add(AuthPublickey(keys))
+                        add(AuthPublickey(client.loadBoundedKeys(auth.privateKeyPem, auth.passphrase)))
                     }
                     is SshAuth.Certificate -> {
                         // Cert auth: possession is proven by the private key from PEM, while the
@@ -285,8 +285,7 @@ class SshjTransport(
                         // sshj doesn't stitch these together from strings on its own (only from
                         // sibling files), so we build the KeyProvider by hand: private from PEM,
                         // public as Certificate, type as *_CERT.
-                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                        val keys = client.loadBoundedKeys(auth.privateKeyPem, auth.passphrase)
                         add(AuthPublickey(certificateKeyProvider(keys, auth.certificate)))
                     }
                     // Nothing to offer up front: the whole exchange is the server asking and the
@@ -325,6 +324,17 @@ class SshjTransport(
             throw SshConnectionException("Connection dropped during authentication", e)
         }
     }
+}
+
+/**
+ * sshj's loadKeys, refused up front for a key whose bcrypt cost is over the cap or can't be read:
+ * sshj would run it uninterruptibly, so cancelling the connect would leave the thread spinning.
+ */
+private fun SSHClient.loadBoundedKeys(privateKeyPem: String, passphrase: String?): KeyProvider {
+    if (!kdfCostAcceptable(privateKeyPem)) {
+        throw SshAuthenticationException("Private key asks for more than $MAX_KDF_ROUNDS bcrypt rounds")
+    }
+    return loadKeys(privateKeyPem, null, passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) })
 }
 
 /**

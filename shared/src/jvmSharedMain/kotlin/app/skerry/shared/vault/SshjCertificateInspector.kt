@@ -38,6 +38,7 @@ class SshjCertificateInspector : SshCertificateInspector {
             // cert.signatureKey is the ssh-wire encoding of the CA public key (matching OpenSSH's
             // fingerprint encoding), so its SHA256 matches `ssh-keygen -l` on the CA key.
             caFingerprintSha256 = fingerprint(cert.signatureKey),
+            keyFingerprintSha256 = fingerprint(Buffer.PlainBuffer().putPublicKey(cert.key).compactData),
         )
     }.getOrNull()
 
