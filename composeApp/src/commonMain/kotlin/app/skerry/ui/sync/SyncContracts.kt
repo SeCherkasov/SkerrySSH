@@ -221,6 +221,16 @@ class InMemorySyncConfigStore : SyncConfigStore {
  */
 class PairingOffer(val payload: String, val expiresAt: Long)
 
+/** Outcome of [SyncCoordinator.startPairing] behind the master password. */
+sealed interface PairingStart {
+    class Offered(val offer: PairingOffer) : PairingStart
+
+    data object WrongPassword : PairingStart
+
+    /** No live session, or the server refused the ticket. */
+    data object Failed : PairingStart
+}
+
 /** UI-visible sync connection state. */
 sealed interface SyncStatus {
     /** Sync not configured on this device (no saved link). */

@@ -71,10 +71,8 @@ class FileVaultTest {
         val underNew = vault()
         underNew.unlockWithDataKey(newKeyCopy)
         assertContentEquals("payload-1".encodeToByteArray(), underNew.openPayload("h1"))
-        // …and the OLD key can no longer decrypt the re-sealed record.
-        val underOld = vault()
-        underOld.unlockWithDataKey(oldKeyCopy)
-        assertNull(underOld.openPayload("h1"))
+        // …and the OLD key no longer opens the file at all.
+        assertEquals(UnlockResult.WrongPassword, vault().unlockWithDataKey(oldKeyCopy))
     }
 
     @Test

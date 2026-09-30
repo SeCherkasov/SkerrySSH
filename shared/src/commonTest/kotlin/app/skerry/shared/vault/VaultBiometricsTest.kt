@@ -561,4 +561,50 @@ class VaultBiometricsTest {
         assertFalse(a.contentEquals(b), "these are independent copies — wiping one doesn't touch the other")
         b.fill(0)
     }
+
+    @Test
+    fun `an artifact wrapping a key the vault replaced is dropped instead of opening the vault`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+        val bio = biometrics(v, keyStore)
+        assertEquals(BiometricEnableResult.Enabled, bio.enable(prompt))
+        // Sync replaced the account key and nobody told biometrics (the adoption hook is the
+        // platform's to wire, and a missing wire is exactly this case).
+        assertTrue(v.adoptDataKey(crypto.newDataKey(), "master-pass".toCharArray()))
+        v.lock()
+
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Invalidated, biometrics(fresh, keyStore).unlock(prompt))
+        assertFalse(fresh.isUnlocked, "a stale key must not open the vault")
+        assertFalse(artifacts().exists(), "the stale wrapper is gone, so the next start asks for the password")
+    }
+
+    @Test
+    fun `enabled follows enable, disable and invalidation`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+        val bio = biometrics(v, keyStore)
+        assertFalse(bio.enabled.value)
+
+        bio.enable(prompt)
+        assertTrue(bio.enabled.value)
+        bio.disable()
+        assertFalse(bio.enabled.value)
+
+        bio.enable(prompt)
+        v.lock()
+        keyStore.nextUnwrap = BiometricOutcome.Invalidated
+        bio.unlock(prompt)
+        assertFalse(bio.enabled.value)
+    }
+
+    @Test
+    fun `the factor comes from the key store`() = bioTest {
+        val v = vault()
+        assertEquals(UnlockFactor.Biometric, biometrics(v, FakeBiometricKeyStore()).factor)
+        val keyring = object : FakeBiometricKeyStore() {
+            override val factor = UnlockFactor.DeviceKeyring
+        }
+        assertEquals(UnlockFactor.DeviceKeyring, biometrics(v, keyring).factor)
+    }
 }

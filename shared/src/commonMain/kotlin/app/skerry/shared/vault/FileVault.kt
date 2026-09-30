@@ -16,12 +16,18 @@ import kotlinx.serialization.json.jsonObject
 import okio.FileSystem
 import okio.Path
 
-/** Plaintext part of the vault file: format version and material for dataKey derivation/wrapping. */
+/**
+ * Plaintext part of the vault file: format version and material for dataKey derivation/wrapping.
+ * [keyCheck] is an empty AEAD box sealed under the dataKey: the one thing a key handed in from outside
+ * ([FileVault.unlockWithDataKey]) can be checked against without the password. `null` in files written
+ * before it existed; filled in by the next password unlock. Optional, so older clients read the file.
+ */
 @Serializable
 internal data class VaultMeta(
     val formatVersion: Int,
     val salt: ByteArray,
     val wrappedDataKey: ByteArray,
+    val keyCheck: ByteArray? = null,
 )
 
 /** Root of the vault file: [VaultMeta] + encrypted records. */
@@ -91,7 +97,7 @@ class FileVault(
             val freshDataKey = crypto.newDataKey()
             val wrapped = crypto.wrapDataKey(masterKey, freshDataKey)
             masterKey.bytes.fill(0)
-            val newMeta = VaultMeta(FORMAT_VERSION, salt, wrapped)
+            val newMeta = VaultMeta(FORMAT_VERSION, salt, wrapped, keyCheckFor(freshDataKey))
             unknownRecords.clear() // fresh vault from scratch — don't carry over unrecognized records from elsewhere
             try {
                 writeFile(newMeta, emptyList())
@@ -111,7 +117,7 @@ class FileVault(
     override fun createWithDataKey(dataKey: DataKey): Unit = synchronized(lock) {
         // meta.wrappedDataKey is intentionally empty: this vault's key lives elsewhere (a TEAM
         // record in the account vault); the password-based unlock() path isn't used for these files.
-        val newMeta = VaultMeta(FORMAT_VERSION, crypto.newSalt(), ByteArray(0))
+        val newMeta = VaultMeta(FORMAT_VERSION, crypto.newSalt(), ByteArray(0), keyCheckFor(dataKey))
         unknownRecords.clear()
         try {
             writeFile(newMeta, emptyList())
@@ -138,6 +144,7 @@ class FileVault(
             dataKey = unwrapped
             adoptBody(body)
             migrateLegacyRecords()
+            recordKeyCheck()
             UnlockResult.Success
         } finally {
             password.fill(' ')
@@ -150,6 +157,11 @@ class FileVault(
         }.getOrElse {
             dataKey.bytes.fill(0) // nothing to assign — don't leave the passed-in key dangling in memory
             return@synchronized UnlockResult.Corrupted
+        }
+        val check = body.meta.keyCheck
+        if (check != null && !opensKeyCheck(dataKey, check)) {
+            dataKey.bytes.fill(0) // not this vault's key — stale wrapper, reset vault, rotated team key
+            return@synchronized UnlockResult.WrongPassword
         }
         this.dataKey?.bytes?.fill(0) // repeated unlock must not orphan the previous key
         this.dataKey = dataKey // assign the passed-in key — the caller does not wipe it (see contract)
@@ -201,7 +213,7 @@ class FileVault(
         val newMaster = crypto.deriveMasterKey(password, newSalt)
         val newWrapped = crypto.wrapDataKey(newMaster, key)
         newMaster.bytes.fill(0)
-        val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped)
+        val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped, keyCheckFor(key))
         writeFile(newMeta, records.toList())
         meta = newMeta
     }
@@ -224,7 +236,9 @@ class FileVault(
             plaintext.fill(0)
             record.copy(version = version, updatedAt = at, deviceId = deviceId, blob = blob)
         }
-        writeFile(currentMeta, rekeyed) // commit after persist — a failed write leaves fields untouched
+        val rekeyedMeta = currentMeta.copy(keyCheck = keyCheckFor(newKey))
+        writeFile(rekeyedMeta, rekeyed) // commit after persist — a failed write leaves fields untouched
+        meta = rekeyedMeta
         records.clear()
         records.addAll(rekeyed)
         oldKey.bytes.fill(0)
@@ -425,7 +439,11 @@ class FileVault(
             val newMaster = crypto.deriveMasterKey(newPassword, newSalt)
             val newWrapped = crypto.wrapDataKey(newMaster, key)
             newMaster.bytes.fill(0)
-            val newMeta = currentMeta.copy(salt = newSalt, wrappedDataKey = newWrapped)
+            val newMeta = currentMeta.copy(
+                salt = newSalt,
+                wrappedDataKey = newWrapped,
+                keyCheck = currentMeta.keyCheck ?: keyCheckFor(key),
+            )
             writeFile(newMeta, records.toList()) // on failure meta is not swapped in
             meta = newMeta
             true
@@ -577,7 +595,26 @@ class FileVault(
         if (persisted) meta = newMeta
     }
 
+    private fun keyCheckFor(key: DataKey): ByteArray = crypto.seal(key, ByteArray(0), KEY_CHECK_AAD)
+
+    private fun opensKeyCheck(key: DataKey, check: ByteArray): Boolean =
+        crypto.open(key, check, KEY_CHECK_AAD) != null
+
+    /**
+     * Writes [VaultMeta.keyCheck] into a file that predates it, once a password unlock has proved the
+     * key. Best-effort like [migrateLegacyRecords]: a failed write only means the next password unlock
+     * tries again, and until then a key from outside is taken unchecked, as it always was.
+     */
+    private fun recordKeyCheck() {
+        val currentMeta = meta ?: return
+        if (currentMeta.keyCheck != null) return
+        val withCheck = currentMeta.copy(keyCheck = keyCheckFor(requireUnlocked()))
+        if (runCatching { writeFile(withCheck, records.toList()) }.isSuccess) meta = withCheck
+    }
+
     private companion object {
+        val KEY_CHECK_AAD = "skerry.vault.key-check.v1".encodeToByteArray()
+
         // 2: records bound to their metadata via [recordAad]. 1: legacy `id‖type` AAD (pre-0.1.3),
         // upgraded in place by [migrateLegacyRecords] on the first unlock.
         const val FORMAT_VERSION = 2

@@ -151,6 +151,12 @@
     <string name="settings_security_pw_changed_days">Last changed %1$d days ago.</string>
     <string name="settings_security_biometric">Biometric unlock</string>
     <string name="settings_security_biometric_desc">Biometrics instead of the master password.</string>
+    <string name="settings_security_trusted_device">Trust this device</string>
+    <string name="settings_security_trusted_device_desc">Opens the vault through the system keyring, without the master password. Auto-lock is off; anyone signed in as you gets in.</string>
+    <string name="settings_security_trusted_device_missing">No system keyring found.</string>
+    <string name="settings_security_trusted_device_confirm">Enter your master password. From now on the system keyring opens the vault for anyone signed in as you.</string>
+    <string name="settings_security_trusted_device_confirm_button">Trust</string>
+    <string name="settings_security_trusted_device_refused">The system keyring refused the key.</string>
     <string name="settings_security_biometric_unsupported">Biometric unlock is unavailable on this device.</string>
     <string name="settings_security_biometric_recheck">Check again</string>
     <string name="settings_security_biometric_weak_binding">On with a weaker key binding — biometrics still required.</string>
@@ -176,6 +182,9 @@
     <string name="settings_event_biometric_enabled">Biometric unlock enabled</string>
     <string name="settings_event_biometric_disabled">Biometric unlock disabled</string>
     <string name="settings_event_unlocked_biometric">Unlocked with biometrics</string>
+    <string name="settings_event_trusted_device_enabled">Trusted device on</string>
+    <string name="settings_event_trusted_device_disabled">Trusted device off</string>
+    <string name="settings_event_unlocked_trusted_device">Unlocked by trusted device</string>
     <string name="settings_event_device_paired">New device paired</string>
     <string name="settings_event_key_exported">Key exported to file</string>
     <string name="settings_event_lock_incomplete">Auto-lock did not finish cleanly</string>
@@ -305,4 +314,6 @@
     <string name="keepalive_vendor_samsung">Samsung</string>
     <string name="settings_experimental_jump_shell">Jump host shell</string>
     <string name="settings_experimental_jump_shell_desc">The connection form offers to reach a host by typing ssh at its jump host's prompt — for bastions that allow only a shell. One login to the jump host serves every such tab. When off, such profiles do not connect on this device.</string>
+    <string name="settings_experimental_trusted_device">Trusted device</string>
+    <string name="settings_experimental_trusted_device_desc">Adds vault unlock through the system keyring to Security. Turning this off drops the trust.</string>
 </resources>

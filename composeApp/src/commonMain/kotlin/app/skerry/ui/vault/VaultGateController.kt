@@ -14,11 +14,13 @@ import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.UnlockFactor
 import app.skerry.shared.vault.VaultBiometrics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,6 +38,9 @@ const val MIN_MASTER_PASSWORD_LENGTH: Int = 12
  * an accidental click on a destructive action.
  */
 const val RESET_CONFIRM_WORD: String = "RESET"
+
+/** Outcome of [VaultGateController.enableTrustedDevice]. */
+enum class TrustEnableResult { Enabled, WrongPassword, Failed }
 
 /** Master-password gate screen over [Vault]. */
 enum class VaultGateState {
@@ -117,6 +122,12 @@ enum class VaultGateError {
 
     /** This device's secure hardware can't decrypt the vault — biometrics is off, password only (#23). */
     BiometricUnsupported,
+
+    /** The OS keyring did not give the key this time (daemon down, keyring locked) — password this once. */
+    TrustedDeviceFailed,
+
+    /** The trust can never work again (keyring entry gone, vault key replaced) — it is off, password needed. */
+    TrustedDeviceReset,
 }
 
 /**
@@ -257,7 +268,7 @@ class VaultGateController(
                         // the final key. Otherwise go straight to biometrics / into the app.
                         state = when {
                             offersSyncOnboarding -> VaultGateState.OfferSync
-                            canEnableBiometric() -> VaultGateState.OfferBiometric
+                            offersBiometricAfterCreate() -> VaultGateState.OfferBiometric
                             else -> VaultGateState.Unlocked
                         }
                     } finally {
@@ -375,6 +386,24 @@ class VaultGateController(
         }
     }
 
+    /** Whether this vault's fast unlock is the OS keyring of issue #398 rather than a biometric prompt. */
+    private val trustedDevice: Boolean get() = biometrics?.factor == UnlockFactor.DeviceKeyring
+
+    /**
+     * The gate opens the vault itself on reaching the unlock form: a trusted device asks nobody, so
+     * there is nothing to wait for and no button to press.
+     */
+    fun unlocksAutomatically(): Boolean = trustedDevice && canUnlockWithBiometric()
+
+    /** Whether the unlock form offers the fingerprint button (biometrics only — a keyring has no touch). */
+    fun offersBiometricButton(): Boolean = !trustedDevice && canUnlockWithBiometric()
+
+    /**
+     * Whether a new vault is followed by the one-time biometrics offer. Not for a trusted device: that
+     * one is experimental and turned on from Settings, where it can say what it gives away.
+     */
+    private fun offersBiometricAfterCreate(): Boolean = !trustedDevice && canEnableBiometric()
+
     /** Whether biometric unlock can be offered on the unlock form (available and enabled). */
     fun canUnlockWithBiometric(): Boolean =
         biometrics?.let { it.availability() == BiometricAvailability.Available && it.isEnabled() } == true
@@ -399,12 +428,12 @@ class VaultGateController(
         try {
             when (bio.unlock(prompt)) {
                 BiometricUnlockResult.Unlocked -> {
-                    audit(SecurityEventType.UnlockedBiometric)
+                    audit(if (trustedDevice) SecurityEventType.UnlockedTrustedDevice else SecurityEventType.UnlockedBiometric)
                     state = VaultGateState.Unlocked
                 }
                 BiometricUnlockResult.Invalidated -> {
                     biometricEnabled = false
-                    error = VaultGateError.BiometricReset
+                    error = if (trustedDevice) VaultGateError.TrustedDeviceReset else VaultGateError.BiometricReset
                 }
                 BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
                 // The enclave stopped honouring the key — biometrics is off for good on this device
@@ -412,13 +441,14 @@ class VaultGateController(
                 BiometricUnlockResult.Unsupported -> {
                     biometricEnabled = false
                     biometricUnsupported = true
-                    error = VaultGateError.BiometricUnsupported
+                    error = if (trustedDevice) VaultGateError.TrustedDeviceReset else VaultGateError.BiometricUnsupported
                 }
                 // A silent failure looks like the tap did nothing — surface a "use your password" hint.
                 BiometricUnlockResult.Failed,
                 BiometricUnlockResult.Unavailable,
-                -> error = VaultGateError.BiometricFailed
-                BiometricUnlockResult.LockedOut -> error = VaultGateError.BiometricLockedOut
+                -> error = if (trustedDevice) VaultGateError.TrustedDeviceFailed else VaultGateError.BiometricFailed
+                BiometricUnlockResult.LockedOut ->
+                    error = if (trustedDevice) VaultGateError.TrustedDeviceFailed else VaultGateError.BiometricLockedOut
                 // Deliberate dismissal stays silent — a message there would just be noise.
                 BiometricUnlockResult.Cancelled,
                 BiometricUnlockResult.NotEnabled,
@@ -435,6 +465,30 @@ class VaultGateController(
      * actually decrypt the vault; a device that fails it lands in [biometricUnsupported].
      */
     suspend fun enableBiometric(prompt: BiometricPrompt, verifyPrompt: BiometricPrompt = prompt): Boolean {
+        // A keyring asks nobody, so its trust is set only through enableTrustedDevice, which asks once.
+        if (trustedDevice) return false
+        return enableUnlockFactor(prompt, verifyPrompt)
+    }
+
+    /**
+     * Set the trusted device of issue #398. From then on anyone signed in as this OS account opens the
+     * vault, so it takes the master password — the same bar as copying a secret out. [password] is wiped.
+     */
+    suspend fun enableTrustedDevice(password: CharArray, prompt: BiometricPrompt): TrustEnableResult {
+        if (!trustedDevice) return TrustEnableResult.Failed
+        val verified = try {
+            withContext(kdfDispatcher) { vault.verifyPassword(password) }
+        } finally {
+            password.fill('\u0000')
+        }
+        if (!verified) return TrustEnableResult.WrongPassword
+        // Past the password nothing asks the user any more, so a dialog closed now must not cut the
+        // enable between `vault.bio` on disk and the toggle and audit that account for it.
+        val enabled = withContext(NonCancellable) { enableUnlockFactor(prompt, prompt) }
+        return if (enabled) TrustEnableResult.Enabled else TrustEnableResult.Failed
+    }
+
+    private suspend fun enableUnlockFactor(prompt: BiometricPrompt, verifyPrompt: BiometricPrompt): Boolean {
         val bio = biometrics ?: return false
         biometricInFlight = true
         return try {
@@ -445,7 +499,9 @@ class VaultGateController(
                 biometricUnsupported = bio.isUnsupported()
                 biometricReducedBinding = bio.reducedBinding()
             }
-            if (result == BiometricEnableResult.Enabled) audit(SecurityEventType.BiometricEnabled)
+            if (result == BiometricEnableResult.Enabled) {
+                audit(if (trustedDevice) SecurityEventType.TrustedDeviceEnabled else SecurityEventType.BiometricEnabled)
+            }
             result == BiometricEnableResult.Enabled
         } finally {
             biometricInFlight = false
@@ -470,15 +526,30 @@ class VaultGateController(
         }
     }
 
-    /** Disable biometrics (remove the key and `vault.bio`). */
-    fun disableBiometric() {
-        val bio = biometrics ?: return
+    /**
+     * Disable biometrics (remove the key and `vault.bio`). Key-store calls block — a keyring is a D-Bus
+     * call. Not cancellable: settings closed mid-way must not keep the toggle and audit from the result.
+     */
+    suspend fun disableBiometric(): Unit = withContext(NonCancellable) {
+        val bio = biometrics ?: return@withContext
         val wasEnabled = bio.isEnabled()
-        bio.disable()
-        biometricEnabled = bio.isEnabled()
+        biometricEnabled = withContext(kdfDispatcher) {
+            // Called from click handlers; a config dir that refuses the delete leaves the toggle on,
+            // which is the truth, rather than taking the app down.
+            try {
+                bio.disable()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                Unit
+            }
+            bio.isEnabled()
+        }
         biometricReducedBinding = false
         // Record the event only if biometrics was actually enabled (disable is idempotent).
-        if (wasEnabled && !biometricEnabled) audit(SecurityEventType.BiometricDisabled)
+        if (wasEnabled && !biometricEnabled) {
+            audit(if (trustedDevice) SecurityEventType.TrustedDeviceDisabled else SecurityEventType.BiometricDisabled)
+        }
     }
 
     /**
@@ -488,7 +559,7 @@ class VaultGateController(
      */
     fun completeSyncOnboarding() {
         if (state != VaultGateState.OfferSync) return
-        state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
+        state = if (offersBiometricAfterCreate()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 
     /**
@@ -507,7 +578,7 @@ class VaultGateController(
         // for the Online transition). Record the event here, not in the coordinator: all join paths
         // (desktop and mobile, via the shared gate) converge here, exactly where pairing succeeded.
         audit(SecurityEventType.DevicePaired)
-        state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
+        state = if (offersBiometricAfterCreate()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 
     /**

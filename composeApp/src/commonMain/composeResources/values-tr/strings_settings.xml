@@ -147,6 +147,12 @@
     <string name="settings_security_pw_changed_days">Son değişiklik %1$d gün önce.</string>
     <string name="settings_security_biometric">Biyometrik kilit açma</string>
     <string name="settings_security_biometric_desc">Ana şifre yerine biyometri.</string>
+    <string name="settings_security_trusted_device">Bu cihaza güven</string>
+    <string name="settings_security_trusted_device_desc">Kasa, ana şifre olmadan sistem anahtarlığı üzerinden açılır. Otomatik kilit kapalı; sizin hesabınızla oturum açan herkes girer.</string>
+    <string name="settings_security_trusted_device_missing">Sistem anahtarlığı bulunamadı.</string>
+    <string name="settings_security_trusted_device_confirm">Ana şifrenizi girin. Bundan sonra kasayı, sizin hesabınızla oturum açan herkes için sistem anahtarlığı açar.</string>
+    <string name="settings_security_trusted_device_confirm_button">Güven</string>
+    <string name="settings_security_trusted_device_refused">Sistem anahtarlığı anahtarı reddetti.</string>
     <string name="settings_security_biometric_unsupported">Bu cihazda biyometrik kilit açma kullanılamıyor.</string>
     <string name="settings_security_biometric_recheck">Yeniden denetle</string>
     <string name="settings_security_biometric_weak_binding">Daha zayıf anahtar bağlamayla açık — biyometri yine de gerekli.</string>
@@ -172,6 +178,9 @@
     <string name="settings_event_biometric_enabled">Biyometrik kilit açma etkinleştirildi</string>
     <string name="settings_event_biometric_disabled">Biyometrik kilit açma devre dışı bırakıldı</string>
     <string name="settings_event_unlocked_biometric">Biyometriyle kilit açıldı</string>
+    <string name="settings_event_trusted_device_enabled">Güvenilir cihaz açıldı</string>
+    <string name="settings_event_trusted_device_disabled">Güvenilir cihaz kapatıldı</string>
+    <string name="settings_event_unlocked_trusted_device">Güvenilir cihazla kilit açıldı</string>
     <string name="settings_event_device_paired">Yeni cihaz eşlendi</string>
     <string name="settings_event_key_exported">Anahtar dosyaya dışa aktarıldı</string>
     <string name="settings_event_lock_incomplete">Otomatik kilit düzgün tamamlanmadı</string>
@@ -301,4 +310,6 @@
     <string name="keepalive_vendor_samsung">Samsung</string>
     <string name="settings_experimental_jump_shell">Atlama sunucusu kabuğu</string>
     <string name="settings_experimental_jump_shell_desc">Bağlantı formu, atlama sunucusunun isteminde ssh yazarak bir sunucuya ulaşmayı önerir — yalnızca kabuğa izin veren bastion sunucuları için. Atlama sunucusuna tek oturum açma bu tür tüm sekmelere hizmet eder. Kapalıyken bu tür profiller bu cihazda bağlanmaz.</string>
+    <string name="settings_experimental_trusted_device">Güvenilir cihaz</string>
+    <string name="settings_experimental_trusted_device_desc">Güvenlik bölümüne sistem anahtarlığıyla kasa kilidi açmayı ekler. Kapatmak güveni kaldırır.</string>
 </resources>

@@ -151,6 +151,12 @@
     <string name="settings_security_pw_changed_days">上次更改于 %1$d 天前。</string>
     <string name="settings_security_biometric">生物识别解锁</string>
     <string name="settings_security_biometric_desc">用生物识别代替主密码。</string>
+    <string name="settings_security_trusted_device">信任此设备</string>
+    <string name="settings_security_trusted_device_desc">通过系统密钥环打开保险库，无需主密码。自动锁定关闭；任何以你的身份登录系统的人都能进入。</string>
+    <string name="settings_security_trusted_device_missing">未找到系统密钥环。</string>
+    <string name="settings_security_trusted_device_confirm">请输入主密码。此后系统密钥环会为任何以你的身份登录的人打开保险库。</string>
+    <string name="settings_security_trusted_device_confirm_button">信任</string>
+    <string name="settings_security_trusted_device_refused">系统密钥环拒绝了该密钥。</string>
     <string name="settings_security_biometric_unsupported">此设备不支持生物识别解锁。</string>
     <string name="settings_security_biometric_recheck">重新检查</string>
     <string name="settings_security_biometric_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
@@ -176,6 +182,9 @@
     <string name="settings_event_biometric_enabled">生物识别解锁已启用</string>
     <string name="settings_event_biometric_disabled">生物识别解锁已禁用</string>
     <string name="settings_event_unlocked_biometric">通过生物识别解锁</string>
+    <string name="settings_event_trusted_device_enabled">已启用受信任设备</string>
+    <string name="settings_event_trusted_device_disabled">已停用受信任设备</string>
+    <string name="settings_event_unlocked_trusted_device">通过受信任设备解锁</string>
     <string name="settings_event_device_paired">新设备已配对</string>
     <string name="settings_event_key_exported">密钥已导出到文件</string>
     <string name="settings_event_lock_incomplete">自动锁定未完全完成</string>
@@ -305,4 +314,6 @@
     <string name="keepalive_vendor_samsung">Samsung</string>
     <string name="settings_experimental_jump_shell">跳板主机 shell</string>
     <string name="settings_experimental_jump_shell_desc">连接表单提供在跳板主机提示符下输入 ssh 来连接主机的选项——适用于只允许 shell 的堡垒机。登录跳板主机一次即可用于所有此类标签页。关闭时，此类配置在本设备上不会连接。</string>
+    <string name="settings_experimental_trusted_device">受信任设备</string>
+    <string name="settings_experimental_trusted_device_desc">在“安全”中添加通过系统密钥环解锁保险库。关闭后信任将被清除。</string>
 </resources>

@@ -44,6 +44,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.app.LocalManualLockOffered
 import app.skerry.ui.app.CustomGroup
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
@@ -343,7 +344,9 @@ internal fun DesktopChrome(
         val snippets = LocalSnippets.current
         // Live lock on the live path (teardown itself runs in VaultGate); state.lock is mock/preview.
         // Via rememberUpdatedState so onRootKey doesn't depend on the lock lambda itself changing.
-        val lockAction = rememberUpdatedState(onLockWithTunnels ?: state::lock)
+        val lockAction = rememberUpdatedState(
+            if (LocalManualLockOffered.current) onLockWithTunnels ?: state::lock else null,
+        )
         // Global shell hotkeys (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab — adjacent
         // tab, Alt+digit — tab by number) are checked BEFORE the snippet hotkey. Same gate: only on a
         // live session screen (no overlay/modal/settings), so a chord from editor fields doesn't leak
@@ -364,7 +367,7 @@ internal fun DesktopChrome(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
                     )
                     shortcut != null && survivesModal(shortcut) &&
-                        runDesktopShortcut(shortcut, state, sessions, lockAction.value)
+                        runOfferedDesktopShortcut(shortcut, state, sessions, lockAction.value)
                 }
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
@@ -383,7 +386,7 @@ internal fun DesktopChrome(
                     val shortcut = matchDesktopShortcut(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
                     )
-                    if (shortcut != null && runDesktopShortcut(shortcut, state, sessions, lockAction.value)) true
+                    if (shortcut != null && runOfferedDesktopShortcut(shortcut, state, sessions, lockAction.value)) true
                     else runSnippetHotkey(event, snippets, sessions)
                 }
             }

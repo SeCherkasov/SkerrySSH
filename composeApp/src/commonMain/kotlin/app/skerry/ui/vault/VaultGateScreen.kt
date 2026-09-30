@@ -43,20 +43,10 @@ import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.app.LocalManualLockOffered
 import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.vtail_error_biometric_failed
-import app.skerry.ui.generated.resources.vtail_error_biometric_locked_out
-import app.skerry.ui.generated.resources.vtail_bio_verify_subtitle
-import app.skerry.ui.generated.resources.vtail_bio_verify_title
-import app.skerry.ui.generated.resources.vtail_error_biometric_reset
-import app.skerry.ui.generated.resources.vtail_error_biometric_unsupported
-import app.skerry.ui.generated.resources.vtail_error_corrupted
-import app.skerry.ui.generated.resources.vtail_error_not_writable
-import app.skerry.ui.generated.resources.vtail_error_password_mismatch
-import app.skerry.ui.generated.resources.vtail_error_password_too_short
-import app.skerry.ui.generated.resources.vtail_error_wrong_password
 import app.skerry.ui.generated.resources.vault_biometric_enable
 import app.skerry.ui.generated.resources.vault_biometric_offer_subtitle
 import app.skerry.ui.generated.resources.vault_biometric_offer_title
@@ -88,6 +78,19 @@ import app.skerry.ui.generated.resources.vtail_bio_enable_title
 import app.skerry.ui.generated.resources.vtail_bio_unlock_cancel
 import app.skerry.ui.generated.resources.vtail_bio_unlock_subtitle
 import app.skerry.ui.generated.resources.vtail_bio_unlock_title
+import app.skerry.ui.generated.resources.vtail_bio_verify_subtitle
+import app.skerry.ui.generated.resources.vtail_bio_verify_title
+import app.skerry.ui.generated.resources.vtail_error_biometric_failed
+import app.skerry.ui.generated.resources.vtail_error_biometric_locked_out
+import app.skerry.ui.generated.resources.vtail_error_biometric_reset
+import app.skerry.ui.generated.resources.vtail_error_biometric_unsupported
+import app.skerry.ui.generated.resources.vtail_error_corrupted
+import app.skerry.ui.generated.resources.vtail_error_not_writable
+import app.skerry.ui.generated.resources.vtail_error_password_mismatch
+import app.skerry.ui.generated.resources.vtail_error_password_too_short
+import app.skerry.ui.generated.resources.vtail_error_trusted_device_failed
+import app.skerry.ui.generated.resources.vtail_error_trusted_device_reset
+import app.skerry.ui.generated.resources.vtail_error_wrong_password
 import app.skerry.ui.nav.PlatformBackHandler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -280,11 +283,16 @@ fun VaultGate(
         }
     }
 
+    // A trusted device (issue #398) opens the vault again the moment it locks, so every automatic lock
+    // would only close the sessions: both are off, and the manual lock is not offered, while it is on.
+    val trustActive = rememberTrustActive(biometrics)
+    val idleLockMs = autoLockIdleMs.takeUnless { trustActive }
+
     // Background auto-lock: other hands on an unlocked device must not get an open vault after minimizing.
     val lifecycleOwner = LocalLifecycleOwner.current
     // Read at ON_STOP: the observer outlives a settings change and must not act on the value it was
     // registered under.
-    val lockOnBackgroundNow by rememberUpdatedState(lockOnBackground)
+    val lockOnBackgroundNow by rememberUpdatedState(lockOnBackground && !trustActive)
     DisposableEffect(lifecycleOwner, controller) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_STOP || !lockOnBackgroundNow) return@LifecycleEventObserver
@@ -306,7 +314,7 @@ fun VaultGate(
     // from settings (or null — AutoLockDuration.Never, timer off) makes a new policy, which
     // restarts the loop. Kept out of the composition otherwise: a policy tick is a plain field,
     // deliberately not snapshot state, so pointer movement doesn't recompose the whole app.
-    val idlePolicy = remember(autoLockIdleMs) { autoLockIdleMs?.let { IdleLockPolicy(it) } }
+    val idlePolicy = remember(idleLockMs) { idleLockMs?.let { IdleLockPolicy(it) } }
     val currentWorkInFlight by rememberUpdatedState(workInFlight)
     // Stable per policy: a fresh lambda every recomposition would invalidate every reader of the
     // static local below.
@@ -350,14 +358,20 @@ fun VaultGate(
                     onPairingComplete,
                 )
 
-            VaultGateState.NeedsUnlock ->
+            VaultGateState.NeedsUnlock -> {
+                // No prompt behind the keyring, so nothing to wait for: it opens on entry. key(state)
+                // runs this once per lock; a failure stays on the password form with its error.
+                if (trustActive && controller.unlocksAutomatically()) {
+                    LaunchedEffect(Unit) { controller.unlockWithBiometric(unlockPrompt) }
+                }
                 unlockForm(
                     controller.error,
-                    controller.canUnlockWithBiometric(),
+                    controller.offersBiometricButton(),
                     { password -> controller.unlock(password) },
                     { scope.launch { controller.unlockWithBiometric(unlockPrompt) } },
                     { controller.beginReset() },
                 )
+            }
 
             // Sync step in onboarding: the form connects/skips sync itself and calls onDone, after which
             // the dataKey is final and biometrics can be safely offered. offerSyncForm is guaranteed
@@ -386,7 +400,10 @@ fun VaultGate(
             // lock() moves the gate to NeedsUnlock; key(state) tears down the content subtree, whose
             // DisposableEffect drops the live SSH session — locking closes sessions too.
             VaultGateState.Unlocked -> Box(Modifier.fillMaxSize().idleActivity(idlePolicy)) {
-                CompositionLocalProvider(LocalUserActivity provides userActivity) {
+                CompositionLocalProvider(
+                    LocalUserActivity provides userActivity,
+                    LocalManualLockOffered provides !trustActive,
+                ) {
                     content { lockNow() }
                 }
             }
@@ -610,4 +627,6 @@ internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error)
     VaultGateError.BiometricFailed -> stringResource(Res.string.vtail_error_biometric_failed)
     VaultGateError.BiometricLockedOut -> stringResource(Res.string.vtail_error_biometric_locked_out)
     VaultGateError.BiometricUnsupported -> stringResource(Res.string.vtail_error_biometric_unsupported)
+    VaultGateError.TrustedDeviceFailed -> stringResource(Res.string.vtail_error_trusted_device_failed)
+    VaultGateError.TrustedDeviceReset -> stringResource(Res.string.vtail_error_trusted_device_reset)
 }

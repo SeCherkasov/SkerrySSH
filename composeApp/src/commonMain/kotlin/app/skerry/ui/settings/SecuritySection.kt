@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -22,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,11 +32,15 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.SecurityEvent
 import app.skerry.shared.vault.SecurityEventType
+import app.skerry.shared.vault.UnlockFactor
 import app.skerry.shared.vault.securityMoment
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.app.LocalVaultBiometrics
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.DropdownField
+import app.skerry.ui.design.FormField
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
@@ -56,6 +62,10 @@ import app.skerry.ui.generated.resources.settings_autolock_never
 import app.skerry.ui.generated.resources.settings_badge_soon
 import app.skerry.ui.generated.resources.settings_cancel
 import app.skerry.ui.generated.resources.settings_change
+import app.skerry.ui.generated.resources.settings_change_account_pw_err_rewrap
+import app.skerry.ui.generated.resources.settings_change_account_pw_note
+import app.skerry.ui.generated.resources.settings_change_account_pw_submit
+import app.skerry.ui.generated.resources.settings_change_account_pw_title
 import app.skerry.ui.generated.resources.settings_change_pw_confirm
 import app.skerry.ui.generated.resources.settings_change_pw_current
 import app.skerry.ui.generated.resources.settings_change_pw_err_wrong
@@ -66,21 +76,30 @@ import app.skerry.ui.generated.resources.settings_event_biometric_disabled
 import app.skerry.ui.generated.resources.settings_event_biometric_enabled
 import app.skerry.ui.generated.resources.settings_event_device_paired
 import app.skerry.ui.generated.resources.settings_event_key_exported
-import app.skerry.ui.generated.resources.settings_event_lock_incomplete
 import app.skerry.ui.generated.resources.settings_event_line
+import app.skerry.ui.generated.resources.settings_event_lock_incomplete
 import app.skerry.ui.generated.resources.settings_event_password_changed
 import app.skerry.ui.generated.resources.settings_event_sync_rejected
+import app.skerry.ui.generated.resources.settings_event_trusted_device_disabled
+import app.skerry.ui.generated.resources.settings_event_trusted_device_enabled
 import app.skerry.ui.generated.resources.settings_event_unlocked_biometric
+import app.skerry.ui.generated.resources.settings_event_unlocked_trusted_device
 import app.skerry.ui.generated.resources.settings_event_vault_created
 import app.skerry.ui.generated.resources.settings_event_with_detail
 import app.skerry.ui.generated.resources.settings_manage
+import app.skerry.ui.generated.resources.settings_password_link_moved
 import app.skerry.ui.generated.resources.settings_recent_security_events
-import app.skerry.ui.generated.resources.settings_security_report_team_sessions
-import app.skerry.ui.generated.resources.settings_security_report_team_sessions_desc
 import app.skerry.ui.generated.resources.settings_security_2fa
 import app.skerry.ui.generated.resources.settings_security_2fa_desc
+import app.skerry.ui.generated.resources.settings_security_account_password
+import app.skerry.ui.generated.resources.settings_security_account_password_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock
 import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_biometric
+import app.skerry.ui.generated.resources.settings_security_biometric_desc
+import app.skerry.ui.generated.resources.settings_security_biometric_recheck
+import app.skerry.ui.generated.resources.settings_security_biometric_unsupported
+import app.skerry.ui.generated.resources.settings_security_biometric_weak_binding
 import app.skerry.ui.generated.resources.settings_security_lock_minimised
 import app.skerry.ui.generated.resources.settings_security_lock_minimised_desc
 import app.skerry.ui.generated.resources.settings_security_master_password
@@ -89,40 +108,29 @@ import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_pw_changed_days
 import app.skerry.ui.generated.resources.settings_security_pw_changed_today
 import app.skerry.ui.generated.resources.settings_security_pw_changed_yesterday
-import app.skerry.ui.generated.resources.settings_security_biometric
-import app.skerry.ui.generated.resources.settings_security_biometric_desc
-import app.skerry.ui.generated.resources.settings_security_biometric_recheck
-import app.skerry.ui.generated.resources.settings_security_biometric_unsupported
-import app.skerry.ui.generated.resources.settings_security_biometric_weak_binding
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions_desc
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
 import app.skerry.ui.generated.resources.vtail_error_password_mismatch
 import app.skerry.ui.generated.resources.vtail_error_password_too_short
-import app.skerry.ui.generated.resources.settings_change_account_pw_err_rewrap
-import app.skerry.ui.generated.resources.settings_change_account_pw_note
-import app.skerry.ui.generated.resources.settings_change_account_pw_submit
-import app.skerry.ui.generated.resources.settings_change_account_pw_title
-import app.skerry.ui.generated.resources.settings_security_account_password
-import app.skerry.ui.generated.resources.settings_security_account_password_desc
-import app.skerry.ui.generated.resources.settings_password_link_moved
 import app.skerry.ui.sync.AccountPasswordChange
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncFailureReason
 import app.skerry.ui.sync.SyncField
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.syncFailureText
+import app.skerry.ui.theme.Skerry
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.VaultGateController
+import app.skerry.ui.vault.rememberTrustActive
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.theme.Skerry
-import app.skerry.ui.design.FormField
-import androidx.compose.ui.platform.testTag
-import app.skerry.ui.app.UiTags
 
 // Security section: master password, biometrics, auto-lock, event log.
 
@@ -145,6 +153,7 @@ internal fun SecuritySection(
     onChangeMasterPassword: () -> Unit,
     onChangeAccountPassword: () -> Unit,
     onBiometricToggled: () -> Unit,
+    onTrustDevice: () -> Unit,
 ) {
 
     // Master password subtitle is the real "last changed" from the log (or a neutral fallback).
@@ -181,7 +190,14 @@ internal fun SecuritySection(
     // vault (#23) keeps the row, off and inert, with the reason and a re-check — dropping it silently
     // would read as "Skerry has no biometrics".
     val scope = rememberCoroutineScope()
-    if (controller != null && controller.biometricUnsupported) {
+    val biometrics = LocalVaultBiometrics.current
+    val trustedDevice = biometrics?.factor == UnlockFactor.DeviceKeyring
+    val fastUnlockOn by (biometrics?.enabled ?: remember { MutableStateFlow(false) }).collectAsState()
+    // With the vault reopening itself after every lock, the lock settings below would change nothing.
+    val trustActive = rememberTrustActive(biometrics)
+    if (trustedDevice) {
+        TrustedDeviceRow(state, controller, fastUnlockOn, onRequestTrust = onTrustDevice, onToggled = onBiometricToggled)
+    } else if (controller != null && controller.biometricUnsupported) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.faint, size = 13.sp, weight = FontWeight.Medium)
@@ -232,23 +248,24 @@ internal fun SecuritySection(
     }
 
     // Auto-lock: real idle threshold, applied to VaultGate's idle timer via state.autoLock.
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (!trustActive) Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.settings_security_auto_lock), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
         Box(Modifier.width(170.dp)) { AutoLockPicker(state.settings.autoLock, onPick = state.settings::chooseAutoLock) }
     }
-    HLine()
-
-    // Background lock, separate from the idle threshold above (issue #397).
-    SettingToggleRow(
-        stringResource(Res.string.settings_security_lock_minimised),
-        stringResource(Res.string.settings_security_lock_minimised_desc),
-        on = state.settings.lockOnBackground,
-        onToggle = state.settings::toggleLockOnBackground,
-    )
-    HLine()
+    if (!trustActive) {
+        HLine()
+        // Background lock, separate from the idle threshold above (issue #397).
+        SettingToggleRow(
+            stringResource(Res.string.settings_security_lock_minimised),
+            stringResource(Res.string.settings_security_lock_minimised_desc),
+            on = state.settings.lockOnBackground,
+            onToggle = state.settings::toggleLockOnBackground,
+        )
+        HLine()
+    }
 
     // Two-factor auth isn't implemented yet: SOON badge instead of a fake "enabled" state.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -339,6 +356,9 @@ private fun SecurityEventType.eventLabel(): String = stringResource(
         SecurityEventType.BiometricEnabled -> Res.string.settings_event_biometric_enabled
         SecurityEventType.BiometricDisabled -> Res.string.settings_event_biometric_disabled
         SecurityEventType.UnlockedBiometric -> Res.string.settings_event_unlocked_biometric
+        SecurityEventType.TrustedDeviceEnabled -> Res.string.settings_event_trusted_device_enabled
+        SecurityEventType.TrustedDeviceDisabled -> Res.string.settings_event_trusted_device_disabled
+        SecurityEventType.UnlockedTrustedDevice -> Res.string.settings_event_unlocked_trusted_device
         SecurityEventType.DevicePaired -> Res.string.settings_event_device_paired
         SecurityEventType.KeyExported -> Res.string.settings_event_key_exported
         SecurityEventType.LockIncomplete -> Res.string.settings_event_lock_incomplete

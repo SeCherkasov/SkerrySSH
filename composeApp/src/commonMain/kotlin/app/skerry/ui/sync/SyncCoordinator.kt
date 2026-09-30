@@ -79,6 +79,11 @@ class SyncCoordinator(
      */
     private val onDataKeyAdopted: () -> Boolean = { false },
     /**
+     * Whether quick pairing takes the master password first. True on a trusted device (issue #398):
+     * the vault there opens with nobody's password, and a pairing code hands over the account key.
+     */
+    private val pairingNeedsPassword: () -> Boolean = { false },
+    /**
      * Called after a successful sync when something was pulled from the server ([SyncOutcome.pulled] >
      * 0). List managers (hosts/snippets/tunnels/known-hosts) hold records in memory and don't see what
      * sync wrote to the vault directly — without this callback synced data doesn't appear on screen
@@ -1269,10 +1274,27 @@ class SyncCoordinator(
      * the live dataKey with it, and hand the envelope to the server ([SyncClient.startPairing]); return
      * a [PairingOffer] — the QR/code string ([PairingPayload]) and expiry. The transferKey travels only
      * in the QR, only the envelope goes to the server, so the server ciphertext is useless without the
-     * QR. Requires an active session and unlocked vault; `null` on failure (status → [SyncStatus.Failed]).
+     * QR. Requires an active session and unlocked vault; `null` on failure (status → [SyncStatus.Failed]),
+     * and always `null` while [pairingRequiresPassword] — then the overload taking the password is the way in.
      * suspend — called from a UI coroutine (short POST); transferKey/dataKey copy are wiped in finally.
      */
-    suspend fun startPairing(): PairingOffer? {
+    suspend fun startPairing(): PairingOffer? = if (pairingNeedsPassword()) null else openPairing()
+
+    /** Whether [startPairing] refuses and the code takes the master password ([startPairing] with it). */
+    val pairingRequiresPassword: Boolean get() = pairingNeedsPassword()
+
+    /** [startPairing] behind the master password, checked on the KDF dispatcher. [password] is wiped. */
+    suspend fun startPairing(password: CharArray): PairingStart {
+        val verified = try {
+            withContext(Dispatchers.Default) { vault.verifyPassword(password) }
+        } finally {
+            password.fill('\u0000')
+        }
+        if (!verified) return PairingStart.WrongPassword
+        return openPairing()?.let { PairingStart.Offered(it) } ?: PairingStart.Failed
+    }
+
+    private suspend fun openPairing(): PairingOffer? {
         val (c, s) = liveSession()?.let { it.client to it.session } ?: return null
         val cfg = configStore.load() ?: return null
         // tryLock serializes pairing: a repeat call before the previous one finishes returns null.

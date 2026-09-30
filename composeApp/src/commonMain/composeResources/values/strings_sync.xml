@@ -91,6 +91,8 @@
     <string name="sync_pairing_dialog_desc">On the new device pick “I have a pairing code”, then scan this QR or paste the code below. It works once.</string>
     <string name="sync_done">Done</string>
     <string name="sync_pairing_gen_failed">Couldn't create a pairing code.</string>
+    <string name="sync_pairing_password_prompt">Enter your master password to show the code.</string>
+    <string name="sync_pairing_show_code">Show code</string>
     <string name="sync_generating_code">Generating code…</string>
     <string name="sync_code_expired">Code expired — close and start again</string>
     <string name="sync_expires_in">Expires in %1$s</string>

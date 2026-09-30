@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,14 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.nowMillis
 import app.skerry.ui.sync.qr.QrImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import app.skerry.ui.sync.PairingStart
+import app.skerry.ui.vault.DialogField
+import app.skerry.ui.generated.resources.sync_pairing_password_prompt
+import app.skerry.ui.generated.resources.sync_pairing_show_code
+import app.skerry.ui.generated.resources.vault_field_master_password
+import app.skerry.ui.generated.resources.vault_password_mismatch_retry
+import app.skerry.ui.generated.resources.vault_placeholder_master_password
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_link_device
 import app.skerry.ui.generated.resources.sync_pairing_dialog_desc
@@ -116,7 +125,11 @@ fun PairingOfferContent(sync: SyncCoordinator) {
     var remaining by remember { mutableStateOf<Long?>(null) } // seconds until expiry
     val genFailedMessage = stringResource(Res.string.sync_pairing_gen_failed)
 
+    // A trusted device (issue #398) opens the vault with nobody's password; the code hands over the
+    // account key, so there it is released only for the master password.
+    val needsPassword = remember(sync) { sync.pairingRequiresPassword }
     LaunchedEffect(Unit) {
+        if (needsPassword) return@LaunchedEffect
         val o = sync.startPairing()
         if (o == null) error = genFailedMessage else offer = o
     }
@@ -139,6 +152,15 @@ fun PairingOfferContent(sync: SyncCoordinator) {
     StatusAnnouncer(error.orEmpty())
     when {
         error != null -> SyncFormError(error, announce = false)
+
+        needsPassword && offer == null -> PairingPasswordStep { password ->
+            when (val start = sync.startPairing(password)) {
+                is PairingStart.Offered -> offer = start.offer
+                PairingStart.Failed -> error = genFailedMessage
+                PairingStart.WrongPassword -> return@PairingPasswordStep false
+            }
+            true
+        }
 
         offer == null -> Row(
             Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
@@ -189,6 +211,44 @@ fun PairingOfferContent(sync: SyncCoordinator) {
                 )
             }
         }
+    }
+}
+
+/** The master password before the code. [onSubmit] answers `false` for a wrong password; the field stays for another try. */
+@Composable
+private fun PairingPasswordStep(onSubmit: suspend (CharArray) -> Boolean) {
+    val scope = rememberCoroutineScope()
+    var password by remember { mutableStateOf("") }
+    var wrong by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Txt(stringResource(Res.string.sync_pairing_password_prompt), color = Skerry.colors.dim, size = 12.sp, modifier = Modifier.padding(bottom = 10.dp))
+        DialogField(
+            stringResource(Res.string.vault_field_master_password),
+            password,
+            { password = it; wrong = false },
+            placeholder = stringResource(Res.string.vault_placeholder_master_password),
+            password = true,
+        )
+        val mismatch = stringResource(Res.string.vault_password_mismatch_retry)
+        if (wrong) Txt(mismatch, color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 8.dp))
+        StatusAnnouncer(if (wrong) mismatch else "")
+        PrimaryButton(
+            stringResource(Res.string.sync_pairing_show_code),
+            enabled = password.isNotEmpty() && !checking,
+            modifier = Modifier.padding(top = 12.dp),
+            onClick = {
+                checking = true
+                val typed = password.toCharArray()
+                scope.launch {
+                    try {
+                        wrong = !onSubmit(typed)
+                    } finally {
+                        checking = false
+                    }
+                }
+            },
+        )
     }
 }
 

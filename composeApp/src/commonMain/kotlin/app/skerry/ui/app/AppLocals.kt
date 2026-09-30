@@ -2,6 +2,7 @@ package app.skerry.ui.app
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.audio.AudioOutputs
 import app.skerry.shared.host.Host
@@ -246,6 +247,13 @@ val LocalRunbookRunner: ProvidableCompositionLocal<RunbookRunner?> = staticCompo
  * [app.skerry.ui.vault.VaultGate]; a no-op wherever there is no gate (mock path, previews).
  */
 val LocalUserActivity: ProvidableCompositionLocal<() -> Unit> = staticCompositionLocalOf { {} }
+
+/**
+ * Whether a manual vault lock is offered (title bar, shortcut, its Settings row). `false` on a trusted
+ * device (issue #398): the vault opens again by itself the moment it locks, so a lock would only
+ * close every session. Provided by [app.skerry.ui.vault.VaultGate].
+ */
+val LocalManualLockOffered: ProvidableCompositionLocal<Boolean> = compositionLocalOf { true }
 
 /**
  * Log of past runs, per runbook — what the run screen's "previous runs" card and the library's

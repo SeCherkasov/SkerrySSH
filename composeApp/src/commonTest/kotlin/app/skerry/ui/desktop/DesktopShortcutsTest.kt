@@ -381,4 +381,17 @@ class DesktopShortcutsTest {
         )
         return controller to scope
     }
+
+    /**
+     * A trusted device (issue #398) opens the vault again the moment it locks, so the lock is not
+     * offered: the chord must fall through rather than close every session for nothing.
+     */
+    @Test
+    fun `the lock chord falls through when no lock is offered`() = runTest {
+        val state = DesktopDesignState()
+        assertFalse(runOfferedDesktopShortcut(DesktopShortcut.Lock, state, sessions = null, onLock = null))
+        var locked = false
+        assertTrue(runOfferedDesktopShortcut(DesktopShortcut.Lock, state, sessions = null) { locked = true })
+        assertTrue(locked)
+    }
 }

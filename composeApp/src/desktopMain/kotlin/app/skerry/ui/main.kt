@@ -41,6 +41,13 @@ import app.skerry.shared.vault.FileCredentialUsageLog
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.FileVault
+import kotlinx.coroutines.launch
+import app.skerry.ui.vault.keyring.TrustedDeviceUpkeep
+import app.skerry.ui.vault.keyring.desktopDeviceSecretStore
+import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.shared.vault.FileBiometricSupportStore
+import app.skerry.shared.vault.FileBioArtifactStore
+import app.skerry.shared.vault.DeviceKeyringKeyStore
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.WorkspaceLayoutStore
@@ -142,6 +149,7 @@ private fun deviceId(dir: Path): String {
 
 /** Settings → Terminal → typing ssh on a jump host; off unless this device turned it on. */
 private const val JUMP_SHELL_PREF = "experimental_jump_shell"
+private const val TRUSTED_DEVICE_PREF = "experimental_trusted_device"
 
 /** Terminal font size, px: falls back to default outside [TERMINAL_FONT_SIZE_RANGE]. */
 private fun readTerminalFontSize(prefs: FilePrefs): Int =
@@ -152,6 +160,36 @@ private fun readTerminalFontSize(prefs: FilePrefs): Int =
 private fun readTerminalScrollback(prefs: FilePrefs): Int =
     prefs.int("terminal_scrollback", DEFAULT_TERMINAL_SCROLLBACK)
         .takeIf { it in TERMINAL_SCROLLBACK_OPTIONS } ?: DEFAULT_TERMINAL_SCROLLBACK
+
+// Re-sealing the trust after a sync key adoption: blocking keyring I/O, off the sync coroutine.
+private val trustScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+/**
+ * The trusted-device unlock of issue #398: the shared biometrics machinery over the OS keyring, gated by
+ * the experimental flag on every unlock. `null` where the OS has no keyring Skerry can talk to.
+ */
+private fun buildTrustedDevice(dir: Path, prefs: FilePrefs, vault: FileVault, securityLog: FileSecurityLog): TrustedDevice? {
+    val store = desktopDeviceSecretStore(dir) ?: return null
+    val allowed = { prefs.bool(TRUSTED_DEVICE_PREF, false) }
+    val biometrics = VaultBiometrics(
+        vault = vault,
+        keyStore = DeviceKeyringKeyStore(store, IonspinVaultCrypto(), allowed = allowed),
+        artifacts = FileBioArtifactStore(
+            dir.resolve("vault.bio").toString().toPath(),
+            FileSystem.SYSTEM,
+            harden = { PrivateConfig.harden(Path.of(it.toString())) },
+        ),
+        deviceId = deviceId(dir),
+        support = FileBiometricSupportStore(dir.resolve("vault.bio.unsupported").toString().toPath(), FileSystem.SYSTEM, deviceId(dir)),
+    )
+    val upkeep = TrustedDeviceUpkeep(biometrics, allowed, securityLog, trustScope)
+    upkeep.dropIfDisallowed()
+    // The availability probe is a D-Bus round trip on Linux; take it here, not in the first frame.
+    trustScope.launch { store.isAvailable() }
+    return TrustedDevice(biometrics, upkeep)
+}
+
+private class TrustedDevice(val biometrics: VaultBiometrics, val upkeep: TrustedDeviceUpkeep)
 
 /**
  * Live dependency graph for the desktop app, built before `application {}` by a plain function
@@ -193,6 +231,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         FileSystem.SYSTEM,
         harden = { PrivateConfig.harden(Path.of(it.toString())) },
     ) { Instant.now().toString() }
+    val trustedDevice = buildTrustedDevice(dir, prefs, vault, securityLog)
+    val biometrics = trustedDevice?.biometrics
     // TOFU: a host's first key is remembered in the vault (RecordType.KNOWN_HOST, synced across
     // devices); on key change, the connection is refused and an event is recorded to the local
     // (non-synced) known_hosts_mismatches store so the manager can warn and offer accept/reject.
@@ -311,6 +351,14 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             teamsForSync?.onAccountSynced()
         },
         onRecordsRejected = { count -> securityLog.record(SecurityEventType.SyncRecordsRejected, count.toString()) },
+        // A trusted device opens the vault with nobody's password; the pairing code carries the account key.
+        pairingNeedsPassword = { biometrics?.isEnabled() == true },
+        // A trust sealed the replaced key; FileVault refuses it now, and the user would be back to
+        // typing the password. See TrustedDeviceUpkeep.
+        onDataKeyAdopted = {
+            trustedDevice?.upkeep?.resealAfterKeyAdoption()
+            false
+        },
     )
     // Teams (zero-knowledge record sharing between accounts): coordinator layered on the same sync
     // session. Per-team vaults live in config/teams/ (dataKey = teamKey from the account vault's
@@ -459,8 +507,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         credentialUsage.clear()
         // The reset erased the dataKey, so the sealed sync refresh token is wrapped under a dead key.
         // Disconnects from the server, otherwise settings would show "Linked" with no way to log in.
-        // (No biometrics on desktop: deps.biometrics=null.) Clean start: create a new vault and
-        // reconnect sync.
+        // (The trusted device, if any, was dropped by the gate's reset.) Clean start: create a new
+        // vault and reconnect sync.
         sync.disconnect()
         // Hosts/groups are erased along with the vault on any reset, so their local UI traces
         // (recents, collapse state, empty folders) are cleared too: otherwise group names and host
@@ -514,7 +562,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // A share started or ended somewhere in the team: re-read the directory rather than wait for
     // the user to reopen the screen.
     teams.onSharesChanged = { sharedSessions.refresh() }
-    val deps = AppDependencies(transport = transport, jumpHosts = jumpHosts, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
+    val deps = AppDependencies(transport = transport, jumpHosts = jumpHosts, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, biometrics = biometrics, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -682,6 +730,8 @@ fun main(args: Array<String>) {
                             onOfferSudoPasswordChange = { prefs.set("terminal_sudo_password", it) },
                             initialJumpViaShellOffered = prefs.bool(JUMP_SHELL_PREF, false),
                             onJumpViaShellOfferedChange = { prefs.set(JUMP_SHELL_PREF, it) },
+                            initialTrustedDeviceOffered = prefs.bool(TRUSTED_DEVICE_PREF, false),
+                            onTrustedDeviceOfferedChange = { prefs.set(TRUSTED_DEVICE_PREF, it) },
                             initialReportTeamSessions = prefs.bool("teams_report_sessions", true),
                             onReportTeamSessionsChange = { prefs.set("teams_report_sessions", it) },
                             initialOpenFilePathsInSftp = prefs.bool("terminal_open_paths", true),

@@ -1,5 +1,14 @@
 package app.skerry.ui.vault
 
+import app.skerry.shared.vault.BioArtifact
+import app.skerry.shared.vault.BioArtifactStore
+import app.skerry.shared.vault.BiometricAvailability
+import app.skerry.shared.vault.BiometricKeyHardening
+import app.skerry.shared.vault.BiometricKeyStore
+import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.shared.vault.BiometricResult
+import app.skerry.shared.vault.UnlockFactor
+import app.skerry.shared.vault.VaultBiometrics
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -124,5 +133,43 @@ class SecretCopyAuthorizerTest {
         auth.submitPassword("master")
         advanceUntilIdle()
         assertFalse(copied)
+    }
+
+    @Test
+    fun `a trusted device still asks for the password before a secret leaves the vault`() = runTest {
+        // The keyring releases its key to anyone at this OS account without a prompt (issue #398):
+        // its unwrap proves the machine, not the person, so it must not stand in for the password.
+        val keyring = object : BiometricKeyStore {
+            var unwraps = 0
+            override val factor = UnlockFactor.DeviceKeyring
+            override fun availability() = BiometricAvailability.Available
+            override suspend fun ensureKey(alias: String, hardening: BiometricKeyHardening) = true
+            override suspend fun wrap(alias: String, plaintext: ByteArray, prompt: BiometricPrompt) =
+                BiometricResult.Success(plaintext)
+            override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> {
+                unwraps++
+                return BiometricResult.Success(wrapped.copyOf())
+            }
+            override fun deleteKey(alias: String) = Unit
+        }
+        val artifact = object : BioArtifactStore {
+            override fun exists() = true
+            override fun read() = BioArtifact(1, "skerry.vault.bio.d", "d", ByteArray(32))
+            override fun write(artifact: BioArtifact) = Unit
+            override fun clear() = Unit
+        }
+        val vault = FakeUnlockedVault("master")
+        var exported = false
+        val auth = SecretCopyAuthorizer(
+            vault, VaultBiometrics(vault, keyring, artifact, deviceId = "d"), scope = this,
+            kdfDispatcher = StandardTestDispatcher(testScheduler),
+        )
+
+        auth.authorize(SecretAccess.EXPORT) { exported = true }
+        advanceUntilIdle()
+
+        assertTrue(auth.passwordPromptVisible)
+        assertFalse(exported)
+        assertEquals(0, keyring.unwraps, "the keyring is not consulted at all")
     }
 }

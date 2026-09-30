@@ -140,8 +140,8 @@ private fun LiveVaultView(credentials: CredentialManagerController, collapse: Fo
     val inspector = LocalSshCertificateInspector.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
-    // Re-authentication before copying a password or exporting a key (no biometrics on desktop —
-    // master password instead).
+    // Re-authentication before copying a password or exporting a key: a fingerprint where there is
+    // one, the master password otherwise — a desktop's trusted-device keyring never counts here.
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }

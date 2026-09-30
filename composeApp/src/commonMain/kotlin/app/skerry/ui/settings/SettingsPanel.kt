@@ -90,6 +90,7 @@ fun SettingsPanel(state: DesktopDesignState) {
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
     var changeAccountPwOpen by remember { mutableStateOf(false) }
+    var trustDeviceOpen by remember { mutableStateOf(false) }
     ModalScrim(onDismiss = state::closeSettings, scrimColor = Skerry.colors.modalScrim) {
         Box(
             Modifier
@@ -144,8 +145,9 @@ fun SettingsPanel(state: DesktopDesignState) {
                             onChangeMasterPassword = { changePwOpen = true },
                             onChangeAccountPassword = { changeAccountPwOpen = true },
                             onBiometricToggled = { securityReload++ },
+                            onTrustDevice = { trustDeviceOpen = true },
                         )
-                        SettingsTab.Experimental -> ExperimentalSection(state)
+                        SettingsTab.Experimental -> ExperimentalSection(state, securityController)
                         SettingsTab.Trash -> TrashSection()
                         SettingsTab.Keyboard -> KeyboardSection()
                         SettingsTab.About -> AboutSection()
@@ -189,6 +191,14 @@ fun SettingsPanel(state: DesktopDesignState) {
                 controller = securityController,
                 onClose = { changePwOpen = false },
                 onChanged = { securityReload++ },
+            )
+        }
+        // Master password before a trusted device (issue #398): same overlay level, outside the scroll.
+        if (trustDeviceOpen && securityController != null) {
+            TrustDeviceDialog(
+                controller = securityController,
+                onClose = { trustDeviceOpen = false },
+                onEnabled = { securityReload++ },
             )
         }
         // Change account (sync) password dialog — shown when sync is configured (issue #32).

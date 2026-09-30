@@ -22,6 +22,7 @@ import java.net.ServerSocket
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The whole workspace (hosts + their order, snippets, tunnels) lives as vault records and is
@@ -67,7 +68,7 @@ class WorkspaceSyncE2eTest {
                 ?: error("device B failed to unwrap dataKey")
             val vaultB = newVault(dirB, "devB")
             vaultB.create(masterPassword.toCharArray())
-            vaultB.unlockWithDataKey(dataKeyB) // same dataKey as A (as SyncCoordinator does)
+            assertTrue(vaultB.adoptDataKey(dataKeyB, masterPassword.toCharArray())) // same dataKey as A, as SyncCoordinator adopts it
             SyncEngine(client, vaultB).sync(sessionB)
 
             // Device B sees the same workspace as A — decrypted and in tree order.
