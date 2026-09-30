@@ -89,9 +89,10 @@ class RdpTlsKeyUsageTest {
     private fun connect(
         verifier: RdpCertificateVerifier = RecordingVerifier(),
         onStage: (RdpConnectStage) -> Unit = {},
+        platformSuites: (SSLSocket) -> Array<String> = { RSA_SUITES + it.supportedCipherSuites },
         handshake: (SSLSocket) -> Unit,
     ) = runBlocking {
-        RdpTcpConnector(certificateVerifier = verifier, handshake = handshake)
+        RdpTcpConnector(certificateVerifier = verifier, handshake = handshake, platformSuites = platformSuites)
             .connect(host = server.inetAddress.hostAddress, port = server.localPort, onStage = onStage)
     }
 
@@ -213,6 +214,24 @@ class RdpTlsKeyUsageTest {
     }
 
     @Test
+    fun `a platform without the rsa key exchange fails the retry and keeps the refusal`() {
+        serveNegotiations(connections = 2)
+        var handshakes = 0
+
+        val failure = assertFailsWith<RdpTlsException> {
+            connect(platformSuites = { socket -> socket.supportedCipherSuites.filterNot { it.startsWith("TLS_RSA_") }.toTypedArray() }) {
+                handshakes++
+                throw keyUsageRefusal()
+            }
+        }
+
+        assertEquals(1, handshakes, "nothing to offer, so no second handshake")
+        assertEquals(2, accepted.get())
+        assertTrue(failure.causeChain().any { it.message.orEmpty().contains("no TLS 1.2 RSA key exchange") }, "was $failure")
+        assertTrue(failure.refusalKept())
+    }
+
+    @Test
     fun `any other tls failure is not dialled again`() {
         serveNegotiations(connections = 2)
         var attempts = 0
@@ -265,4 +284,14 @@ class RdpTlsKeyUsageTest {
             "error:1000012e:SSL routines:OPENSSL_internal:KEY_USAGE_BIT_INCORRECT " +
             "(external/boringssl/src/ssl/ssl_cert.cc:396 0x6eff2dcbc6:0x00000000)",
     )
+
+    private companion object {
+        /** What Conscrypt lists, and what JDKs from 21.0.11 on no longer do. */
+        val RSA_SUITES = arrayOf(
+            "TLS_RSA_WITH_AES_128_GCM_SHA256",
+            "TLS_RSA_WITH_AES_256_GCM_SHA384",
+            "TLS_RSA_WITH_AES_128_CBC_SHA",
+            "TLS_RSA_WITH_AES_256_CBC_SHA",
+        )
+    }
 }
