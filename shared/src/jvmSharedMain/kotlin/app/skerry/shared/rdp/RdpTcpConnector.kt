@@ -106,6 +106,9 @@ class RdpTcpConnector(
     // Injectable for tests: the refusal it exists to recover from comes from BoringSSL, which the
     // desktop JVM the tests run on does not have.
     private val handshake: (SSLSocket) -> Unit = { it.startHandshake() },
+    // Injectable for tests as well: newer JDKs drop the RSA key-exchange suites from this list
+    // altogether, while the BoringSSL the retry is for still has them.
+    private val platformSuites: (SSLSocket) -> Array<String> = { it.supportedCipherSuites },
 ) {
     /**
      * Negotiate [requestedProtocols] with the server at [host]:[port] and upgrade the socket to the
@@ -277,7 +280,7 @@ class RdpTcpConnector(
      */
     private fun offerRsaKeyExchangeOnly(secure: SSLSocket) {
         // TLS 1.3 has no RSA key exchange; GCM where the platform has it, CBC only where it does not.
-        val rsa = secure.supportedCipherSuites.filter { it.startsWith(RSA_KEY_EXCHANGE_AES) }
+        val rsa = platformSuites(secure).filter { it.startsWith(RSA_KEY_EXCHANGE_AES) }
         val suites = rsa.filter { GCM in it }.ifEmpty { rsa }
         val protocols = secure.enabledProtocols.filter { it == TLS_12 }
         if (suites.isEmpty() || protocols.isEmpty()) {
