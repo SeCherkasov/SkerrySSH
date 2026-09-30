@@ -216,7 +216,7 @@ states its exact blast radius before it runs.
 Team membership and keys are **not** manageable from the browser: an invite or a key rotation seals
 an envelope under the team key, and no browser session has one. The team panes are read-only.
 
-Interface languages: English, Russian, Chinese (`?lang=` in the URL, then the stored preference,
+Interface languages: English, Russian, Chinese, Turkish (`?lang=` in the URL, then the stored preference,
 then the browser). Zero-knowledge holds throughout — lists show ids, types, sizes and timestamps,
 and the ciphertext preview is shown as what it is.
 

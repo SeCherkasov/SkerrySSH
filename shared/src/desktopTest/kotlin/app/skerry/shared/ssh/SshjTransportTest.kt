@@ -167,6 +167,52 @@ class SshjTransportTest {
         connection.disconnect()
     }
 
+    /**
+     * Choosing Turkish in Appearance sets the JVM default locale, and under `tr` Java's
+     * `toUpperCase()`/`toLowerCase()` map `i` to `İ` and `I` to `ı`. Algorithm names, key-type
+     * tags and fingerprints on the whole SSH path go through code we do not own, so the same
+     * connection is made under `Locale.ROOT` and under Turkish and must come out identical. The
+     * client key is EC: `ecdsa-sha2-nistp256` is a name with an `i` in it, `ssh-rsa` is not.
+     */
+    @Test
+    fun `key auth, host-key offer and exec are unchanged with the default locale set to Turkish`() = runTest {
+        val ecKey = KeyPairGenerator.getInstance("EC")
+            .apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+        server.publickeyAuthenticator = PublickeyAuthenticator { user, key, _ ->
+            user == USER && key.encoded.contentEquals(ecKey.public.encoded)
+        }
+
+        suspend fun handshakeUnder(locale: java.util.Locale): Pair<String?, String?> {
+            val saved = java.util.Locale.getDefault()
+            java.util.Locale.setDefault(locale)
+            try {
+                var seenKeyType: String? = null
+                var seenFingerprint: String? = null
+                val recording = HostKeyVerifier { offer ->
+                    seenKeyType = offer.keyType
+                    seenFingerprint = offer.fingerprint
+                    null
+                }
+                val connection = SshjTransport(recording).connect(target(), SshAuth.PublicKey(pkcs8Pem(ecKey)))
+                try {
+                    val result = connection.exec("echo hello")
+                    assertEquals(0, result.exitCode)
+                    assertEquals("hello\n", result.stdout)
+                } finally {
+                    connection.disconnect()
+                }
+                return seenKeyType to seenFingerprint
+            } finally {
+                java.util.Locale.setDefault(saved)
+            }
+        }
+
+        val root = handshakeUnder(java.util.Locale.ROOT)
+        val turkish = handshakeUnder(java.util.Locale.forLanguageTag("tr-TR"))
+        assertTrue(!root.first.isNullOrBlank() && root.second.orEmpty().startsWith("SHA256:"), "baseline: $root")
+        assertEquals(root, turkish, "the host key reads differently under the Turkish locale")
+    }
+
     @Test
     fun `rejects an unauthorized private key`() = runTest {
         assertFailsWith<SshAuthenticationException> {

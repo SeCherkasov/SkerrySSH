@@ -1,0 +1,32 @@
+<resources>
+    <string name="share_session">Oturumu paylaş</string>
+    <string name="share_session_stop">Paylaşımı durdur</string>
+    <string name="share_title">Bu oturumu paylaş</string>
+    <string name="share_pick_team">Paylaşılacak ekip</string>
+    <string name="share_no_teams">Oturum paylaşmak için bir ekibe katılın veya ekip oluşturun.</string>
+    <string name="share_starting">Aktarıcıya bağlanılıyor…</string>
+    <string name="share_live">%1$s ile paylaşılıyor</string>
+    <string name="share_viewers">%1$d izleyici</string>
+    <string name="share_allow_input">İzleyiciler yazabilsin</string>
+    <string name="share_input_locked">Üretim oturumu: izleyiciler yalnızca izleyebilir</string>
+    <string name="share_note">Ekip üyeleri katılıp bu terminali izleyebilir. Aktarıcı yalnızca şifreli çerçeveler taşır.</string>
+    <string name="share_live_sessions">Canlı oturumlar</string>
+    <string name="share_none_live">Şu anda kimse oturum paylaşmıyor.</string>
+    <string name="share_join">Katıl</string>
+    <string name="share_started_by">%1$s · %2$d izleyici</string>
+    <string name="share_unnamed">Paylaşılan oturum</string>
+    <string name="share_watching">İzleniyor: %1$s</string>
+    <string name="share_fail_not_connected">Eşitleme hesabı bağlı değil.</string>
+    <string name="share_fail_no_key">Ekip anahtarı bu cihaza henüz ulaşmadı.</string>
+    <string name="share_fail_network">Aktarıcıya ulaşılamıyor.</string>
+    <string name="share_fail_rejected">Sunucu paylaşımı reddetti.</string>
+    <string name="share_fail_server">Sunucu oturumu aktaramadı.</string>
+    <string name="share_control_wants">Yazmak istiyor: %1$s</string>
+    <string name="share_control_wants_unnamed">Bir izleyici yazmak istiyor</string>
+    <string name="share_grant">İzin ver</string>
+    <string name="share_deny">Reddet</string>
+    <string name="share_read_only">Yalnızca görüntüleme</string>
+    <string name="share_control_request">Denetim iste</string>
+    <string name="share_control_asked">İstendi…</string>
+    <string name="share_control_granted">Yazabilirsiniz</string>
+</resources>

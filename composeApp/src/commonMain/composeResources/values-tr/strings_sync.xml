@@ -1,0 +1,141 @@
+<resources>
+    <string name="sync_title">Eşitleme</string>
+    <string name="sync_mobile_intro">Cihazlarınız arasında uçtan uca şifreli eşitleme. Skerry verilerinizi hiçbir zaman düz metin olarak görmez.</string>
+    <string name="sync_unavailable_title">Eşitleme kullanılamıyor</string>
+    <string name="sync_unavailable_subtitle">Bu cihazda yapılandırılmamış.</string>
+    <string name="sync_back">Geri</string>
+
+    <string name="sync_setup_title">Eşitlemeyi kur</string>
+    <string name="sync_setup_desc">Bu cihazı eşitleme sunucunuza bağlayın. Uçtan uca şifreli — Skerry verilerinizi hiçbir zaman düz metin olarak görmez.</string>
+    <string name="sync_connecting">Bağlanılıyor…</string>
+    <string name="sync_connecting_sub">Eşitleme sunucunuzla iletişim kuruluyor.</string>
+    <string name="sync_syncing">Eşitleniyor…</string>
+
+    <string name="sync_storage_choice_title">Skerry kasanızı nerede tutsun?</string>
+    <string name="sync_storage_choice_desc">Sunucularınız ve anahtarlarınız her zaman şifrelidir. Onları yalnızca bu cihazda tutun veya kendi çalıştırdığınız bir eşitleme sunucusu üzerinden cihazlar arasında eşitleyin.</string>
+    <string name="sync_storage_local_title">Yerel şifreli depolama</string>
+    <string name="sync_storage_local_sub">Her şey bu cihazda kalır. Hesap yok, sunucu yok.</string>
+    <string name="sync_storage_server_title">Kendi barındırdığınız eşitleme sunucusu</string>
+    <string name="sync_storage_server_sub">Kendi çalıştırdığınız bir sunucu üzerinden cihazlarınız arasında uçtan uca şifreli eşitleme.</string>
+    <string name="sync_switch_later">Bunu daha sonra Ayarlar'dan değiştirebilirsiniz.</string>
+
+    <string name="sync_reenroll_title">Parmak izini yeniden etkinleştir</string>
+    <string name="sync_reenroll_desc">Hesabınıza bağlanmak kasa anahtarını değiştirdi, bu yüzden biyometrik kilit açma kapatıldı. Parmak izinizle kilidi açmak için yeniden kurun.</string>
+    <string name="sync_reenroll_action">Yeniden etkinleştir</string>
+    <string name="sync_not_now">Şimdi değil</string>
+
+    <string name="sync_connected_title">Bağlı · %1$s</string>
+    <string name="sync_session_stats">Bu oturumda gönderilen %1$d · alınan %2$d</string>
+    <string name="sync_sync_now">Şimdi eşitle</string>
+    <string name="sync_disconnect">Bağlantıyı kes</string>
+    <string name="sync_linked_title">Bağlantılı · %1$s</string>
+    <string name="sync_reconnect_password">Ana şifrenizle yeniden bağlanın.</string>
+
+    <string name="sync_field_server_url">Sunucu URL'si</string>
+    <string name="sync_placeholder_server_url">https://sync.example.com</string>
+    <string name="sync_field_account">Hesap</string>
+    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_field_master_password">Ana şifre</string>
+    <string name="sync_placeholder_master_password">ana şifre</string>
+    <string name="sync_keep_connected">Bağlı kal</string>
+    <string name="sync_keep_connected_sub">Yeniden başlatmadan sonra otomatik olarak yeniden bağlan.</string>
+    <string name="sync_keep_connected_sub_long">Yeniden başlatmadan sonra otomatik olarak yeniden bağlan — şifre gerekmez.</string>
+    <string name="sync_insecure_url_warning">Düz http:// — aktarım sırasında şifrelenmez. Yerel test dışında her şey için https:// kullanın.</string>
+    <string name="sync_connect">Bağlan</string>
+    <string name="sync_zero_knowledge">Sıfır bilgi</string>
+    <string name="sync_zero_knowledge_password">Sıfır bilgi · şifre bu cihazdan hiç çıkmaz</string>
+
+    <string name="sync_join_title">Kodla bağla</string>
+    <string name="sync_join_desc">Zaten oturum açılmış bir cihazda Ayarlar → Eşitleme → “Cihaz bağla”yı açın, ardından QR kodunu tarayın veya kodu buraya yapıştırın. Aşağıdaki şifre bu cihazın kasasını şifreler ve kurtarılamaz — kaybederseniz cihazı baştan bağlamanız gerekir.</string>
+    <string name="sync_field_pairing_code">Eşleştirme kodu</string>
+    <string name="sync_placeholder_pairing_code">Kodu yapıştırın (sk1.…)</string>
+    <string name="sync_scan_qr">QR kodunu tara</string>
+    <string name="sync_field_choose_password">Bu cihaz için bir şifre belirleyin</string>
+    <string name="sync_placeholder_min_chars">en az %1$d karakter</string>
+    <string name="sync_field_repeat_password">Şifreyi yineleyin</string>
+    <string name="sync_placeholder_repeat">onaylamak için yineleyin</string>
+    <string name="sync_passwords_mismatch">Şifreler eşleşmiyor.</string>
+    <string name="sync_link_this_device">Bu cihazı bağla</string>
+    <string name="sync_zero_knowledge_account">Sıfır bilgi · hesap şifresi hiçbir yere gönderilmez</string>
+
+    <string name="sync_what_syncs">NELER EŞİTLENİR</string>
+    <string name="sync_what_hosts">Sunucular ve gruplar</string>
+    <string name="sync_what_snippets">Kod parçacıkları</string>
+
+    <string name="sync_link_device">Cihaz bağla</string>
+    <string name="sync_hide">Gizle</string>
+
+    <string name="sync_linked_devices">BAĞLI CİHAZLAR</string>
+    <string name="sync_loading_devices">Cihazlar yükleniyor…</string>
+    <string name="sync_load_devices_failed">Cihazlar yüklenemedi. “Şimdi eşitle”yi deneyin.</string>
+    <string name="sync_only_this_device">Şimdilik yalnızca bu cihaz.</string>
+    <string name="sync_this_device_badge">● bu cihaz</string>
+    <string name="sync_confirm">Onayla</string>
+    <string name="sync_cancel">İptal</string>
+    <string name="sync_revoke">Erişimi kaldır</string>
+    <string name="sync_device_unnamed">Adsız cihaz</string>
+
+    <string name="sync_setup_dialog_desc">Uçtan uca şifreli. Skerry verilerinizi hiçbir zaman düz metin olarak görmez — ana şifre cihazınızda kalır.</string>
+    <string name="sync_pairing_dialog_desc">Yeni cihazda “Eşleştirme kodum var” seçeneğini seçin, ardından bu QR kodunu tarayın veya aşağıdaki kodu yapıştırın. Kod bir kez çalışır.</string>
+    <string name="sync_done">Bitti</string>
+    <string name="sync_pairing_gen_failed">Eşleştirme kodu oluşturulamadı.</string>
+    <string name="sync_generating_code">Kod oluşturuluyor…</string>
+    <string name="sync_code_expired">Kodun süresi doldu — kapatıp yeniden başlayın</string>
+    <string name="sync_expires_in">Kalan süre: %1$s</string>
+    <string name="sync_copied">Kopyalandı</string>
+    <string name="sync_copy">Kopyala</string>
+
+    <string name="sync_fail_vault_locked">Kasa kilitli</string>
+    <string name="sync_fail_unauthorized">Şifre veya hesap yanlış. Yeni bir hesap için bu kasanın şifresini kullanın.</string>
+    <string name="sync_fail_account_not_found">Hesap bulunamadı</string>
+    <string name="sync_fail_account_exists">Hesap zaten var</string>
+    <string name="sync_fail_pairing_expired">Eşleştirme kodunun süresi doldu</string>
+    <string name="sync_fail_network">Sunucuya ulaşılamıyor</string>
+    <string name="sync_fail_protocol">Eşitleme protokolü hatası</string>
+    <string name="sync_fail_connect">Bağlanılamadı</string>
+    <string name="sync_fail_code_malformed">Bu bir eşleştirme koduna benzemiyor</string>
+    <string name="sync_fail_code_invalid">Eşleştirme kodu geçersiz</string>
+    <string name="sync_fail_wrong_device_password">Bu cihazın şifresi yanlış</string>
+    <string name="sync_fail_local_vault_corrupted">Yerel kasa bozuk</string>
+    <string name="sync_fail_pairing">Cihaz bağlanamadı. Kodu denetleyip yeniden deneyin.</string>
+    <string name="sync_fail_save_settings">Eşitleme ayarları kaydedilemedi</string>
+    <string name="sync_fail_sync">Eşitleme başarısız</string>
+    <string name="sync_fail_revoke">Cihazın erişimi kaldırılamadı</string>
+    <string name="sync_fail_too_many_requests">Sunucu istekleri kısıtlıyor — biraz bekleyip yeniden deneyin</string>
+    <string name="sync_fail_server_error">Sunucu düzgün yanıt vermiyor — daha sonra yeniden deneyin</string>
+    <string name="sync_fail_rejected">Sunucu bu isteği reddetti — yöneticisine başvurun</string>
+    <string name="sync_fail_registration_refused_signin">Sunucu kaydı ve oturum açmayı reddetti — şifreyi denetleyin</string>
+    <string name="sync_fail_reconcile_required">Bu cihazın verilerini sunucudan yeniden oluşturması gerekiyor — eşitlemek için yeniden bağlanın</string>
+
+    <string name="sync_password_replace_title">Hesap şifreniz kullanılsın mı?</string>
+    <string name="sync_password_replace_body">“%1$s” hesabı farklı bir şifre kullanıyor. Eşitleme için bu cihaz, kilidi hesap şifrenizle açmaya geçecek.</string>
+    <string name="sync_password_replace_confirm">Hesap şifresini kullan</string>
+    <string name="sync_password_replace_cancel">İptal</string>
+
+    <string name="sync_account_id_label">Hesap kimliği</string>
+    <string name="sync_sharing_fingerprint_label">Paylaşım anahtarı parmak izi</string>
+    <string name="sync_identity_hint">Bir ekip sahibinin sizi ekibe davet etmesi için bu tanımlayıcılar gerekir.</string>
+
+    <string name="web_access_label">WEB ERİŞİMİ</string>
+    <string name="web_access_title">Tarayıcıda hesap sayfası</string>
+    <string name="web_access_desc">Web şifresi ana şifreden ayrı belirlenir. Tarayıcı cihazları, etkinliği ve kayıt boyutlarını gösterir — kayıtların kendisini değil.</string>
+    <string name="web_access_state_on">Etkin</string>
+    <string name="web_access_state_off">Belirlenmedi</string>
+    <string name="web_access_state_unknown">Durum okunamıyor</string>
+    <string name="web_access_checking">Denetleniyor…</string>
+    <string name="web_access_announce">Web erişimi: %1$s</string>
+    <string name="web_access_set">Şifre belirle</string>
+    <string name="web_access_change">Değiştir</string>
+    <string name="web_access_open">Aç</string>
+    <string name="web_access_remove">Devre dışı bırak</string>
+    <string name="web_access_field_new">Web şifresi</string>
+    <string name="web_access_field_repeat">Şifreyi yineleyin</string>
+    <string name="web_access_save">Kaydet</string>
+    <string name="web_access_cancel">İptal</string>
+    <string name="web_access_too_short">En az %1$d karakter.</string>
+    <string name="web_access_too_long">En fazla %1$d karakter.</string>
+    <string name="web_access_mismatch">Şifreler eşleşmiyor.</string>
+    <string name="web_access_not_connected">Önce eşitleme sunucusuna bağlanın.</string>
+    <string name="web_access_remove_title">Web erişimi devre dışı bırakılsın mı?</string>
+    <string name="web_access_remove_body">Şu anda oturum açmış bir tarayıcının oturumu kapatılır. Yeniden şifre belirlemek sayfayı tekrar açar.</string>
+</resources>

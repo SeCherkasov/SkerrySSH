@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.SHORT_ID_CHARS
 import app.skerry.ui.design.boundedVisibleText
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.rowSubtitle
 import app.skerry.ui.host.rowLabel
@@ -733,7 +734,7 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
             Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
             // Same "NAME · N" form as a personal folder header (see MobileFolderHeader).
             Txt(
-                "${name.uppercase()} · ${shared.size}",
+                "${labelUppercase(name)} · ${shared.size}",
                 color = Skerry.colors.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )

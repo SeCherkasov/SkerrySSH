@@ -174,7 +174,7 @@ internal fun AppearanceSection(state: DesktopDesignState) {
     }
 }
 
-/** UI language dropdown (System / English / Russian). */
+/** UI language dropdown: System, then every [UiLanguage] by its autonym. */
 @Composable
 private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     DropdownField(current, UiLanguage.entries, label = { it.label() }, onPick = onPick)

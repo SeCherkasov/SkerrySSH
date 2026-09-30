@@ -1,0 +1,23 @@
+<resources>
+    <string name="risk_fork_bomb">Fork bombası — sistem kaynaklarını tüketir.</string>
+    <string name="risk_recursive_force_delete">Özyinelemeli zorla silme — geri alınamaz veri kaybı.</string>
+    <string name="risk_recursive_broad_delete">Geniş bir yolun özyinelemeli silinmesi — geri alınamaz veri kaybı.</string>
+    <string name="risk_disk_device_write">Doğrudan bir disk aygıtına yazar — dosya sistemini yok edebilir.</string>
+    <string name="risk_download_to_shell">İndirilen betiği doğrudan kabuğa aktarır — doğrulanmamış uzak kod çalıştırır.</string>
+    <string name="risk_pipe_to_interpreter">Çıktıyı bir yorumlayıcıya aktarır — oluşturulmuş veya uzak kod çalıştırır.</string>
+    <string name="risk_mirror_delete">Yansıtarak silme — hedefte olup kaynakta olmayan dosyaları siler.</string>
+    <string name="risk_power_off">Makineyi kapatır veya yeniden başlatır.</string>
+    <string name="risk_recursive_permissions">Bir sistem yolunda özyinelemeli izin/sahiplik değişikliği.</string>
+    <string name="risk_security_file_overwrite">Güvenlik açısından kritik bir dosyanın üzerine yazar.</string>
+    <string name="risk_firewall_flush">Güvenlik duvarı kurallarını temizler — uzak erişimi kesebilir.</string>
+    <string name="risk_deletes_files">Dosyaları siler.</string>
+    <string name="risk_kills_processes">Çalışan işlemleri sonlandırır.</string>
+    <string name="risk_uninstalls_packages">Paketleri kaldırır.</string>
+    <string name="risk_git_destructive">Yerel değişiklikleri atar veya geçmişi yeniden yazar.</string>
+    <string name="risk_world_writable">Herkese yazma izni verir.</string>
+    <string name="risk_stops_service">Bir hizmeti durdurur veya devre dışı bırakır.</string>
+    <string name="risk_bulk_delete">Eşleşen dosyaları toplu olarak siler.</string>
+    <string name="risk_truncates_content">Dosya içeriğini atar.</string>
+    <string name="risk_elevated">Yükseltilmiş ayrıcalıklarla çalışır.</string>
+    <string name="risk_beyond_inspection">Korumanın okuyabileceğini aşıyor — bu girdinin bir kısmı sınıflandırılmadı.</string>
+</resources>

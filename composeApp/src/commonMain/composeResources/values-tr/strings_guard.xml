@@ -1,0 +1,17 @@
+<resources>
+    <string name="guard_prod_connect_title">Üretime bağlanılsın mı?</string>
+    <string name="guard_prod_connect_message">%1$s #prod etiketli. Bu oturumda riskli komutlar çalışmadan önce onay ister.</string>
+    <string name="guard_prod_connect_confirm">Bağlan</string>
+    <string name="guard_prod_command_title">Bu komut üretimde çalıştırılsın mı?</string>
+    <string name="guard_prod_command_host">%1$s #prod etiketli.</string>
+    <string name="guard_prod_nothing_to_show">gösterilecek komut yok</string>
+    <string name="guard_prod_on_line">zaten satırda</string>
+    <string name="guard_prod_further_in">bu girdinin devamında</string>
+    <string name="guard_prod_sending">gönderiliyor</string>
+    <string name="guard_prod_command_confirm">Çalıştır</string>
+    <string name="guard_prod_broadcast_title">Üretime yayınlansın mı?</string>
+    <string name="guard_prod_broadcast_message">Seçili oturumlardan %1$d tanesi üretim sunucularında çalışıyor. Komut tüm oturumlara aynı anda gider.</string>
+    <string name="guard_prod_broadcast_confirm">Gönder</string>
+    <string name="guard_prod_snippet_title">Kod parçacığı üretimde çalıştırılsın mı?</string>
+    <string name="guard_prod_snippet_message">%1$s #prod etiketli. Kod parçacığı oturum açılır açılmaz çalışır.</string>
+</resources>

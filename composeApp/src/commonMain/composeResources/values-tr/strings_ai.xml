@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_title">Asistan</string>
+    <string name="assistant_clear">Konuşmayı temizle</string>
+    <string name="assistant_thinking">Düşünüyor…</string>
+    <string name="assistant_empty">Bu oturum hakkında soru sorun: çıktı, hatalar, sonraki adım.</string>
+    <string name="assistant_explain_request">Yukarıdaki çıktıyı açıkla.</string>
+    <string name="assistant_ask_placeholder">Bu oturum hakkında soru sorun…</string>
+    <string name="assistant_context_chip">bağlam: %1$d</string>
+    <string name="assistant_context_title">GÖNDERİLECEK SON ÇIKTILAR</string>
+    <string name="assistant_context_off">Kapalı</string>
+    <string name="assistant_policy_note">Yıkıcı komutlar siz tıklamadan asla çalıştırılmaz. Gönderilen bağlam: yalnızca komut çıktısı — anahtar yok, kasa yok.</string>
+    <string name="assistant_run">Oturumda çalıştır</string>
+    <string name="assistant_run_anyway">Yine de çalıştır</string>
+    <string name="assistant_confirm_run">Çalıştırmayı onayla</string>
+    <string name="assistant_no_answer">Model yanıt döndürmedi. Yeniden sorun veya daha fazla bağlam ekleyin.</string>
+    <string name="assistant_attached">gönderilen çıktı: %1$d</string>
+    <string name="assistant_copy">Kopyala</string>
+    <string name="assistant_copy_failed">Sistem panosu reddetti</string>
+    <string name="assistant_edit">Düzenle</string>
+    <string name="shell_tip_assistant">Asistan</string>
+    <string name="assistant_explain_action">Çıktıyı açıkla</string>
+</resources>

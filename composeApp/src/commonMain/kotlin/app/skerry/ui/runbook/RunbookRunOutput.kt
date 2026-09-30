@@ -80,7 +80,7 @@ internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily, shownS
             untrustedLabel(step?.step?.title?.takeIf { it.isNotBlank() } ?: run.label)
         }
         Txt(
-            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + title.uppercase(),
+            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + labelUppercase(title),
             color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         )
         Box(

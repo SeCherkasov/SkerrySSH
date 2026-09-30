@@ -47,6 +47,7 @@ import app.skerry.ui.design.ModalTextField
 import app.skerry.shared.serial.SerialPortInfo
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.connectionTestFailureText
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_tag_add_placeholder
@@ -75,7 +76,7 @@ internal fun Spacer14() = Box(Modifier.size(14.dp))
 @Composable
 internal fun Field(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier) {
-        Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
+        Txt(labelUppercase(label), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
         // The caption is a sibling of the input, so nothing connects the two on its own — see
         // [LocalFieldLabel]. The input inside adopts it as its accessible name.
         CompositionLocalProvider(LocalFieldLabel provides label) { content() }

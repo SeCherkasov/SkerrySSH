@@ -294,7 +294,7 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.lib_known_key_changed_for, mismatch.host), color = Skerry.colors.sunset, size = 13.sp, weight = FontWeight.SemiBold)
             Txt(
-                stringResource(Res.string.lib_known_mismatch_body, displayKeyType(mismatch.keyType).uppercase()),
+                stringResource(Res.string.lib_known_mismatch_body, displayKeyType(mismatch.keyType).uppercase()), // harness-allow: label-case
                 color = Skerry.colors.dim, size = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp),
             )
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

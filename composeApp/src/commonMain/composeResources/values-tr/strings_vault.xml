@@ -1,0 +1,179 @@
+<resources>
+    <string name="vault_title">Kasa</string>
+    <string name="vault_sidebar_header">KASA</string>
+    <string name="vault_e2e_encrypted">Uçtan uca şifreli</string>
+    <string name="vault_e2e_description">Özel anahtarlar ana şifrenizle şifrelenir ve asla düz metin olarak eşitlenmez.</string>
+    <string name="vault_generate_key">Anahtar oluştur</string>
+    <string name="vault_add_password">Şifre ekle</string>
+    <string name="vault_import_certificate">Sertifika içe aktar</string>
+
+    <string name="vault_empty_ssh_title">Henüz SSH anahtarı yok</string>
+    <string name="vault_empty_ssh_hint">Sunuculara eklemek için bir anahtar oluşturun.</string>
+    <string name="vault_empty_passwords_title">Henüz şifre yok</string>
+    <string name="vault_empty_passwords_hint">Bir şifre ekleyin — şifreli saklanır ve sunucular arasında yeniden kullanılabilir.</string>
+    <string name="vault_empty_certificates_title">Henüz sertifika yok</string>
+    <string name="vault_empty_certificates_hint">CA imzalı bir sertifikayı ve özel anahtarını içe aktarın.</string>
+    <string name="vault_empty_certificates_hint_short">CA imzalı bir sertifikayı ve özel anahtarını içe aktarın.</string>
+
+    <string name="vault_subtitle_certificate">Sertifika</string>
+    <string name="vault_subtitle_certificate_typed">%1$s sertifikası</string>
+    <string name="vault_subtitle_private_key">Özel anahtar</string>
+    <string name="vault_subtitle_password">Şifre</string>
+    <string name="vault_label_public_key">Açık anahtar</string>
+    <string name="vault_key_unreadable">Anahtar okunamadı</string>
+    <string name="vault_copy_certificate">Sertifikayı kopyala</string>
+    <string name="vault_copy_public_key">Açık anahtarı kopyala</string>
+    <string name="vault_copy_password">Şifreyi kopyala</string>
+    <string name="vault_export">Dışa aktar</string>
+    <string name="vault_export_key">Anahtarı dışa aktar</string>
+    <string name="vault_export_certificate">Sertifikayı dışa aktar</string>
+    <string name="vault_export_failed_title">Dışa aktarma başarısız</string>
+    <string name="vault_export_failed_message">Dosya yazılmadı.</string>
+    <string name="vault_export_dismiss">Kapat</string>
+    <string name="vault_delete">Sil</string>
+    <string name="vault_edit">Düzenle</string>
+    <string name="vault_cancel">İptal</string>
+    <string name="vault_used_by_one">Kullanan · 1 sunucu</string>
+    <string name="vault_used_by">Kullanan · %1$d sunucu</string>
+    <string name="vault_used_by_snippets_one">Kullanan · 1 kod parçacığı</string>
+    <string name="vault_used_by_snippets">Kullanan · %1$d kod parçacığı</string>
+    <string name="vault_not_attached">Henüz hiçbir sunucuya bağlı değil.</string>
+    <string name="vault_cert_key_id">Anahtar kimliği: %1$s</string>
+    <string name="vault_cert_unreadable">Sertifika okunamadı</string>
+    <string name="vault_label_principals">Principal'lar</string>
+    <string name="vault_any_principal">herhangi bir principal</string>
+    <string name="vault_label_valid">Geçerlilik</string>
+    <string name="vault_badge_expired">SÜRESİ DOLDU</string>
+    <string name="vault_label_serial">Seri no</string>
+    <string name="vault_label_signing_ca">İmzalayan CA</string>
+    <string name="vault_label_note">Not</string>
+
+    <string name="vault_dialog_generate_title">SSH anahtarı oluştur</string>
+    <string name="vault_dialog_generate_subtitle">Yeni anahtar çifti kasanızda mühürlenir — parola gerekmez.</string>
+    <string name="vault_field_name">AD</string>
+    <string name="vault_placeholder_name_key">ör. work-laptop</string>
+    <string name="vault_field_algorithm">ALGORİTMA</string>
+    <string name="vault_generate">Oluştur</string>
+
+    <string name="vault_dialog_add_password_subtitle">Kasanızda şifreli saklanır ve sunucular arasında yeniden kullanılabilir.</string>
+    <string name="vault_placeholder_name_password">ör. db-admin</string>
+    <string name="vault_field_password">ŞİFRE</string>
+    <string name="vault_placeholder_password">gizli</string>
+    <string name="vault_add">Ekle</string>
+
+    <string name="vault_dialog_import_subtitle">CA imzalı sertifika ve özel anahtarı kasanızda mühürlenir.</string>
+    <string name="vault_placeholder_name_cert">ör. prod-access</string>
+    <string name="vault_field_private_key_pem">ÖZEL ANAHTAR (PEM)</string>
+    <string name="vault_field_certificate">SERTİFİKA (*-cert.pub)</string>
+    <string name="vault_field_passphrase">PAROLA (varsa)</string>
+    <string name="vault_placeholder_optional">isteğe bağlı</string>
+    <string name="vault_cert_read_error">Sertifika okunamadı — OpenSSH *-cert.pub satırı bekleniyordu.</string>
+    <string name="vault_cert_valid_summary">%1$s · %2$s · geçerlilik sonu: %3$s</string>
+    <string name="vault_import">İçe aktar</string>
+
+    <string name="vault_confirm_master_title">Ana şifreyi onaylayın</string>
+    <string name="vault_confirm_master_subtitle">Bu gizli bilgiyi panoya kopyalamak için ana şifrenizi girin.</string>
+    <string name="vault_confirm_master_subtitle_export">Bu özel anahtarı dosyaya yazmak için ana şifrenizi girin.</string>
+    <string name="vault_field_master_password">ANA ŞİFRE</string>
+    <string name="vault_placeholder_master_password">ana şifre</string>
+    <string name="vault_password_mismatch_retry">Şifre eşleşmedi — yeniden deneyin.</string>
+    <string name="vault_copy">Kopyala</string>
+
+    <string name="vault_edit_title">Düzenle: “%1$s”</string>
+    <string name="vault_field_note">NOT</string>
+    <string name="vault_placeholder_note">ör. denetim için geçici erişim, mayısta kaldır</string>
+    <string name="vault_save">Kaydet</string>
+
+    <string name="vault_delete_title">“%1$s” silinsin mi?</string>
+    <string name="vault_delete_detail_none">Kasanızdan kaldırılır. Bu işlem geri alınamaz.</string>
+    <string name="vault_delete_detail_bound">%1$d sunucu bu kimlik bilgisini kaybeder ve sonraki bağlantıda şifre ister. Geri alınamaz.</string>
+
+    <string name="vault_create_title">Ana şifre oluşturun</string>
+    <string name="vault_create_subtitle">Yerel kasanızı şifreler. Şifre bu cihazda kalır ve kurtarılamaz — unutursanız verilerin şifresi çözülemez.</string>
+    <string name="vault_master_password_label">Ana şifre</string>
+    <string name="vault_confirm_password_label">Şifreyi onayla</string>
+    <string name="vault_create_button">Kasa oluştur</string>
+    <string name="vault_biometric_offer_title">Hızlı kilit açma</string>
+    <string name="vault_biometric_offer_subtitle">Kasanın kilidini ana şifreyi yazmadan açın. Bunu daha sonra ayarlardan değiştirebilirsiniz.</string>
+    <string name="vault_biometric_enable">Biyometriyi etkinleştir</string>
+    <string name="vault_not_now">Şimdi değil</string>
+    <string name="vault_unlock_title">Kasanın kilidini aç</string>
+    <string name="vault_unlock_subtitle">Sunucularınızı, anahtarlarınızı ve oturumlarınızı açmak için ana şifrenizi girin.</string>
+    <string name="vault_unlock_button">Kilidi aç</string>
+    <string name="vault_unlock_biometric">Biyometri ile kilidi aç</string>
+    <string name="vault_forgot_password">Ana şifreyi sıfırla</string>
+    <string name="vault_corrupted_title">Kasa bozuk</string>
+    <string name="vault_corrupted_subtitle">Kasa dosyası okunamıyor veya şifresi çözülemiyor. Uygulamayı kullanmaya devam etmek için kasayı sıfırlayın.</string>
+    <string name="vault_reset_vault">Kasayı sıfırla</string>
+    <string name="vault_reset_subtitle">Geri alınamaz. Kayıtlı şifreler, anahtarlar ve kimlik bilgileri kurtarılamayacak şekilde silinir — ana şifre bunları geri getiremez.</string>
+    <string name="vault_reset_scope_secrets_title">Yalnızca gizli bilgiler</string>
+    <string name="vault_reset_scope_secrets_subtitle">Sunucu profilleri ve known_hosts korunur.</string>
+    <string name="vault_reset_scope_everything_title">Her şeyi sil</string>
+    <string name="vault_reset_scope_everything_subtitle">Sunucu profillerini, known_hosts dosyasını ve ayarları da sil.</string>
+    <string name="vault_reset_confirm_label">Onaylamak için %1$s yazın</string>
+    <string name="vault_reset_confirm_button">Kalıcı olarak sıfırla</string>
+    <string name="vault_link_key_file">Anahtar dosyası bağla</string>
+    <string name="vault_dialog_key_file_subtitle">Anahtar ve sertifika diskte kalır ve her bağlantıda yeniden okunur</string>
+    <string name="vault_subtitle_key_file">Anahtar dosyası</string>
+    <string name="vault_subtitle_key_file_cert">Sertifika dosyası</string>
+    <string name="vault_field_key_path">ÖZEL ANAHTAR DOSYASI</string>
+    <string name="vault_field_cert_path">SERTİFİKA DOSYASI (İSTEĞE BAĞLI)</string>
+    <string name="vault_placeholder_name_key_file">İş SSH CA</string>
+    <string name="vault_hint_cert_sibling">Boş: varsa anahtarın yanındaki dosya kullanılır: %1$s</string>
+    <string name="vault_hint_cert_sibling_opaque">Boş: sertifika yok — anahtar tek başına kimlik doğrular</string>
+    <string name="vault_browse">Gözat…</string>
+    <string name="vault_link">Bağla</string>
+    <string name="vault_badge_file">DOSYA</string>
+    <string name="vault_badge_file_missing">DOSYA YOK</string>
+    <string name="vault_label_key_path">ANAHTAR DOSYASI</string>
+    <string name="vault_label_cert_path">SERTİFİKA DOSYASI</string>
+    <string name="vault_key_file_missing">Bu cihazdan okunamıyor</string>
+    <string name="vault_key_file_device_only">Dosyada tutulan gizli bilgiler eşitlenmez</string>
+    <string name="vault_cert_from_file_unreadable">Sertifika dosyası okunamıyor</string>
+
+    <plurals name="vault_item_count">
+        <item quantity="one">%1$d öğe</item>
+        <item quantity="other">%1$d öğe</item>
+    </plurals>
+    <string name="vault_header_summary">%1$s · XChaCha20-Poly1305 · Argon2id</string>
+
+    <string name="vault_kv_type">Tür</string>
+    <string name="vault_kv_fingerprint">Parmak izi</string>
+    <string name="vault_kv_passphrase">Parola</string>
+    <string name="vault_kv_added">Eklendi</string>
+    <string name="vault_kv_last_used">Son kullanım</string>
+    <string name="vault_value_unknown">—</string>
+    <string name="vault_value_never">hiç</string>
+    <string name="vault_passphrase_set">var</string>
+    <string name="vault_passphrase_none">yok</string>
+
+    <string name="vault_section_encryption">Şifreleme</string>
+    <string name="vault_kv_cipher">Algoritma</string>
+    <string name="vault_kv_kdf">Anahtar türetme</string>
+    <string name="vault_kv_stored">Eşitleme sunucusunda</string>
+    <string name="vault_kdf_value">Argon2id · %1$d MiB</string>
+    <string name="vault_stored_ciphertext">yalnızca şifreli metin</string>
+    <string name="vault_stored_local">yalnızca bu cihaz</string>
+
+    <string name="vault_section_audit">Denetim</string>
+    <string name="vault_kv_copied">Kopyalandı</string>
+    <plurals name="vault_copies_window">
+        <item quantity="one">%2$d günde %1$d kez</item>
+        <item quantity="other">%2$d günde %1$d kez</item>
+    </plurals>
+    <string name="vault_kv_exported">Dışa aktarıldı</string>
+    <string name="vault_never_exported">hiç</string>
+
+    <string name="vault_meta_rotated">yenilendi: %1$s</string>
+    <string name="vault_meta_valid_until">geçerlilik sonu: %1$s</string>
+    <string name="vault_kv_changed">Değiştirildi</string>
+
+    <string name="vault_help_title">Kasa</string>
+    <string name="vault_help_intro">Bağlantılar için kimlik bilgileri, ana şifre altında şifreli olarak saklanır. Eşitleme yalnızca şifreli kayıtları aktarır.</string>
+    <string name="vault_help_categories">Kategoriler</string>
+    <string name="vault_help_keys">burada oluşturulur veya bir dosyadan bağlanır; sunucularda kimlik doğrulamak için kullanılır</string>
+    <string name="vault_help_passwords">sunucu ve oturum açma şifreleri; kopyalamalar kullanım günlüğüne kaydedilir</string>
+    <string name="vault_help_certificates">dosyalardan içe aktarılan, bir anahtarla eşleştirilmiş SSH sertifikaları</string>
+    <string name="vault_help_snippets">Kod parçacıklarında</string>
+    <string name="vault_help_snippets_hint">bir kod parçacığı veya runbook adımı, kayıtlı bir şifreye girdi adıyla başvurur; şifre her önizlemede maskelenir</string>
+</resources>

@@ -28,6 +28,7 @@ import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_col_last_seen
@@ -189,6 +190,6 @@ private fun MemberGridRow(modifier: Modifier = Modifier, content: @Composable Ro
 @Composable
 private fun HeaderCell(text: String, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.CenterStart) {
-        Txt(text.uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+        Txt(labelUppercase(text), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
     }
 }

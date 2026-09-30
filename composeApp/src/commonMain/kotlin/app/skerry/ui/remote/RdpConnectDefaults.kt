@@ -64,7 +64,7 @@ fun Host.toRdpRequest(
  */
 fun keyboardLayoutFor(language: String, country: String): Int {
     val lang = language.lowercase()
-    val exact = if (country.isEmpty()) null else KEYBOARD_LAYOUTS["$lang-${country.uppercase()}"]
+    val exact = if (country.isEmpty()) null else KEYBOARD_LAYOUTS["$lang-${country.uppercase()}"] // harness-allow: label-case
     return exact ?: KEYBOARD_LAYOUTS[lang] ?: RdpClientSettings.KEYBOARD_LAYOUT_US
 }
 

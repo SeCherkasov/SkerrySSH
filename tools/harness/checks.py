@@ -100,6 +100,12 @@ RAW_ICON = re.compile(r"(?<![A-Za-z0-9_.])Icon\s*\(")
 LITERAL_UI_STRING = re.compile(r"(?<![A-Za-z0-9_.])(?:Txt|Text)\s*\(\s*\"((?:[^\"\\]|\\.)*)\"")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*")
 HEX_COLOUR = re.compile(r"Color\s*\(\s*0x")
+# `String.uppercase()` is Locale.ROOT: under the Turkish UI a label drawn with it loses the dot on
+# `İ`. Labels go through `labelUppercase`; a protocol token (a key type, hex) says so on the line.
+ROOT_UPPERCASE = re.compile(r"\.uppercase\(\s*\)")
+LABEL_CASE_FILE = "/design/LabelCase.kt"
+# A positional format argument; the resource reader substitutes only this shape.
+PLACEHOLDER = re.compile(r"%\d+\$[sdf]")
 # Bare names, not import paths: `mockk<Foo>()` is the form that slips past a path-shaped pattern.
 TEST_LIB = re.compile(r"\b(kotest|mockk)\b")
 RAW_COORD = re.compile(
@@ -153,6 +159,12 @@ def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
         if ui and RAW_TEXT.search(text) and not _allowed(text, "design-primitives"):
             found.append(Finding("design-primitives", BLOCK, path, line,
                                  "raw `Text(` — the UI uses `Txt`, see coding-guidelines §1."))
+        if (ui and ROOT_UPPERCASE.search(text) and not path.endswith(LABEL_CASE_FILE)
+                and not _allowed(text, "label-case")):
+            found.append(Finding("label-case", BLOCK, path, line,
+                                 "`.uppercase()` ignores the UI locale — a Turkish label loses the "
+                                 "dot on İ. Use `labelUppercase`; a protocol token takes "
+                                 "`// harness-allow: label-case`."))
         if ui and RAW_ICON.search(text) and not _allowed(text, "design-primitives"):
             found.append(Finding("design-primitives", BLOCK, path, line,
                                  "raw `Icon(` — the UI uses `Sym`."))
@@ -165,7 +177,7 @@ def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
             if re.search(r"[A-Za-z]{2,}", prose):
                 found.append(Finding("i18n-hardcoded", BLOCK, path, line,
                                      f"user-visible literal \"{prose[:40]}\" — move it to "
-                                     "composeResources and ship en + ru + zh. A brand name or a "
+                                     "composeResources and ship en + ru + zh + tr. A brand name or a "
                                      "protocol token takes `// harness-allow: i18n-hardcoded`."))
         if (ui and HEX_COLOUR.search(text) and not any(t in path for t in THEME_PATHS)
                 and not _allowed(text, "design-hex")):
@@ -271,11 +283,11 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
         return key if kind == "string" else f"{kind} {key}"
 
     en, found = keys("values"), []
-    for locale in ("values-ru", "values-zh"):
+    for locale in ("values-ru", "values-zh", "values-tr"):
         other = keys(locale)
         for key in sorted(set(en) - set(other)):
             found.append(Finding("i18n-parity", BLOCK, en[key], 0,
-                                 f"`{label(key)}` has no {locale} translation — strings ship en + ru + zh."))
+                                 f"`{label(key)}` has no {locale} translation — strings ship en + ru + zh + tr."))
         for key in sorted(set(other) - set(en)):
             found.append(Finding("i18n-parity", BLOCK, other[key], 0,
                                  f"`{label(key)}` exists only in {locale} — a stale or misspelt key."))
@@ -285,7 +297,8 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
     # Russian renders "1 файлов" with every gate green.
     required = {"values": ("one", "other"),
                 "values-ru": ("one", "few", "many", "other"),
-                "values-zh": ("other",)}
+                "values-zh": ("other",),
+                "values-tr": ("one", "other")}
     for locale, categories in required.items():
         for file in sorted(glob.glob(os.path.join(base, locale, "*.xml"))):
             rel = os.path.relpath(file, root)
@@ -312,6 +325,36 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
     for kind, key in sorted(used - set(en)):
         found.append(Finding("i18n-parity", BLOCK, "composeApp", 0,
                              f"`Res.{accessor[kind]}.{key}` is used but defined nowhere."))
+
+    # A translation that drops or renumbers a placeholder passes every check above and draws a
+    # sentence with the host name missing. Each plural item is held to the set English uses.
+    def placeholders(locale: str) -> dict[tuple[str, str], list[tuple[str, set[str]]]]:
+        out: dict[tuple[str, str], list[tuple[str, set[str]]]] = {}
+        for file in sorted(glob.glob(os.path.join(base, locale, "*.xml"))):
+            body = read(file)
+            for key, text in re.findall(r'<string\s+[^>]*?name="([^"]+)"[^>]*>(.*?)</string>', body, re.S):
+                out[("string", key)] = [(os.path.relpath(file, root), set(PLACEHOLDER.findall(text)))]
+            for key, block in re.findall(r'<plurals\s+[^>]*?name="([^"]+)"(.*?)</plurals>', body, re.S):
+                out[("plurals", key)] = [(os.path.relpath(file, root), set(PLACEHOLDER.findall(text)))
+                                         for text in re.findall(r"<item[^>]*>(.*?)</item>", block, re.S)
+                                         # an empty item is the category check's finding, not this one
+                                         if text.strip()]
+        return out
+
+    source = placeholders("values")
+    for locale in ("values-ru", "values-zh", "values-tr"):
+        for entry, items in sorted(placeholders(locale).items()):
+            if entry not in source:
+                continue
+            expected = set().union(*(marks for _, marks in source[entry]))
+            wrong = next(((rel, marks) for rel, marks in items if marks != expected), None)
+            if wrong:
+                rel, marks = wrong
+                found.append(Finding("i18n-parity", BLOCK, rel, 0,
+                                     f"`{label(entry)}` in {locale} has placeholders "
+                                     f"{', '.join(sorted(marks)) or 'none'}, English has "
+                                     f"{', '.join(sorted(expected)) or 'none'} — the value is "
+                                     "dropped or misplaced on screen."))
 
     # Which way the sweep is wrong depends on what could not be read, so the two are counted apart.
     if unreadable["locale"]:

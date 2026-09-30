@@ -1,0 +1,99 @@
+<resources>
+    <!-- Appearance -->
+    <string name="appearance_title">Görünüm</string>
+    <string name="appearance_subtitle">Tema, arayüz dili ve kenar çubuğu.</string>
+    <string name="appearance_theme">Uygulama teması</string>
+    <string name="appearance_rendering">Görüntü işleme</string>
+    <string name="appearance_rendering_desc">Tüm uygulama için Skia arka ucu; H.264 kod çözme de onu izler. Başlangıçta okunur — yeniden başlatınca etkin olur.</string>
+    <string name="render_backend_auto">Otomatik</string>
+    <string name="render_backend_hardware">Donanım</string>
+    <string name="render_backend_software">Yazılım</string>
+    <string name="theme_system">Sistem</string>
+    <string name="theme_light">Skerry Açık</string>
+    <string name="theme_dark">Skerry Koyu</string>
+    <string name="theme_blackwater">Blackwater</string>
+    <string name="theme_tokyo_night">Tokyo Night</string>
+    <string name="theme_tokyo_day">Tokyo Day</string>
+    <string name="theme_catppuccin_mocha">Catppuccin Mocha</string>
+    <string name="theme_gruvbox_dark">Gruvbox Dark</string>
+    <string name="theme_dracula">Dracula</string>
+    <string name="theme_solarized_light">Solarized Light</string>
+    <string name="appearance_badge_active">ETKİN</string>
+    <string name="appearance_section_terminal">TERMİNAL</string>
+    <string name="appearance_section_interface">ARAYÜZ</string>
+    <string name="appearance_section_theme">TEMA</string>
+    <string name="appearance_custom_term_theme">Ayrı terminal teması</string>
+    <string name="appearance_custom_term_theme_desc">Uygulama temasından farklı bir terminal teması seçin.</string>
+    <string name="appearance_font">Yazı tipi</string>
+    <string name="appearance_font_size">Yazı tipi boyutu</string>
+    <string name="appearance_line_height">Satır yüksekliği</string>
+    <string name="appearance_letter_spacing">Harf aralığı</string>
+    <string name="appearance_default_value">Varsayılan: %1$s</string>
+    <string name="appearance_language">Dil</string>
+    <string name="appearance_recent_show">Son bağlantılar</string>
+    <string name="appearance_recent_show_desc">Son bağlanılan sunucuları kenar çubuğunda göster.</string>
+    <string name="appearance_recent_count">Gösterilen sayı</string>
+
+    <string name="language_system">Sistem</string>
+
+    <string name="nav_tab_hosts">Sunucular</string>
+    <string name="nav_tab_sessions">Oturumlar</string>
+    <string name="nav_tab_more">Diğer</string>
+
+    <string name="rail_terminal">Terminal</string>
+    <string name="rail_desktops">Uzak masaüstleri</string>
+    <string name="rail_tunnels">Tüneller</string>
+    <string name="rail_snippets">Kod parçacıkları</string>
+    <string name="rail_vault">Kasa</string>
+    <string name="rail_hosts">Sunucular</string>
+    <string name="rail_team">Ekip</string>
+
+    <string name="sftp_dialog_save_as">Farklı kaydet</string>
+    <string name="sftp_dialog_pick_upload">Yüklenecek dosyayı seçin</string>
+
+    <string name="terminal_reverse_search_prompt">(reverse-i-search)`%1$s`:  ↑↓ seç · Enter ekle · Del kaldır · Esc</string>
+    <string name="terminal_reverse_search_no_matches">— eşleşme yok —</string>
+
+    <string name="terminal_copied">Kopyalandı</string>
+
+    <string name="terminal_search_placeholder">Çıktıda bul</string>
+    <string name="terminal_search_counter">%1$d/%2$d</string>
+    <string name="terminal_search_counter_capped">%1$d/%2$d+</string>
+    <string name="terminal_search_no_matches">Eşleşme yok</string>
+    <string name="terminal_search_invalid_pattern">Geçersiz desen</string>
+    <string name="terminal_search_too_complex">Desen çok karmaşık</string>
+    <string name="terminal_search_match_case">Büyük/küçük harf eşleştir</string>
+    <string name="terminal_search_regex">Düzenli ifade</string>
+    <string name="terminal_search_next">Sonraki eşleşme</string>
+    <string name="terminal_search_prev">Önceki eşleşme</string>
+    <string name="terminal_search_close">Aramayı kapat</string>
+
+    <string name="qr_scan_hint">Kamerayı diğer cihazınızda gösterilen QR koduna tutun.</string>
+    <string name="qr_permission_needed">Eşleştirme kodunu taramak için kamera izni gerekli.</string>
+    <string name="qr_cancel">İptal</string>
+    <string name="command_clipped_partial">kısmen gösteriliyor</string>
+    <string name="command_clipped">kısmen gösteriliyor · %1$d karakter</string>
+
+    <!-- Help dialogs -->
+    <string name="help_button">Yardım</string>
+    <string name="help_close">Kapat</string>
+    <string name="help_add">Ekle</string>
+    <string name="help_added">Eklendi</string>
+    <string name="trust_new_key_title">Yeni sunucu anahtarı</string>
+    <string name="trust_changed_key_title">Sunucu anahtarı değişti</string>
+    <string name="trust_new_cert_title">Yeni sunucu sertifikası</string>
+    <string name="trust_changed_cert_title">Sunucu sertifikası değişti</string>
+    <string name="trust_other_type_title">Sunucu başka bir anahtarla biliniyor</string>
+    <string name="trust_new_key_body">Bu sunucu için henüz kayıtlı anahtar yok. Kabul etmeden önce parmak izini sunucudakiyle karşılaştırın.</string>
+    <string name="trust_new_cert_body">Bu sunucu için henüz kayıtlı sertifika yok. Kabul etmeden önce parmak izini sunucudakiyle karşılaştırın.</string>
+    <string name="trust_fingerprint">PARMAK İZİ (SHA256)</string>
+    <string name="trust_other_type_note">Bu sunucu zaten şu algoritmayla kayıtlı: %1$s. Değişimde hangi algoritmanın kullanılacağını sunucu seçer; bu yüzden değişmiş bir anahtar yeni bir anahtar olarak gelebilir.</string>
+    <string name="trust_accept">Kabul et ve bağlan</string>
+    <string name="trust_accept_new_cert">Yeni sertifikayı kabul et</string>
+    <string name="trust_reject">Reddet</string>
+    <string name="trust_cert_subject">Konu</string>
+    <string name="trust_cert_issuer">Veren</string>
+    <string name="trust_cert_valid_until">Geçerlilik sonu</string>
+    <string name="trust_cert_not_verified">Sistem bu sertifikayı doğrulayamadı — eksik zincir ya da tanımadığı bir yetkili. Uzak Masaüstü için olağan; parmak izine göre karar verin.</string>
+    <string name="trust_cert_name_mismatch">Sertifika, bağlanılan sunucudan farklı bir sunucu adı içeriyor.</string>
+</resources>

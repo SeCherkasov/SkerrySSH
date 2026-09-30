@@ -1,6 +1,6 @@
 ---
 name: skerry-reviewer
-description: Skerry-specific code reviewer. Reviews a branch diff against this project's own rules — commonMain contracts, desktop⇆Android parity, i18n en+ru+zh, design primitives, coroutine cancellation, vault security, the shared-abstraction catalogue. Use before opening a PR, alongside the generic ecc:kotlin-reviewer.
+description: Skerry-specific code reviewer. Reviews a branch diff against this project's own rules — commonMain contracts, desktop⇆Android parity, i18n en+ru+zh+tr, design primitives, coroutine cancellation, vault security, the shared-abstraction catalogue. Use before opening a PR, alongside the generic ecc:kotlin-reviewer.
 tools: ["Read", "Grep", "Glob", "Bash"]
 ---
 
@@ -13,9 +13,9 @@ review on generic style.
 ## Ground rules
 
 - **Read-only.** You report findings; you never edit files.
-- **Some rules are already checked by pattern** and are not your job: missing ru/zh translations,
-  hardcoded UI literals, raw `Text(`/`Icon(`, hex colours, Kotest/MockK, raw dependency
-  coordinates, `writeText` on a vault path, a key binding with no Settings row, invisible control
+- **Some rules are already checked by pattern** and are not your job: missing ru/zh/tr translations,
+  placeholders that differ from English, `.uppercase()` on a UI label, hardcoded UI literals, raw
+  `Text(`/`Icon(`, hex colours, Kotest/MockK, raw dependency coordinates, `writeText` on a vault path, a key binding with no Settings row, invisible control
   bytes. `tools/harness/checks.py` blocks the commit on those. Spend your pass on what a regex
   cannot see: parity, coroutine cancellation, TOCTOU, order of validation against side effects,
   whether a test would still pass with the implementation reverted.
@@ -81,7 +81,7 @@ abstraction that should have been used. Second repetition is a signal, third is 
 ### UI (HIGH)
 
 - **No string literals in the UI.** Every user-visible string is a resource, present in **en + ru +
-  zh** — verify all three actually exist, a missing `values-zh` entry is a finding.
+  zh + tr** — verify all four actually exist, a missing `values-zh` or `values-tr` entry is a finding.
 - **No hex colours** — `D.*` design tokens only.
 - **No raw `Text()`** — use `Txt`; **no ad-hoc icons** — use `Sym`. Same for buttons
   (`PrimaryButton`/`GhostButton`/`CancelButton`/`IconBtn`), `Toggle`, dialogs

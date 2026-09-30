@@ -17,6 +17,21 @@ class UiLanguageTest {
         }
     }
 
+    /** The ids are stored in prefs; renaming one silently resets that user's choice to System. */
+    @Test
+    fun `stored ids never change`() {
+        assertEquals(
+            mapOf(
+                UiLanguage.System to "system",
+                UiLanguage.English to "en",
+                UiLanguage.Russian to "ru",
+                UiLanguage.Chinese to "zh",
+                UiLanguage.Turkish to "tr",
+            ),
+            UiLanguage.entries.associateWith { it.id },
+        )
+    }
+
     @Test
     fun `fromId falls back to System for unknown, null or blank`() {
         assertEquals(UiLanguage.System, UiLanguage.fromId(null))
@@ -33,6 +48,16 @@ class UiLanguageTest {
     fun `explicit languages carry their BCP-47 tag`() {
         assertEquals("en", UiLanguage.English.localeTag)
         assertEquals("ru", UiLanguage.Russian.localeTag)
+        assertEquals("zh", UiLanguage.Chinese.localeTag)
+        assertEquals("tr", UiLanguage.Turkish.localeTag)
+    }
+
+    @Test
+    fun `the AI answers in the language the UI resolved to`() {
+        assertEquals("Turkish", aiResponseLanguageName("tr-TR"))
+        assertEquals("Chinese", aiResponseLanguageName("zh"))
+        assertEquals("Russian", aiResponseLanguageName("ru"))
+        assertEquals("English", aiResponseLanguageName("fr"))
     }
 
     @Test

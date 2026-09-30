@@ -32,6 +32,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
@@ -77,7 +78,7 @@ internal fun FingerprintCeremony(
             .padding(12.dp),
     ) {
         Txt(
-            stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(),
+            labelUppercase(stringResource(Res.string.lib_teams_invite_fingerprint)),
             color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
         )
         Txt(fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp))

@@ -1,0 +1,46 @@
+<resources>
+    <!-- Kasa yüzeyinin @Composable dışı kullanıcı dizeleri (önek vtail_). -->
+
+    <!-- Biyometri istemleri (başlık / iptal düğmesi / alt başlık). -->
+    <string name="vtail_bio_enable_title">Biyometriyi etkinleştir</string>
+    <string name="vtail_bio_enable_cancel">İptal</string>
+    <string name="vtail_bio_enable_subtitle">Kasa kilidini biyometriye bağlamak için doğrulayın.</string>
+    <string name="vtail_bio_verify_title">Biyometrik kilit açmayı denetle</string>
+    <string name="vtail_bio_verify_subtitle">Kilit açmanın çalıştığını denetlemek için bir dokunuş daha.</string>
+    <string name="vtail_bio_unlock_title">Skerry'nin kilidini aç</string>
+    <string name="vtail_bio_unlock_cancel">Şifre gir</string>
+    <string name="vtail_bio_unlock_subtitle">Kasayı açmak için biyometrinizi doğrulayın.</string>
+    <string name="vtail_bio_copy_title">Kimliğinizi doğrulayın</string>
+    <string name="vtail_bio_copy_cancel">İptal</string>
+    <string name="vtail_bio_copy_subtitle">Bu gizli bilgiyi panoya kopyalamak için biyometrinizi doğrulayın.</string>
+    <string name="vtail_bio_export_subtitle">Bu özel anahtarı dosyaya yazmak için biyometrinizi doğrulayın.</string>
+
+    <!-- Kimlik doğrulama seçici: anahtarlık kimlik bilgisi türleri. -->
+    <string name="vtail_picker_type_password">Şifre</string>
+    <string name="vtail_picker_type_ssh_key">SSH anahtarı</string>
+    <string name="vtail_picker_type_certificate">Sertifika</string>
+
+    <!-- Kasa kapısı hata iletileri. -->
+    <string name="vtail_error_password_too_short">Şifre çok kısa — en az %1$d karakter.</string>
+    <string name="vtail_error_password_mismatch">Şifreler eşleşmiyor.</string>
+    <string name="vtail_error_wrong_password">Ana şifre yanlış.</string>
+    <string name="vtail_error_corrupted">Kasa dosyası bozuk veya okunamıyor.</string>
+    <string name="vtail_error_not_writable">Kasa dosyası yazılamadı — klasör izinlerini ve boş alanı denetleyin.</string>
+    <string name="vtail_error_biometric_reset">Biyometri sıfırlandı — ana şifrenizle oturum açın.</string>
+    <string name="vtail_error_biometric_failed">Biyometri çalışmadı — ana şifrenizi girin.</string>
+    <string name="vtail_error_biometric_locked_out">Biyometri geçici olarak kilitlendi — ana şifrenizi girin.</string>
+    <string name="vtail_error_biometric_unsupported">Biyometri bu telefonda çalışmıyor — ana şifrenizi kullanın.</string>
+
+    <!-- Gizli bilgi kartı “kullanan” parçası, tekil / çoğul. -->
+    <string name="vtail_used_by_snippets_one">1 kod parçacığı kullanıyor</string>
+    <string name="vtail_used_by_snippets_other">%1$d kod parçacığı kullanıyor</string>
+    <string name="vtail_snippets_frag_one">1 kod parçacığı</string>
+    <string name="vtail_snippets_frag_other">%1$d kod parçacığı</string>
+
+    <!-- Kasa kenar çubuğu kategori başlıkları. -->
+    <string name="vtail_category_ssh_keys">SSH anahtarları</string>
+    <string name="vtail_category_passwords">Şifreler</string>
+    <string name="vtail_category_certificates">Sertifikalar</string>
+
+    <string name="vtail_picker_type_key_file">Anahtar dosyası</string>
+</resources>

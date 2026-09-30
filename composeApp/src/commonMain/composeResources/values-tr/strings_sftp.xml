@@ -1,0 +1,126 @@
+<resources>
+    <!-- Titles and work bar -->
+    <string name="sftp_wbar_subtitle">SFTP · %1$s</string>
+    <string name="sftp_files_title">Dosyalar</string>
+
+    <!-- Work-bar tooltips -->
+    <string name="sftp_tip_back">Terminale dön (F10)</string>
+    <string name="sftp_tip_refresh">Her iki bölmeyi yenile (F9)</string>
+    <string name="sftp_tip_filter">Listeyi filtrele (Ctrl+F)</string>
+    <string name="sftp_tip_upload">Seçimi karşıya yükle (F5)</string>
+    <string name="sftp_tip_download">Seçimi indir (F5)</string>
+
+    <!-- Toolbar / FAB actions -->
+    <string name="sftp_new_folder">Yeni klasör</string>
+    <string name="sftp_create">Oluştur</string>
+    <string name="sftp_create_directory">Dizin oluştur</string>
+    <string name="sftp_upload_file">Dosya yükle</string>
+    <string name="sftp_download_to_device">Cihaza indir</string>
+
+    <!-- Pane labels -->
+    <string name="sftp_pane_local">Yerel</string>
+    <string name="sftp_pane_remote">Uzak</string>
+
+    <!-- Statuses / notices -->
+    <string name="sftp_unavailable">SFTP kullanılamıyor</string>
+    <string name="sftp_opening">SFTP açılıyor…</string>
+    <string name="sftp_connecting">Bağlanılıyor…</string>
+    <string name="sftp_loading">Yükleniyor…</string>
+    <string name="sftp_error">Hata</string>
+    <string name="sftp_no_session">Etkin oturum yok</string>
+    <string name="sftp_no_session_hint">Dosyalara göz atmak için bir sunucuya bağlanın</string>
+
+    <!-- Shared dialog buttons -->
+    <string name="sftp_cancel">İptal</string>
+    <string name="sftp_delete">Sil</string>
+    <string name="sftp_copy">Kopyala</string>
+    <string name="sftp_move">Taşı</string>
+    <string name="sftp_rename">Yeniden adlandır</string>
+
+    <!-- Name dialog -->
+    <string name="sftp_already_exists">“%1$s” zaten var</string>
+
+    <!-- Delete dialogs -->
+    <string name="sftp_delete_folder_q">Klasör silinsin mi?</string>
+    <string name="sftp_delete_file_q">Dosya silinsin mi?</string>
+    <string name="sftp_delete_items_q">%1$d öğe silinsin mi?</string>
+    <string name="sftp_delete_folder_body">“%1$s” ve içindeki her şey kalıcı olarak silinecek.</string>
+    <string name="sftp_delete_file_body">“%1$s” kalıcı olarak silinecek.</string>
+    <string name="sftp_delete_items_dirs_body">%1$d öğe (içerikleriyle birlikte klasörler) kalıcı olarak silinecek.</string>
+    <string name="sftp_delete_items_body">%1$d öğe kalıcı olarak silinecek.</string>
+
+    <!-- Copy / move dialogs -->
+    <string name="sftp_what_single">“%1$s”</string>
+    <string name="sftp_items_count">%1$d öğe</string>
+    <string name="sftp_drag_shift_move">Shift: taşı</string>
+    <string name="sftp_copy_to_remote_q">Sunucuya kopyalansın mı?</string>
+    <string name="sftp_copy_to_local_q">Bu bilgisayara kopyalansın mı?</string>
+    <string name="sftp_move_to_remote_q">Sunucuya taşınsın mı?</string>
+    <string name="sftp_move_to_local_q">Bu bilgisayara taşınsın mı?</string>
+    <string name="sftp_transfer_body">%1$s → %2$s</string>
+
+    <!-- Transfer error (name: message) -->
+    <string name="sftp_transfer_error">%1$s: %2$s</string>
+
+    <!-- Overwrite confirmation -->
+    <string name="sftp_overwrite_q">Mevcut olanların üzerine yazılsın mı?</string>
+    <string name="sftp_overwrite_one">Hedefte zaten var: %1$s.</string>
+    <string name="sftp_overwrite_many">Hedefte zaten %1$d öğe var ve üzerlerine yazılacak.</string>
+    <string name="sftp_overwrite">Üzerine yaz</string>
+
+    <!-- Listing columns and quick filter -->
+    <string name="sftp_columns">Sütunlar</string>
+    <string name="sftp_col_name">Ad</string>
+    <string name="sftp_unprintable_name">Yazdırılamayan ad</string>
+    <string name="sftp_col_size">Boyut</string>
+    <string name="sftp_col_modified">Değiştirilme</string>
+    <string name="sftp_col_permissions">İzinler</string>
+    <string name="sftp_col_permissions_short">İzin</string>
+    <string name="sftp_filter_hint">Filtre (ad veya *.maske)</string>
+    <string name="sftp_tip_filter_toggle">Listeyi filtrele</string>
+    <string name="sftp_meta_joined">%1$s · %2$s</string>
+    <!-- Date: day, month, time/year -->
+    <string name="sftp_date_recent">%2$d %1$s %3$s</string>
+    <string name="sftp_date_day">%2$d %1$s</string>
+    <string name="sftp_date_old">%2$d %1$s %3$d</string>
+    <string-array name="sftp_months">
+        <item>Oca</item>
+        <item>Şub</item>
+        <item>Mar</item>
+        <item>Nis</item>
+        <item>May</item>
+        <item>Haz</item>
+        <item>Tem</item>
+        <item>Ağu</item>
+        <item>Eyl</item>
+        <item>Eki</item>
+        <item>Kas</item>
+        <item>Ara</item>
+    </string-array>
+
+    <!-- Built-in viewer/editor (F3/F4) -->
+    <string name="sftp_edit_title">Düzenle</string>
+    <string name="sftp_edit_title_view">Görüntüle</string>
+    <string name="sftp_edit_readonly">salt okunur</string>
+    <string name="sftp_edit_modified">değiştirildi</string>
+    <string name="sftp_edit_saving">Kaydediliyor…</string>
+    <string name="sftp_edit_find">Ara:</string>
+    <string name="sftp_edit_not_found">bulunamadı</string>
+    <string name="sftp_edit_discard_q">Değişiklikler atılsın mı?</string>
+    <string name="sftp_edit_discard_body">“%1$s” dosyasında kaydedilmemiş değişiklikler var. Şimdi kapatırsanız kaybolur.</string>
+    <string name="sftp_edit_discard">Yok say</string>
+    <string name="sftp_edit_conflict_q">Dosya kaynakta değişti mi?</string>
+    <string name="sftp_edit_conflict_body">“%1$s” siz açtıktan sonra değişti. Kaydetmek, dosyanın üzerine sizin sürümünüzü yazar.</string>
+
+    <!-- Transfer queue -->
+    <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
+    <string name="sftp_queue_done">tamamlandı</string>
+    <string name="sftp_queue_waiting">bekliyor</string>
+    <string name="sftp_queue_backlog">Kanal bekleniyor: %1$d</string>
+    <string name="sftp_queue_cancel">İptal et: %1$s</string>
+    <string name="sftp_queue_clear">Temizle: %1$s</string>
+    <string name="sftp_queue_state">%1$s: %2$s</string>
+    <!-- Accessible names -->
+    <string name="sftp_path_field">Yola git</string>
+    <string name="sftp_edit_buffer">Dosya içeriği</string>
+</resources>

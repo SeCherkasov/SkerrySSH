@@ -33,6 +33,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_screen_title
 import app.skerry.ui.generated.resources.rd_search_placeholder
@@ -219,7 +220,7 @@ internal fun MobileFolderHeader(
         // Template form: "PRODUCTION · 3" — the count rides with the name instead of sitting on the
         // far right, where it read as a column of unrelated numbers down the screen.
         Txt(
-            "${name.uppercase()} · $count",
+            "${labelUppercase(name)} · $count",
             color = if (isDragging || dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
             size = 12.sp,
             weight = FontWeight.SemiBold,
