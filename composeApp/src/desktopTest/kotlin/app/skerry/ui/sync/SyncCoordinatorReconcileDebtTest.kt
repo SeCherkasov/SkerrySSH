@@ -303,8 +303,17 @@ class SyncCoordinatorReconcileDebtTest {
             sut.connect("https://home.test", account, password.toCharArray())
             sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
 
-            // The work instance, same account id: an ordinary connect that owes nothing.
-            sut.connect(serverUrl, account, password.toCharArray())
+            // The work instance, same account id: an ordinary connect that owes nothing. The failed
+            // connect reports before it releases the linking guard, and a connect made in that window
+            // is dropped, leaving the old failure on screen — so it is repeated until one is taken.
+            val stale = sut.status.value
+            awaitSync("the second connect to be accepted") {
+                while (true) {
+                    sut.connect(serverUrl, account, password.toCharArray())
+                    if (sut.status.value !== stale) break
+                    delay(10)
+                }
+            }
             sut.status.awaitStatus("the second connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
             assertTrue(vault.records().any { it.id == "r1" }, "another server's reactivation must not clear this vault")
@@ -344,8 +353,12 @@ class SyncCoordinatorReconcileDebtTest {
             assertFalse(debts.owes(serverUrl, account), "the debt never made it to disk")
 
             debts.refuse = false // the disk has room again by the time the restore runs
+            // The connect's own failure already matches "settled"; only a status the restore set counts.
+            val stale = sut.status.value
             sut.restoreSession()
-            sut.status.awaitStatus("the silent restore to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            sut.status.awaitStatus("the silent restore to settle") {
+                it !== stale && (it is SyncStatus.Online || it is SyncStatus.Failed)
+            }
             assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
             assertFalse(vault.records().any { it.id == "r1" }, "the restore must rebuild — the debt is still owed")
             assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
