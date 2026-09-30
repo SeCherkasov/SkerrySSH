@@ -7,6 +7,7 @@ import app.skerry.shared.vault.BiometricAvailability
 import app.skerry.shared.vault.BiometricConfirmResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.UnlockFactor
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_bio_copy_cancel
@@ -36,7 +37,8 @@ internal enum class SecretAccess { COPY, EXPORT }
  * The action runs only after success.
  *
  * Shared by desktop ([app.skerry.ui.vault.VaultView]) and mobile ([app.skerry.ui.mobile.MobileVaultView])
- * keychains; desktop has no biometrics (`biometrics == null`), so it always falls back to password.
+ * keychains. Desktop's only fast unlock is the trusted device, which proves no presence, so there it
+ * is always the password.
  * Password-form state is held here as Compose snapshot state; instantiated via
  * `remember(vault, biometrics, scope)`.
  *
@@ -79,7 +81,9 @@ internal class SecretCopyAuthorizer(
      * the prompt.
      */
     fun authorize(access: SecretAccess = SecretAccess.COPY, onAuthorized: () -> Unit) {
-        val bio = biometrics
+        // Only a factor that proves presence may stand in for the password: a trusted device's keyring
+        // (issue #398) hands its key to anyone at this OS account, so there it is the password.
+        val bio = biometrics?.takeIf { it.factor == UnlockFactor.Biometric }
         if (bio != null && bio.isEnabled() && bio.availability() == BiometricAvailability.Available) {
             // Assigned only past this guard: a second tap while a prompt is in flight is dropped, and
             // re-wording the open prompt for a request that was never started would put "Export" over

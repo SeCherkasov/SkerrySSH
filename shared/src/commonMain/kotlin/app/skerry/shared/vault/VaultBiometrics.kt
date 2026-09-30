@@ -2,7 +2,11 @@ package app.skerry.shared.vault
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlin.concurrent.Volatile
 
 /** Outcome of enabling biometrics for a vault. */
 enum class BiometricEnableResult {
@@ -123,6 +127,21 @@ class VaultBiometrics(
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
+    /** What an unlock through this instance proves — the UI words the setting and the gate by it. */
+    val factor: UnlockFactor get() = keyStore.factor
+
+    private val _enabled = MutableStateFlow(artifacts.exists())
+
+    /**
+     * Whether unlock through this instance is set up, as state: the gate and the settings screen
+     * each hold their own controller, and both have to see the other's toggle.
+     */
+    val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
+
+    /** Bumped by every [disable], so a [reseal] running across one can tell. */
+    @Volatile
+    private var disables = 0
+
     /** Biometric availability on this device — to show/hide the toggle and button. */
     fun availability(): BiometricAvailability = keyStore.availability()
 
@@ -170,6 +189,21 @@ class VaultBiometrics(
             withContext(io) { disable() }
         }
         return outcome.result
+    }
+
+    /**
+     * Seal an enrollment already in place over the vault key it has now — after sync replaced that key
+     * the old wrapper opens nothing. `null` when there is no enrollment to keep: none was set, or a
+     * [disable] landed while this ran. That disable wins, and the wrapper just written goes with it —
+     * otherwise a background re-seal would bring back what the user had just turned off.
+     */
+    suspend fun reseal(prompt: BiometricPrompt): BiometricEnableResult? {
+        val generation = disables
+        if (!isEnabled()) return null
+        val result = enable(prompt)
+        if (disables == generation) return result
+        withContext(io) { disable() }
+        return null
     }
 
     /**
@@ -237,6 +271,7 @@ class VaultBiometrics(
                 verified.value.fill(0) // the verification copy of the dataKey must not outlive the check
                 if (!matches) return Attempt.NextRung
                 withContext(io) { artifacts.write(BioArtifact(FORMAT_VERSION, alias, deviceId, wrapped)) }
+                _enabled.value = true
                 Attempt.Verified
             }
             BiometricResult.Cancelled -> Attempt.Abort(BiometricEnableResult.Cancelled)
@@ -263,10 +298,17 @@ class VaultBiometrics(
     /** [walkLadder]'s result plus whether it destroyed the `bioKey` the device had before. */
     private class LadderOutcome(val result: BiometricEnableResult, val keyRecreated: Boolean)
 
-    /** Disable biometrics: remove `bioKey` and `vault.bio`. Idempotent. */
+    /**
+     * Disable biometrics: remove `vault.bio`, then `bioKey`. Idempotent. The artifact goes first: without
+     * it the key wraps nothing, while an artifact left behind by a key store that could not be reached
+     * would keep the setting on. An artifact that could not be removed keeps its key, so the enrollment
+     * the setting still shows keeps working.
+     */
     fun disable() {
-        keyStore.deleteKey(alias)
+        disables++
         artifacts.clear()
+        _enabled.value = artifacts.exists()
+        keyStore.deleteKey(alias)
     }
 
     /**
@@ -281,9 +323,12 @@ class VaultBiometrics(
                 when (vault.unlockWithDataKey(dataKey)) {
                     UnlockResult.Success -> BiometricUnlockResult.Unlocked
                     UnlockResult.Corrupted -> BiometricUnlockResult.Corrupted
-                    // unlockWithDataKey never checks a password and by contract never returns
-                    // WrongPassword; explicit branch instead of else so a new UnlockResult case fails loudly.
-                    UnlockResult.WrongPassword -> error("unlockWithDataKey does not check a password — WrongPassword is unreachable")
+                    // The vault's key check refused it: the wrapper outlived a key replacement or a
+                    // reset. It will never open this vault again — drop it, as on invalidation.
+                    UnlockResult.WrongPassword -> withContext(io) {
+                        disable()
+                        BiometricUnlockResult.Invalidated
+                    }
                 }
             } catch (e: Throwable) {
                 dataKey.bytes.fill(0) // exceptional path: don't leave the unwrapped key in memory

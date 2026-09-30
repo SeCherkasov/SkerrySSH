@@ -82,9 +82,9 @@ interface Vault {
      * `dataKey` typically comes from [BiometricKeyStore.unwrap] (the `vault.bio` wrapper), wrapped
      * under the device's `bioKey`. The implementation **takes ownership** of the given [dataKey]
      * (the caller doesn't wipe it) and loads records from the file; [UnlockResult.Corrupted] if the
-     * file can't be read. The method deliberately doesn't verify that `dataKey` is correct (there's
-     * no master key to check against): a wrong key simply fails to open records (AEAD failure in
-     * [openPayload]). Use only from the trusted biometrics path.
+     * file can't be read. A key the file's key check refuses — a wrapper that outlived a key
+     * replacement or a reset — gives [UnlockResult.WrongPassword] and leaves the vault locked; a file
+     * written before the check existed is opened unchecked. Use only from the trusted biometrics path.
      */
     fun unlockWithDataKey(dataKey: DataKey): UnlockResult
 

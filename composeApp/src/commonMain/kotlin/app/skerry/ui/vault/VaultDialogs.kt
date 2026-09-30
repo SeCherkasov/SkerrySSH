@@ -119,6 +119,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.shared.ssh.keyFileSiblingRef
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.rememberFieldDraft
@@ -282,7 +283,6 @@ internal fun PasswordConfirmDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var password by remember { mutableStateOf("") }
     // The dialog names the action it is gating: a master password typed for "Copy" must not be the
     // one that writes a private key to disk.
     val subtitle = when (access) {
@@ -293,9 +293,31 @@ internal fun PasswordConfirmDialog(
         SecretAccess.COPY -> stringResource(Res.string.vault_copy)
         SecretAccess.EXPORT -> stringResource(Res.string.vault_export)
     }
+    PasswordConfirmDialog(
+        subtitle = subtitle,
+        confirmLabel = confirmLabel,
+        errorText = if (error) stringResource(Res.string.vault_password_mismatch_retry) else null,
+        busy = busy,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+    )
+}
+
+/** The master-password dialog for any action it gates: [subtitle] and [confirmLabel] name that action. */
+@Composable
+internal fun PasswordConfirmDialog(
+    subtitle: String,
+    confirmLabel: String,
+    errorText: String?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
     VaultDialogScaffold(stringResource(Res.string.vault_confirm_master_title), subtitle, onDismiss) {
         DialogField(stringResource(Res.string.vault_field_master_password), password, { password = it }, placeholder = stringResource(Res.string.vault_placeholder_master_password), password = true)
-        if (error) Txt(stringResource(Res.string.vault_password_mismatch_retry), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+        if (errorText != null) Txt(errorText, color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+        StatusAnnouncer(errorText.orEmpty())
         // confirmEnabled is disabled while verifying (Argon2id) — otherwise a double-tap would run it twice.
         DialogButtons(confirmLabel = confirmLabel, confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
     }

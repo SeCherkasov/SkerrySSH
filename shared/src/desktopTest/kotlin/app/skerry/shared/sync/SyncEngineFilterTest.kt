@@ -82,7 +82,7 @@ class SyncEngineFilterTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
 
         // Page order: snippet BEFORE settings — the engine must apply SETTINGS first and use it to
         // filter the snippet from the same page (otherwise it would land before the disable took effect).

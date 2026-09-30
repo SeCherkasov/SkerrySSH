@@ -30,6 +30,15 @@ enum class SecurityEventType {
     /** Successful biometric unlock. */
     UnlockedBiometric,
 
+    /** Trusted-device unlock through the OS keyring turned on (issue #398). */
+    TrustedDeviceEnabled,
+
+    /** Trusted-device unlock turned off — by the user, the experimental switch, or a reset. */
+    TrustedDeviceDisabled,
+
+    /** The vault opened through the OS keyring, without the master password. */
+    UnlockedTrustedDevice,
+
     /** New device paired (quick pairing) — [detail] carries the device name. */
     DevicePaired,
 

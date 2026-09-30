@@ -371,7 +371,8 @@ fun DesktopDesignApp(
         // Terminal color theme: the app theme's twin, or the separately-picked one (Appearance → cards).
         LocalTerminalTheme provides effectiveTerminalTheme,
         // The open vault + biometrics behind the gate — needed for re-authentication before copying
-        // a password from the keychain (desktop has no biometrics, so the path reduces to the master password).
+        // a password from the keychain (on desktop the fast unlock is the OS keyring, which proves no
+        // presence, so the path reduces to the master password).
         LocalVault provides vault,
         LocalVaultBiometrics provides biometrics,
         LocalSecurityLog provides securityLog,

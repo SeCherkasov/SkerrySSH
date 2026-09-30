@@ -90,6 +90,8 @@
     <string name="sync_pairing_dialog_desc">На новом устройстве выберите «У меня есть код связывания», затем отсканируйте этот QR-код или вставьте код ниже. Код срабатывает один раз.</string>
     <string name="sync_done">Готово</string>
     <string name="sync_pairing_gen_failed">Не удалось создать код связывания.</string>
+    <string name="sync_pairing_password_prompt">Введите мастер-пароль, чтобы показать код.</string>
+    <string name="sync_pairing_show_code">Показать код</string>
     <string name="sync_generating_code">Создание кода…</string>
     <string name="sync_code_expired">Код истёк — закройте и начните заново</string>
     <string name="sync_expires_in">Истекает через %1$s</string>

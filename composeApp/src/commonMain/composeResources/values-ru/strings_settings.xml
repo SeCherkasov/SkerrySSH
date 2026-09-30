@@ -151,6 +151,12 @@
     <string name="settings_security_pw_changed_days">Последнее изменение %1$d дн. назад.</string>
     <string name="settings_security_biometric">Разблокировка по биометрии</string>
     <string name="settings_security_biometric_desc">Биометрия вместо мастер-пароля.</string>
+    <string name="settings_security_trusted_device">Доверять этому устройству</string>
+    <string name="settings_security_trusted_device_desc">Хранилище открывается через системную связку ключей, без мастер-пароля. Автоблокировка выключена; войдёт любой, кто вошёл в систему под вами.</string>
+    <string name="settings_security_trusted_device_missing">Системная связка ключей не найдена.</string>
+    <string name="settings_security_trusted_device_confirm">Введите мастер-пароль. Дальше хранилище открывает системная связка ключей — любому, кто вошёл под вами.</string>
+    <string name="settings_security_trusted_device_confirm_button">Доверять</string>
+    <string name="settings_security_trusted_device_refused">Системная связка ключей не приняла ключ.</string>
     <string name="settings_security_biometric_unsupported">Биометрическая разблокировка недоступна на этом устройстве.</string>
     <string name="settings_security_biometric_recheck">Проверить снова</string>
     <string name="settings_security_biometric_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
@@ -176,6 +182,9 @@
     <string name="settings_event_biometric_enabled">Включена разблокировка биометрией</string>
     <string name="settings_event_biometric_disabled">Выключена разблокировка биометрией</string>
     <string name="settings_event_unlocked_biometric">Разблокировка биометрией</string>
+    <string name="settings_event_trusted_device_enabled">Доверенное устройство включено</string>
+    <string name="settings_event_trusted_device_disabled">Доверенное устройство выключено</string>
+    <string name="settings_event_unlocked_trusted_device">Разблокировка доверенным устройством</string>
     <string name="settings_event_device_paired">Привязано новое устройство</string>
     <string name="settings_event_key_exported">Ключ экспортирован в файл</string>
     <string name="settings_event_lock_incomplete">Автоблокировка завершилась не полностью</string>
@@ -305,4 +314,6 @@
     <string name="keepalive_vendor_samsung">Samsung</string>
     <string name="settings_experimental_jump_shell">Shell прыжкового хоста</string>
     <string name="settings_experimental_jump_shell_desc">Форма подключения предлагает заходить на хост командой ssh в приглашении прыжкового хоста — для бастионов, где доступен только shell. Один вход на прыжковый хост обслуживает все такие вкладки. Когда выключено, такие профили на этом устройстве не подключаются.</string>
+    <string name="settings_experimental_trusted_device">Доверенное устройство</string>
+    <string name="settings_experimental_trusted_device_desc">Добавляет в «Безопасность» разблокировку хранилища через системную связку ключей. Выключение сбрасывает доверие.</string>
 </resources>

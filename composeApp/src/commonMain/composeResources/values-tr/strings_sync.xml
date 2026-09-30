@@ -79,6 +79,8 @@
     <string name="sync_pairing_dialog_desc">Yeni cihazda “Eşleştirme kodum var” seçeneğini seçin, ardından bu QR kodunu tarayın veya aşağıdaki kodu yapıştırın. Kod bir kez çalışır.</string>
     <string name="sync_done">Bitti</string>
     <string name="sync_pairing_gen_failed">Eşleştirme kodu oluşturulamadı.</string>
+    <string name="sync_pairing_password_prompt">Kodu göstermek için ana şifrenizi girin.</string>
+    <string name="sync_pairing_show_code">Kodu göster</string>
     <string name="sync_generating_code">Kod oluşturuluyor…</string>
     <string name="sync_code_expired">Kodun süresi doldu — kapatıp yeniden başlayın</string>
     <string name="sync_expires_in">Kalan süre: %1$s</string>

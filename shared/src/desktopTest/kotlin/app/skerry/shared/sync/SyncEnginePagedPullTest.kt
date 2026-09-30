@@ -55,7 +55,7 @@ class SyncEnginePagedPullTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
         SyncEngine(server, receiver, InMemorySyncStateStore()).sync(session)
 
         assertEquals((0 until 5).map { "h$it" }.toSet(), receiver.records().filter { it.type == RecordType.HOST }.map { it.id }.toSet())
@@ -76,7 +76,7 @@ class SyncEnginePagedPullTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
         SyncEngine(server, receiver, InMemorySyncStateStore(), settings = { SyncSettingsStore(receiver).load() }).sync(session)
 
         assertTrue(receiver.records().any { it.id == "h1" })

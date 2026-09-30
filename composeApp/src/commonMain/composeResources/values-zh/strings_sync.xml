@@ -90,6 +90,8 @@
     <string name="sync_pairing_dialog_desc">在新设备上选择“我有配对码”，然后扫描此二维码或粘贴下方代码。仅可使用一次。</string>
     <string name="sync_done">完成</string>
     <string name="sync_pairing_gen_failed">无法创建配对码。</string>
+    <string name="sync_pairing_password_prompt">输入主密码以显示代码。</string>
+    <string name="sync_pairing_show_code">显示代码</string>
     <string name="sync_generating_code">正在生成代码…</string>
     <string name="sync_code_expired">代码已过期 — 关闭并重新开始</string>
     <string name="sync_expires_in">%1$s 后过期</string>

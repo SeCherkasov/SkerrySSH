@@ -71,6 +71,22 @@ internal fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, session
 }
 
 /**
+ * [runDesktopShortcut] where the manual lock may not be offered ([onLock] `null`, see
+ * [app.skerry.ui.app.LocalManualLockOffered]): the lock chord then falls through like any other
+ * shortcut with no target.
+ */
+internal fun runOfferedDesktopShortcut(
+    shortcut: DesktopShortcut,
+    state: DesktopDesignState,
+    sessions: SessionsController?,
+    onLock: (() -> Unit)?,
+): Boolean = when {
+    onLock != null -> runDesktopShortcut(shortcut, state, sessions, onLock)
+    shortcut == DesktopShortcut.Lock -> false
+    else -> runDesktopShortcut(shortcut, state, sessions) {}
+}
+
+/**
  * Run a global shell hotkey ([matchDesktopShortcut]). Returns `true` if the action was applied
  * (consume the event), `false` if there's no target (e.g. Alt+digit past the tab count): the caller
  * then lets the key fall through (including to the snippet hotkey). Live mode addresses tabs via

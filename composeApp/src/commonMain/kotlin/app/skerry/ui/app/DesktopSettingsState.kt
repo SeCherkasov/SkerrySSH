@@ -59,6 +59,8 @@ class DesktopSettingsState(
     private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
     initialJumpViaShellOffered: Boolean = false,
     private val onJumpViaShellOfferedChange: (Boolean) -> Unit = {},
+    initialTrustedDeviceOffered: Boolean = false,
+    private val onTrustedDeviceOfferedChange: (Boolean) -> Unit = {},
     initialReportTeamSessions: Boolean = true,
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     initialOpenFilePathsInSftp: Boolean = true,
@@ -153,6 +155,13 @@ class DesktopSettingsState(
      * profile synced from elsewhere is refused here until this is on.
      */
     var jumpViaShellOffered: Boolean by mutableStateOf(initialJumpViaShellOffered); private set
+
+    /**
+     * Experimental (issue #398): whether Settings → Security offers opening the vault through the OS
+     * keyring. The key store reads the stored value per unlock, so turning this off stops the bypass
+     * even before the trust itself is dropped.
+     */
+    var trustedDeviceOffered: Boolean by mutableStateOf(initialTrustedDeviceOffered); private set
 
     /**
      * Whether opening a session on a host **shared with a team** is reported to that team's activity
@@ -357,6 +366,12 @@ class DesktopSettingsState(
     fun toggleJumpViaShellOffered() {
         jumpViaShellOffered = !jumpViaShellOffered
         onJumpViaShellOfferedChange(jumpViaShellOffered)
+    }
+
+    /** Toggle offering the trusted-device unlock and report outward (for persistence). */
+    fun toggleTrustedDeviceOffered() {
+        trustedDeviceOffered = !trustedDeviceOffered
+        onTrustedDeviceOfferedChange(trustedDeviceOffered)
     }
 
     /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */

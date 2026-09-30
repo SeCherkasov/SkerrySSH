@@ -28,6 +28,8 @@
     <string name="vtail_error_not_writable">Kasa dosyası yazılamadı — klasör izinlerini ve boş alanı denetleyin.</string>
     <string name="vtail_error_biometric_reset">Biyometri sıfırlandı — ana şifrenizle oturum açın.</string>
     <string name="vtail_error_biometric_failed">Biyometri çalışmadı — ana şifrenizi girin.</string>
+    <string name="vtail_error_trusted_device_failed">Sistem anahtarlığı yanıt vermedi — ana şifrenizi girin.</string>
+    <string name="vtail_error_trusted_device_reset">Cihaz güveni sıfırlandı — ana şifrenizi girin.</string>
     <string name="vtail_error_biometric_locked_out">Biyometri geçici olarak kilitlendi — ana şifrenizi girin.</string>
     <string name="vtail_error_biometric_unsupported">Biyometri bu telefonda çalışmıyor — ana şifrenizi kullanın.</string>
 

@@ -100,7 +100,7 @@ class DeviceLocalCredentialSyncTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
 
         engine(FakeSyncClient(serverRecords = remote), receiver).sync(session)
 
@@ -152,7 +152,7 @@ class DeviceLocalCredentialSyncTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
 
         engine(FakeSyncClient(serverRecords = remote), receiver).sync(session)
 
@@ -178,7 +178,7 @@ class DeviceLocalCredentialSyncTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
         receiver.mergeRemote(listOf(first)) // what the older release already put here
         assertEquals(first.version, receiver.records().first { it.id == "cred-file" }.version)
 
@@ -328,7 +328,7 @@ class DeviceLocalCredentialSyncTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
 
         engine(FakeSyncClient(serverRecords = remote), receiver).sync(session)
 
@@ -367,7 +367,7 @@ class DeviceLocalCredentialSyncTest {
 
         val receiver = newVault("devB")
         receiver.create(password.toCharArray())
-        receiver.unlockWithDataKey(source.exportDataKey()!!)
+        assertTrue(receiver.adoptDataKey(source.exportDataKey()!!, password.toCharArray()))
 
         engine(FakeSyncClient(serverRecords = remote), receiver).sync(session)
 

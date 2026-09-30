@@ -83,6 +83,21 @@ sealed interface BiometricResult<out T> {
 }
 
 /**
+ * What stands behind a [BiometricKeyStore] key — and so what a successful unwrap proves.
+ */
+enum class UnlockFactor {
+    /** A biometric prompt per operation: an unwrap proves the owner was there a moment ago. */
+    Biometric,
+
+    /**
+     * The OS keyring of the signed-in account (Secret Service, DPAPI, Keychain), issue #398. The
+     * key is released to any process of that account without asking anyone, so an unwrap proves
+     * only that this is the trusted device — not who is at the keyboard.
+     */
+    DeviceKeyring,
+}
+
+/**
  * Text for the system biometric prompt. UI strings (localized) are supplied from above —
  * `commonMain` does not hardcode them. `cancelLabel` is required: on Android it's the prompt's
  * negative button.
@@ -107,6 +122,9 @@ interface BiometricKeyStore {
 
     /** Current biometric availability; poll before every operation. */
     fun availability(): BiometricAvailability
+
+    /** What an unwrap by this store proves (see [UnlockFactor]). */
+    val factor: UnlockFactor get() = UnlockFactor.Biometric
 
     /**
      * Configurations to try when creating the `bioKey`, strongest first. A platform with a single

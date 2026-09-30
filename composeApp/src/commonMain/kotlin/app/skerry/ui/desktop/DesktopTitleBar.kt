@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.app.LocalManualLockOffered
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.generated.resources.Res
 import androidx.compose.ui.platform.testTag
@@ -166,7 +167,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
+            if (LocalManualLockOffered.current) Row(
                 Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(Skerry.colors.cyan08)

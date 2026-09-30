@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.app.LocalManualLockOffered
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
@@ -89,6 +90,7 @@ internal fun KeyboardSection() {
     val ctrl: (String) -> String = { k -> if (mac) "⌃$k" else "Ctrl+$k" }
     val ctrlShift: (String) -> String = { k -> if (mac) "⌃⇧$k" else "Ctrl+Shift+$k" }
     val shift: (String) -> String = { k -> if (mac) "⇧$k" else "Shift+$k" }
+    val lockOffered = LocalManualLockOffered.current
 
     val global = listOf(
         KeyboardBinding(stringResource(Res.string.settings_kb_new_connection), mod("N"), live = true),
@@ -104,12 +106,12 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_open_assistant), mod("/"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("E"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true).takeIf { lockOffered },
         // Deliberately not the terminal's Ctrl+Shift+C: outside a shell there is no SIGINT to avoid,
         // and this is the platform chord every other selectable surface answers to. Listed because
         // the terminal row two groups down teaches a different one for the same word.
         KeyboardBinding(stringResource(Res.string.settings_kb_copy_text), if (mac) "⌘C" else ctrl("C"), live = true),
-    )
+    ).filterNotNull()
     // Terminal-internal hotkeys (handled by TerminalScreen): fish-style autocomplete, history
     // reverse-search (Ctrl-R), copy/paste. Active while a terminal session is focused.
     val terminal = listOf(

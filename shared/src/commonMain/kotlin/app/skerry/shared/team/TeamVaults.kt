@@ -93,9 +93,14 @@ class TeamVaults(
             vault.createWithDataKey(ownedKey)
         } else {
             // Corrupt/unreadable file: unlockWithDataKey already wiped ownedKey. Don't reset — the
-            // bytes may be a transient/partial write over records not yet pushed.
-            if (vault.unlockWithDataKey(ownedKey) != UnlockResult.Success) return@synchronized OpenResult.Unreadable
-            // unlockWithDataKey doesn't validate the key (team-vault meta has no wrapping), so
+            // bytes may be a transient/partial write over records not yet pushed. A key the file's
+            // key check refuses is a superseded one, same as the probe below finds.
+            when (vault.unlockWithDataKey(ownedKey)) {
+                UnlockResult.Success -> Unit
+                UnlockResult.WrongPassword -> return@synchronized OpenResult.StaleKey
+                UnlockResult.Corrupted -> return@synchronized OpenResult.Unreadable
+            }
+            // A file written before the key check existed is opened unchecked, so
             // validate by trial-decrypting the first live record. An empty vault accepts any key.
             // A decrypt failure here is a superseded key, not corruption — safe to reset.
             val probe = vault.records().firstOrNull { !it.deleted }
