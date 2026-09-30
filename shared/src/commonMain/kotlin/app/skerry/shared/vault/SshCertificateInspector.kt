@@ -11,6 +11,8 @@ package app.skerry.shared.vault
  * certificate is issued for (empty == "any"). [serial] — serial number as a string (uint64 is
  * wider than `Long`). [validFrom]/[validUntil] — validity window (`validUntil` == [FOREVER] for
  * unlimited). [caFingerprintSha256] — fingerprint of the CA key (`SHA256:`+base64, no padding).
+ * [keyFingerprintSha256] — fingerprint of the key the certificate is issued for, comparable with
+ * [SshPublicKeyInfo.fingerprintSha256]; null when the inspector does not report it.
  */
 data class SshCertificateInfo(
     val keyTypeLabel: String,
@@ -21,6 +23,7 @@ data class SshCertificateInfo(
     val validUntil: String,
     val expired: Boolean,
     val caFingerprintSha256: String,
+    val keyFingerprintSha256: String? = null,
 ) {
     companion object {
         /** [validUntil] value for a certificate with no expiry (OpenSSH `valid before` == max). */

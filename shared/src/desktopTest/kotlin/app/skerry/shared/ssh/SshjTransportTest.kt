@@ -2,6 +2,9 @@ package app.skerry.shared.ssh
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import app.skerry.shared.vault.ENCRYPTED_ED25519
+import app.skerry.shared.vault.ENCRYPTED_ED25519_PASSPHRASE
+import app.skerry.shared.vault.withRounds
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
@@ -214,6 +217,24 @@ class SshjTransportTest {
             SshjTransport(acceptAllKeys)
                 .connect(target(), SshAuth.PublicKey(pkcs8Pem(generateRsaKeyPair())))
         }
+    }
+
+    /** loadKeys runs a key's bcrypt rounds uninterruptibly, so cancelling the connect would not stop it. */
+    @Test
+    fun `refuses a key demanding more bcrypt rounds than the cap without running them`() {
+        val hostile = withRounds(ENCRYPTED_ED25519, Int.MAX_VALUE.toLong())
+        var outcome: Throwable? = null
+        val connecting = Thread {
+            outcome = runCatching {
+                kotlinx.coroutines.runBlocking {
+                    SshjTransport(acceptAllKeys).connect(target(), SshAuth.PublicKey(hostile, ENCRYPTED_ED25519_PASSPHRASE))
+                }
+            }.exceptionOrNull()
+        }.apply { isDaemon = true; start() }
+        connecting.join(10_000)
+
+        assertFalse(connecting.isAlive, "the key's bcrypt rounds were run")
+        assertTrue(outcome is SshAuthenticationException, "got $outcome")
     }
 
     @Test

@@ -7,11 +7,12 @@
     <string name="vault_generate_key">Создать ключ</string>
     <string name="vault_add_password">Добавить пароль</string>
     <string name="vault_import_certificate">Импортировать сертификат</string>
+    <string name="vault_import_key">Импортировать ключ</string>
 
 
     <!-- Пустые состояния категорий. -->
     <string name="vault_empty_ssh_title">Пока нет SSH-ключей</string>
-    <string name="vault_empty_ssh_hint">Создайте ключ для привязки к хостам.</string>
+    <string name="vault_empty_ssh_hint">Создайте или импортируйте ключ для привязки к хостам.</string>
     <string name="vault_empty_passwords_title">Пока нет паролей</string>
     <string name="vault_empty_passwords_hint">Добавьте пароль — он хранится в зашифрованном виде и переиспользуется на разных хостах.</string>
     <string name="vault_empty_certificates_title">Пока нет сертификатов</string>
@@ -78,6 +79,13 @@
     <string name="vault_cert_valid_summary">%1$s · %2$s · действителен до %3$s</string>
     <string name="vault_import">Импорт</string>
 
+    <!-- Import key dialog (the certificate import above, with the certificate optional). -->
+    <string name="vault_dialog_import_key_subtitle">Приватный ключ запечатывается в хранилище. Сертификат необязателен.</string>
+    <string name="vault_key_read_error">Не удалось прочитать ключ — неверная парольная фраза или это не приватный ключ OpenSSH или PEM.</string>
+    <string name="vault_key_valid_summary">%1$s · %2$s</string>
+    <string name="vault_key_readable">Ключ прочитан: %1$s</string>
+    <string name="vault_cert_key_mismatch">Этот сертификат выпущен для другого ключа.</string>
+
     <!-- Подтверждение мастер-пароля перед копированием секрета. -->
     <string name="vault_confirm_master_title">Подтвердите мастер-пароль</string>
     <string name="vault_confirm_master_subtitle">Введите мастер-пароль, чтобы скопировать секрет в буфер обмена.</string>
@@ -134,6 +142,7 @@
     <string name="vault_hint_cert_sibling_opaque">Пусто: без сертификата — ключ аутентифицируется сам</string>
     <string name="vault_browse">Обзор…</string>
     <string name="vault_link">Связать</string>
+    <string name="vault_key_path_is_key">Это сам ключ, а не путь. Используйте «Импортировать ключ».</string>
     <string name="vault_badge_file">ФАЙЛ</string>
     <string name="vault_badge_file_missing">ФАЙЛ НЕ НАЙДЕН</string>
     <string name="vault_label_key_path">ФАЙЛ КЛЮЧА</string>
@@ -188,7 +197,7 @@
     <string name="vault_help_title">Хранилище</string>
     <string name="vault_help_intro">Учётные данные подключений, зашифрованные мастер-паролем. Синхронизация переносит только зашифрованные записи.</string>
     <string name="vault_help_categories">Категории</string>
-    <string name="vault_help_keys">создаются здесь или подключаются из файла; используются для входа на хосты</string>
+    <string name="vault_help_keys">создаются здесь, импортируются вставкой или подключаются из файла; используются для входа на хосты</string>
     <string name="vault_help_passwords">пароли хостов и учёток; копирования фиксируются в журнале использования</string>
     <string name="vault_help_certificates">SSH-сертификаты, импортированные из файлов, в паре с ключом</string>
     <string name="vault_help_snippets">В сниппетах</string>

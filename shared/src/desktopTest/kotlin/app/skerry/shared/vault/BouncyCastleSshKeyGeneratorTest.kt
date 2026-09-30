@@ -6,6 +6,7 @@ import java.security.MessageDigest
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -78,5 +79,36 @@ class BouncyCastleSshKeyGeneratorTest {
     fun `inspect returns null for garbage`() {
         assertNull(gen.inspect("not a pem at all"))
         assertNull(gen.inspect(""))
+    }
+
+    @Test
+    fun `an encrypted key reads with its passphrase and not without`() {
+        assertEquals("ED25519", gen.inspect(ENCRYPTED_ED25519, ENCRYPTED_ED25519_PASSPHRASE)?.keyTypeLabel)
+        assertNull(gen.inspect(ENCRYPTED_ED25519, null))
+        assertNull(gen.inspect(ENCRYPTED_ED25519, "wrong"))
+    }
+
+    /**
+     * A pasted key sets its own bcrypt cost and sshj pays it in full, uninterruptibly — the vault's
+     * import dialog reads keys as they are typed. Past the cap it must be refused, not computed:
+     * Int.MAX_VALUE rounds would run for days, so a thread still busy after seconds means it was run.
+     */
+    /** Each form sshj reads: plain, with the base64 padding dropped, with text after the header. */
+    @Test
+    fun `a key demanding more bcrypt rounds than the cap is refused without running them`() {
+        val hostile = withRounds(ENCRYPTED_ED25519, Int.MAX_VALUE.toLong())
+        val forms = listOf(
+            hostile,
+            hostile.replace("=", ""),
+            hostile.replace("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN OPENSSH PRIVATE KEY----- PRIVATE KEY-----"),
+        )
+        for (form in forms) {
+            var result: SshPublicKeyInfo? = SshPublicKeyInfo("", "", "unset")
+            val reader = Thread { result = gen.inspect(form, ENCRYPTED_ED25519_PASSPHRASE) }.apply { isDaemon = true; start() }
+            reader.join(10_000)
+
+            assertFalse(reader.isAlive, "the key's bcrypt rounds were run:\n$form")
+            assertNull(result)
+        }
     }
 }

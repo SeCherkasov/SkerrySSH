@@ -61,6 +61,8 @@ class BouncyCastleSshKeyGenerator(
     }
 
     override fun inspect(privateKeyPem: String, passphrase: String?): SshPublicKeyInfo? = runCatching {
+        // sshj runs the key's own bcrypt count unbounded and uninterruptibly: refuse it before parsing.
+        if (!kdfCostAcceptable(privateKeyPem)) return null
         // sshj loadKeys goes through the JCE "BC" provider, stripped down on Android, which breaks
         // PEM parsing. Register the full provider before parsing (idempotent).
         ensureCryptoProvider()

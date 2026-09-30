@@ -54,18 +54,14 @@ import app.skerry.shared.text.capNotes
 import app.skerry.ui.design.FormField
 import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
-import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyType
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.shtail_group_label
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_add
 import app.skerry.ui.generated.resources.vault_add_password
-import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_browse
 import app.skerry.ui.generated.resources.vault_cancel
-import app.skerry.ui.generated.resources.vault_cert_read_error
-import app.skerry.ui.generated.resources.vault_cert_valid_summary
 import app.skerry.ui.generated.resources.vault_confirm_master_subtitle
 import app.skerry.ui.generated.resources.vault_confirm_master_subtitle_export
 import app.skerry.ui.generated.resources.vault_export
@@ -78,28 +74,23 @@ import app.skerry.ui.generated.resources.vault_delete_title
 import app.skerry.ui.generated.resources.vault_dialog_add_password_subtitle
 import app.skerry.ui.generated.resources.vault_dialog_generate_subtitle
 import app.skerry.ui.generated.resources.vault_dialog_generate_title
-import app.skerry.ui.generated.resources.vault_dialog_import_subtitle
 import app.skerry.ui.generated.resources.vault_dialog_key_file_subtitle
 import app.skerry.ui.generated.resources.vault_field_algorithm
 import app.skerry.ui.generated.resources.vault_field_cert_path
-import app.skerry.ui.generated.resources.vault_field_certificate
 import app.skerry.ui.generated.resources.vault_field_key_path
 import app.skerry.ui.generated.resources.vault_field_master_password
 import app.skerry.ui.generated.resources.vault_field_name
 import app.skerry.ui.generated.resources.vault_field_passphrase
 import app.skerry.ui.generated.resources.vault_field_password
-import app.skerry.ui.generated.resources.vault_field_private_key_pem
 import app.skerry.ui.generated.resources.vault_generate
 import app.skerry.ui.generated.resources.vault_hint_cert_sibling
 import app.skerry.ui.generated.resources.vault_hint_cert_sibling_opaque
-import app.skerry.ui.generated.resources.vault_import
-import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_key_path_is_key
 import app.skerry.ui.generated.resources.vault_key_file_missing
 import app.skerry.ui.generated.resources.vault_link
 import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_password_mismatch_retry
 import app.skerry.ui.generated.resources.vault_placeholder_master_password
-import app.skerry.ui.generated.resources.vault_placeholder_name_cert
 import app.skerry.ui.generated.resources.vault_placeholder_name_key
 import app.skerry.ui.generated.resources.vault_placeholder_name_key_file
 import app.skerry.ui.generated.resources.vault_placeholder_name_password
@@ -159,46 +150,6 @@ internal fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, p
     }
 }
 
-@Composable
-internal fun ImportCertificateDialog(
-    inspector: SshCertificateInspector,
-    onDismiss: () -> Unit,
-    onCreate: (name: String, pem: String, certificate: String, passphrase: String?) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    var pem by remember { mutableStateOf("") }
-    var certificate by remember { mutableStateOf("") }
-    var passphrase by remember { mutableStateOf("") }
-    // Metadata is computed from the entered cert string — this doubles as validation that it's a valid certificate.
-    val info = remember(certificate, inspector) { certificate.trim().takeIf { it.isNotEmpty() }?.let { inspector.inspect(it) } }
-    val certInvalid = certificate.isNotBlank() && info == null
-    val valid = name.isNotBlank() && pem.isNotBlank() && info != null
-
-    VaultDialogScaffold(stringResource(Res.string.vault_import_certificate), stringResource(Res.string.vault_dialog_import_subtitle), onDismiss) {
-        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_cert))
-        Box(Modifier.padding(top = 16.dp)) {
-            DialogField(stringResource(Res.string.vault_field_private_key_pem), pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false, keyboardType = KeyboardType.Password)
-        }
-        Box(Modifier.padding(top = 16.dp)) {
-            DialogField(stringResource(Res.string.vault_field_certificate), certificate, { certificate = it }, placeholder = "ssh-…-cert-v01@openssh.com …", singleLine = false)
-        }
-        Box(Modifier.padding(top = 16.dp)) {
-            DialogField(stringResource(Res.string.vault_field_passphrase), passphrase, { passphrase = it }, placeholder = stringResource(Res.string.vault_placeholder_optional), password = true)
-        }
-        when {
-            certInvalid -> Txt(stringResource(Res.string.vault_cert_read_error), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
-            info != null -> {
-                val principalsPart = if (info.principals.isEmpty()) stringResource(Res.string.vault_any_principal) else info.principals.joinToString(", ")
-                Txt(
-                    stringResource(Res.string.vault_cert_valid_summary, info.keyTypeLabel, principalsPart, info.validUntil),
-                    color = Skerry.colors.moss, size = 11.sp, modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-        }
-        DialogButtons(confirmLabel = stringResource(Res.string.vault_import), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
-    }
-}
-
 /** One ref line in the detail panel, in monospace, with a note when the file isn't readable here. */
 @Composable
 internal fun RefRow(ref: String, missing: Boolean, mono: FontFamily) {
@@ -209,7 +160,7 @@ internal fun RefRow(ref: String, missing: Boolean, mono: FontFamily) {
 }
 
 /**
- * Links a key (and optionally a certificate) that stays on disk. Unlike [ImportCertificateDialog]
+ * Links a key (and optionally a certificate) that stays on disk. Unlike [ImportKeyDialog]
  * nothing is read here: only the locations are kept, which is what lets a short-lived certificate
  * keep working while its issuer rewrites the file.
  *
@@ -227,7 +178,9 @@ internal fun LinkKeyFileDialog(
     var certRef by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    val valid = name.isNotBlank() && normalizeKeyFileRef(keyRef).isNotEmpty()
+    // The key itself pasted where its path goes (issue #396) is refused here, not linked as a path.
+    val pastedKey = looksLikeKeyMaterial(keyRef) || looksLikeKeyMaterial(certRef)
+    val valid = name.isNotBlank() && normalizeKeyFileRef(keyRef).isNotEmpty() && !pastedKey
     val browseTitle = stringResource(Res.string.vault_link_key_file)
 
     VaultDialogScaffold(stringResource(Res.string.vault_link_key_file), stringResource(Res.string.vault_dialog_key_file_subtitle), onDismiss) {
@@ -242,7 +195,11 @@ internal fun LinkKeyFileDialog(
                 scope.launch { pickSecretFileRef(browseTitle)?.let { certRef = it } }
             }
         }
-        if (normalizeKeyFileRef(certRef).isEmpty()) {
+        val pastedKeyError = if (pastedKey) stringResource(Res.string.vault_key_path_is_key) else ""
+        StatusAnnouncer(pastedKeyError)
+        if (pastedKey) {
+            Txt(pastedKeyError, color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 8.dp))
+        } else if (normalizeKeyFileRef(certRef).isEmpty()) {
             val sibling = keyFileSiblingRef(normalizeKeyFileRef(keyRef))
             Txt(
                 if (sibling != null) stringResource(Res.string.vault_hint_cert_sibling, sibling)

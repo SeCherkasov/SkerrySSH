@@ -6,9 +6,10 @@
     <string name="vault_generate_key">Anahtar oluştur</string>
     <string name="vault_add_password">Şifre ekle</string>
     <string name="vault_import_certificate">Sertifika içe aktar</string>
+    <string name="vault_import_key">Anahtar içe aktar</string>
 
     <string name="vault_empty_ssh_title">Henüz SSH anahtarı yok</string>
-    <string name="vault_empty_ssh_hint">Sunuculara eklemek için bir anahtar oluşturun.</string>
+    <string name="vault_empty_ssh_hint">Sunuculara eklemek için bir anahtar oluşturun veya içe aktarın.</string>
     <string name="vault_empty_passwords_title">Henüz şifre yok</string>
     <string name="vault_empty_passwords_hint">Bir şifre ekleyin — şifreli saklanır ve sunucular arasında yeniden kullanılabilir.</string>
     <string name="vault_empty_certificates_title">Henüz sertifika yok</string>
@@ -71,6 +72,13 @@
     <string name="vault_cert_valid_summary">%1$s · %2$s · geçerlilik sonu: %3$s</string>
     <string name="vault_import">İçe aktar</string>
 
+    <!-- Import key dialog (the certificate import above, with the certificate optional). -->
+    <string name="vault_dialog_import_key_subtitle">Özel anahtar kasanızda mühürlenir. Sertifika isteğe bağlıdır.</string>
+    <string name="vault_key_read_error">Anahtar okunamadı — parola yanlış ya da bu bir OpenSSH veya PEM özel anahtarı değil.</string>
+    <string name="vault_key_valid_summary">%1$s · %2$s</string>
+    <string name="vault_key_readable">Anahtar okundu: %1$s</string>
+    <string name="vault_cert_key_mismatch">Bu sertifika başka bir anahtar için verilmiş.</string>
+
     <string name="vault_confirm_master_title">Ana şifreyi onaylayın</string>
     <string name="vault_confirm_master_subtitle">Bu gizli bilgiyi panoya kopyalamak için ana şifrenizi girin.</string>
     <string name="vault_confirm_master_subtitle_export">Bu özel anahtarı dosyaya yazmak için ana şifrenizi girin.</string>
@@ -123,6 +131,7 @@
     <string name="vault_hint_cert_sibling_opaque">Boş: sertifika yok — anahtar tek başına kimlik doğrular</string>
     <string name="vault_browse">Gözat…</string>
     <string name="vault_link">Bağla</string>
+    <string name="vault_key_path_is_key">Bu bir yol değil, anahtarın kendisi. Bunun yerine “Anahtar içe aktar”ı kullanın.</string>
     <string name="vault_badge_file">DOSYA</string>
     <string name="vault_badge_file_missing">DOSYA YOK</string>
     <string name="vault_label_key_path">ANAHTAR DOSYASI</string>
@@ -171,7 +180,7 @@
     <string name="vault_help_title">Kasa</string>
     <string name="vault_help_intro">Bağlantılar için kimlik bilgileri, ana şifre altında şifreli olarak saklanır. Eşitleme yalnızca şifreli kayıtları aktarır.</string>
     <string name="vault_help_categories">Kategoriler</string>
-    <string name="vault_help_keys">burada oluşturulur veya bir dosyadan bağlanır; sunucularda kimlik doğrulamak için kullanılır</string>
+    <string name="vault_help_keys">burada oluşturulur, yapıştırılarak içe aktarılır veya bir dosyadan bağlanır; sunucularda kimlik doğrulamak için kullanılır</string>
     <string name="vault_help_passwords">sunucu ve oturum açma şifreleri; kopyalamalar kullanım günlüğüne kaydedilir</string>
     <string name="vault_help_certificates">dosyalardan içe aktarılan, bir anahtarla eşleştirilmiş SSH sertifikaları</string>
     <string name="vault_help_snippets">Kod parçacıklarında</string>

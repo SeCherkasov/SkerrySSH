@@ -63,6 +63,7 @@ import app.skerry.ui.generated.resources.vault_generate_key
 import app.skerry.ui.generated.resources.vault_header_summary
 import app.skerry.ui.generated.resources.vault_item_count
 import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_import_key
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_public_key
 import app.skerry.ui.generated.resources.vault_link_key_file
@@ -106,7 +107,10 @@ import app.skerry.ui.vault.CertificateDetailBody
 import app.skerry.ui.vault.DeleteSecretDialog
 import app.skerry.ui.vault.DetailLabel
 import app.skerry.ui.vault.GenerateKeyDialog
-import app.skerry.ui.vault.ImportCertificateDialog
+import app.skerry.ui.vault.ImportKeyDialog
+import app.skerry.ui.vault.ImportKeyMode
+import app.skerry.ui.vault.importCategory
+import app.skerry.ui.vault.importedKeyDraft
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.NoticeDialog
@@ -197,7 +201,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     var showHelp by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     val secretFiles = LocalSecretFileReader.current
-    var showImportCert by remember { mutableStateOf(false) }
+    var importMode by remember { mutableStateOf<ImportKeyMode?>(null) }
     var showLinkKeyFile by remember { mutableStateOf(false) }
     var pendingEdit by remember { mutableStateOf<Credential?>(null) }
     var pendingDelete by remember { mutableStateOf<Credential?>(null) }
@@ -211,7 +215,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // over the centered dialog and covers the bottom input fields above the keyboard. LaunchedEffect
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
-    val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingEdit != null || pendingDelete != null ||
+    val modalOpen = showGenerate || showAddPassword || importMode != null || showLinkKeyFile || pendingEdit != null || pendingDelete != null ||
         selectedCred != null || copyAuth.passwordPromptVisible || exportFailed || showHelp
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
@@ -233,11 +237,12 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
             MobileVaultAction(
                 category = category,
                 canGenerate = generator != null,
-                canImportCert = inspector != null,
+                canImportKey = generator != null,
+                canImportCert = generator != null && inspector != null,
                 onGenerate = { showGenerate = true },
                 onAddPassword = { showAddPassword = true },
                 canLinkFile = secretFiles != null,
-                onImportCert = { showImportCert = true },
+                onImport = { importMode = it },
                 onLinkKeyFile = { showLinkKeyFile = true },
             )
             // 6dp on top of the row's own 12dp: the list lines up with the pills and the title above it.
@@ -298,22 +303,18 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 },
             )
         }
-        if (showImportCert && inspector != null) {
-            ImportCertificateDialog(
+        val importing = importMode
+        if (importing != null && generator != null) {
+            ImportKeyDialog(
+                mode = importing,
+                generator = generator,
                 inspector = inspector,
-                onDismiss = { showImportCert = false },
+                onDismiss = { importMode = null },
                 onCreate = { name, pem, cert, passphrase ->
-                    selectedId = credentials.save(
-                        CredentialDraft(
-                            label = name,
-                            kind = CredentialKind.CERTIFICATE,
-                            privateKeyPem = pem,
-                            certificate = cert,
-                            passphrase = passphrase ?: "",
-                        ),
-                    )
-                    category = VaultCategoryKind.CERTIFICATES
-                    showImportCert = false
+                    val draft = importedKeyDraft(name, pem, cert, passphrase)
+                    selectedId = credentials.save(draft)
+                    category = draft.importCategory()
+                    importMode = null
                 },
             )
         }
@@ -508,23 +509,27 @@ private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Cre
     }
 }
 
-/** Context action button per category — generate key / add password / import certificate. */
+/** Context action buttons per category — generate or import a key / add password / import certificate. */
 @Composable
 private fun MobileVaultAction(
     category: VaultCategoryKind,
     canGenerate: Boolean,
+    canImportKey: Boolean,
     canImportCert: Boolean,
     canLinkFile: Boolean,
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
-    onImportCert: () -> Unit,
+    onImport: (ImportKeyMode) -> Unit,
     onLinkKeyFile: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (category) {
-            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add", modifier = Modifier.fillMaxWidth())
+            VaultCategoryKind.SSH_KEYS -> {
+                if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add", modifier = Modifier.fillMaxWidth())
+                if (canImportKey) GhostButton(stringResource(Res.string.vault_import_key), onClick = { onImport(ImportKeyMode.KEY) }, modifier = Modifier.fillMaxWidth())
+            }
             VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add", modifier = Modifier.fillMaxWidth())
-            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add", modifier = Modifier.fillMaxWidth())
+            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = { onImport(ImportKeyMode.CERTIFICATE) }, icon = "add", modifier = Modifier.fillMaxWidth())
         }
         // Same rule as desktop: a file-backed secret can be either kind, so the action shows in both.
         if (canLinkFile && category != VaultCategoryKind.PASSWORDS) {

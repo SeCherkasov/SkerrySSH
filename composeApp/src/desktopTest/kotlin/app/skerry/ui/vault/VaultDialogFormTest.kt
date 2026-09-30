@@ -1,25 +1,40 @@
 package app.skerry.ui.vault
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import app.skerry.shared.vault.SshCertificateInfo
+import app.skerry.shared.vault.SshCertificateInspector
+import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SshKeyType
+import app.skerry.shared.vault.SshPublicKeyInfo
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.desktop.onField
 import app.skerry.ui.desktop.runForm
+import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.vault_field_certificate
+import app.skerry.ui.generated.resources.vault_cert_key_mismatch
+import app.skerry.ui.generated.resources.vault_cert_read_error
 import app.skerry.ui.generated.resources.vault_field_cert_path
+import app.skerry.ui.generated.resources.vault_field_certificate
 import app.skerry.ui.generated.resources.vault_field_key_path
 import app.skerry.ui.generated.resources.vault_field_name
 import app.skerry.ui.generated.resources.vault_field_note
+import app.skerry.ui.generated.resources.vault_field_passphrase
 import app.skerry.ui.generated.resources.vault_field_password
 import app.skerry.ui.generated.resources.vault_field_private_key_pem
+import app.skerry.ui.generated.resources.vault_key_path_is_key
+import app.skerry.ui.generated.resources.vault_key_read_error
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -90,19 +105,175 @@ class VaultDialogFormTest {
     fun `a certificate that does not parse cannot be imported`() {
         var created = false
         runForm({
-            ImportCertificateDialog(
+            ImportKeyDialog(
+                mode = ImportKeyMode.CERTIFICATE,
+                generator = FakeKeys(),
                 inspector = SshjCertificateInspector(),
                 onDismiss = {},
                 onCreate = { _, _, _, _ -> created = true },
             )
         }) {
             onField(Res.string.vault_field_name).performTextInput(NAME)
-            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
-
             onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            awaitKeyRead()
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
 
             onField(Res.string.vault_field_certificate).performTextInput(CERT)
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+        }
+        assertTrue(!created)
+    }
+
+    /** Opened from Certificates, the import is a certificate import: a bare key is not what was asked for. */
+    @Test
+    fun `a certificate import needs the certificate`() {
+        runForm({
+            ImportKeyDialog(ImportKeyMode.CERTIFICATE, FakeKeys(), CertInspector, onDismiss = {}, onCreate = { _, _, _, _ -> })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            awaitKeyRead()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_certificate).performTextInput(VALID_CERT)
+            awaitSaveEnabled()
+        }
+    }
+
+    /** Issue #396's ask: a pasted private key becomes a key secret, with no certificate and no file. */
+    @Test
+    fun `importing a key without a certificate hands back just the key`() {
+        var created: List<String?>? = null
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(), CertInspector, onDismiss = {}, onCreate = { name, pem, cert, pass -> created = listOf(name, pem, cert, pass) })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            onField(Res.string.vault_field_private_key_pem).performTextInput("\n$PEM\n")
+            awaitSaveEnabled()
+            onNodeWithText(KEY_INFO.fingerprintSha256, substring = true).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(listOf(NAME, PEM, null, null), created)
+    }
+
+    /**
+     * What sshj cannot load here, it cannot log in with either: the key is read with the same parser
+     * the connection uses, and a record that fails it never reaches the vault.
+     */
+    @Test
+    fun `a private key that does not parse cannot be imported`() {
+        var created = false
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(), CertInspector, onDismiss = {}, onCreate = { _, _, _, _ -> created = true })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput("-----BEGIN OPENSSH PRIVATE KEY-----\nnot a key")
+            awaitKeyRead()
+            onNodeWithText(string(Res.string.vault_key_read_error)).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled().performClick()
+            waitForIdle()
+        }
+        assertTrue(!created)
+    }
+
+    /** An encrypted key reads only with its passphrase — and that passphrase is what gets stored. */
+    @Test
+    fun `an encrypted key imports once its passphrase is entered`() {
+        var created: List<String?>? = null
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(passphrase = SECRET), CertInspector, onDismiss = {}, onCreate = { name, pem, cert, pass -> created = listOf(name, pem, cert, pass) })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            awaitKeyRead()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_passphrase).performTextInput(SECRET)
+            awaitSaveEnabled()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(listOf(NAME, PEM, null, SECRET), created)
+    }
+
+    /** The certificate is optional for a key, but one that is there has to parse. */
+    @Test
+    fun `an optional certificate is handed back when it parses and blocks the import when it does not`() {
+        var created: List<String?>? = null
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(), CertInspector, onDismiss = {}, onCreate = { name, pem, cert, pass -> created = listOf(name, pem, cert, pass) })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            awaitSaveEnabled()
+
+            onField(Res.string.vault_field_certificate).performTextInput(CERT)
+            onNodeWithText(string(Res.string.vault_cert_read_error)).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_certificate).performTextReplacement(VALID_CERT)
+            awaitSaveEnabled()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(listOf(NAME, PEM, VALID_CERT, null), created)
+    }
+
+    /**
+     * A verdict belongs to the text it was read from. Edited after reading, the key is unread again
+     * until the next read lands — the button must shut at once, not after the pause, or the click in
+     * between saves a key nobody read.
+     */
+    @Test
+    fun `editing a key after it read shuts the import until it is read again`() {
+        var created = false
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(passphrase = SECRET), CertInspector, onDismiss = {}, onCreate = { _, _, _, _ -> created = true })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            onField(Res.string.vault_field_passphrase).performTextInput(SECRET)
+            awaitSaveEnabled()
+
+            onField(Res.string.vault_field_passphrase).performTextReplacement("hunter3")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_passphrase).performTextReplacement(SECRET)
+            awaitSaveEnabled()
+            onField(Res.string.vault_field_private_key_pem).performTextReplacement("$PEM\nx")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled().performClick()
+            waitForIdle()
+        }
+        assertTrue(!created)
+    }
+
+    /** A certificate that parses but names another key would be refused by the server at login. */
+    @Test
+    fun `a certificate issued for another key cannot be imported with this one`() {
+        runForm({
+            ImportKeyDialog(ImportKeyMode.KEY, FakeKeys(), CertInspector, onDismiss = {}, onCreate = { _, _, _, _ -> })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_private_key_pem).performTextInput(PEM)
+            onField(Res.string.vault_field_certificate).performTextInput(OTHER_KEY_CERT)
+            awaitKeyRead()
+            onNodeWithText(string(Res.string.vault_cert_key_mismatch)).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+        }
+    }
+
+    /** Issue #396: the key itself in the path field was linked as a path and broke the vault on open. */
+    @Test
+    fun `a key pasted into the key file path is refused`() {
+        var created = false
+        runForm({
+            LinkKeyFileDialog(onDismiss = {}, onCreate = { _, _, _, _ -> created = true })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_key_path).performTextInput(PEM)
+            onNodeWithText(string(Res.string.vault_key_path_is_key)).assertExists()
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
         }
         assertTrue(!created)
@@ -144,6 +315,24 @@ class VaultDialogFormTest {
         }
         assertEquals(KEY_PATH, created?.second)
         assertEquals("$KEY_PATH-cert.pub", created?.third)
+    }
+
+    /** A certificate line in the certificate path is the same mistake as a key in the key path. */
+    @Test
+    fun `a certificate pasted into the certificate path is refused`() {
+        runForm({
+            LinkKeyFileDialog(onDismiss = {}, onCreate = { _, _, _, _ -> })
+        }) {
+            onField(Res.string.vault_field_name).performTextInput(NAME)
+            onField(Res.string.vault_field_key_path).performTextInput(KEY_PATH)
+            onField(Res.string.vault_field_cert_path).performTextInput(VALID_CERT)
+            onNodeWithText(string(Res.string.vault_key_path_is_key)).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_cert_path).performTextReplacement("$KEY_PATH-cert.pub")
+            onNodeWithText(string(Res.string.vault_key_path_is_key)).assertDoesNotExist()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled()
+        }
     }
 
     /** Saving the same name and note is a sync push with nothing in it, so the button stays shut. */
@@ -290,3 +479,35 @@ private const val PEM = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPEN
 private const val KEY_PATH = "~/.ssh/id_ed25519"
 private const val RENAMED = "laptop-key"
 private const val CERT = "ssh-ed25519-cert-v01@openssh.com AAAA"
+private const val VALID_CERT = "ssh-ed25519-cert-v01@openssh.com AAAAvalid alice@skerry"
+private val KEY_INFO = SshPublicKeyInfo("ssh-ed25519 AAAAC3Nza", "SHA256:q0uM3cD0x5aW", "ED25519")
+
+/** Reads [PEM] as a key — with [passphrase] only, when one is set — and nothing else. */
+private class FakeKeys(private val passphrase: String? = null) : SshKeyGenerator {
+    override fun generate(type: SshKeyType, comment: String) = error("the import never generates")
+    override fun inspect(privateKeyPem: String, passphrase: String?): SshPublicKeyInfo? =
+        KEY_INFO.takeIf { privateKeyPem == PEM && passphrase == this.passphrase }
+}
+
+private const val OTHER_KEY_CERT = "ssh-ed25519-cert-v01@openssh.com AAAAother bob@skerry"
+
+private val CertInspector = SshCertificateInspector { cert ->
+    val issuedFor = when (cert) {
+        VALID_CERT -> KEY_INFO.fingerprintSha256
+        OTHER_KEY_CERT -> "SHA256:someone-else"
+        else -> return@SshCertificateInspector null
+    }
+    SshCertificateInfo("ED25519", "alice", listOf("alice"), "1", "2026-01-01", SshCertificateInfo.FOREVER, false, "SHA256:ca", issuedFor)
+}
+
+/** The key is read off the UI thread; a verdict either way shows as a line under the fields. */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.awaitKeyRead() = waitUntil(timeoutMillis = 5_000) {
+    val verdicts = listOf(string(Res.string.vault_key_read_error), KEY_INFO.fingerprintSha256)
+    verdicts.any { onAllNodesWithText(it, substring = true).fetchSemanticsNodes().isNotEmpty() }
+}
+
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.awaitSaveEnabled() = waitUntil(timeoutMillis = 5_000) {
+    onNodeWithTag(UiTags.FORM_SAVE).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null
+}

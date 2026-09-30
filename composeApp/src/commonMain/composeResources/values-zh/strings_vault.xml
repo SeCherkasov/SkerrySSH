@@ -7,11 +7,12 @@
     <string name="vault_generate_key">生成密钥</string>
     <string name="vault_add_password">添加密码</string>
     <string name="vault_import_certificate">导入证书</string>
+    <string name="vault_import_key">导入密钥</string>
 
 
     <!-- 空分类状态 -->
     <string name="vault_empty_ssh_title">暂无 SSH 密钥</string>
-    <string name="vault_empty_ssh_hint">生成密钥以附加到主机。</string>
+    <string name="vault_empty_ssh_hint">生成或导入密钥以附加到主机。</string>
     <string name="vault_empty_passwords_title">暂无密码</string>
     <string name="vault_empty_passwords_hint">添加密码——它将被加密存储，可跨主机重复使用。</string>
     <string name="vault_empty_certificates_title">暂无证书</string>
@@ -78,6 +79,13 @@
     <string name="vault_cert_valid_summary">%1$s · %2$s · 有效期至 %3$s</string>
     <string name="vault_import">导入</string>
 
+    <!-- Import key dialog (the certificate import above, with the certificate optional). -->
+    <string name="vault_dialog_import_key_subtitle">私钥将加密存储在保险库中。证书为可选项。</string>
+    <string name="vault_key_read_error">无法读取该密钥——密码短语错误，或不是 OpenSSH 或 PEM 私钥。</string>
+    <string name="vault_key_valid_summary">%1$s · %2$s</string>
+    <string name="vault_key_readable">密钥可读：%1$s</string>
+    <string name="vault_cert_key_mismatch">此证书是为另一个密钥签发的。</string>
+
     <!-- 复制密钥前确认主密码 -->
     <string name="vault_confirm_master_title">确认主密码</string>
     <string name="vault_confirm_master_subtitle">请输入主密码以将此密钥复制到剪贴板。</string>
@@ -134,6 +142,7 @@
     <string name="vault_hint_cert_sibling_opaque">留空：无证书 — 仅用密钥认证</string>
     <string name="vault_browse">浏览…</string>
     <string name="vault_link">关联</string>
+    <string name="vault_key_path_is_key">这是密钥本身，不是路径。请改用“导入密钥”。</string>
     <string name="vault_badge_file">文件</string>
     <string name="vault_badge_file_missing">文件缺失</string>
     <string name="vault_label_key_path">密钥文件</string>
@@ -182,7 +191,7 @@
     <string name="vault_help_title">保险库</string>
     <string name="vault_help_intro">连接所用的凭据，以主密码加密存储。同步只传输加密记录。</string>
     <string name="vault_help_categories">类别</string>
-    <string name="vault_help_keys">在此生成或从文件链接；用于主机身份验证</string>
+    <string name="vault_help_keys">在此生成、粘贴导入或从文件链接；用于主机身份验证</string>
     <string name="vault_help_passwords">主机和账号密码；复制操作会记入使用日志</string>
     <string name="vault_help_certificates">从文件导入的 SSH 证书，与密钥配对</string>
     <string name="vault_help_snippets">在片段中</string>
