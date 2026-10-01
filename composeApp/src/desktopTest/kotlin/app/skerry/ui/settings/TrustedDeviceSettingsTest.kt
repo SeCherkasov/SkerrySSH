@@ -53,6 +53,7 @@ import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -91,7 +92,13 @@ class TrustedDeviceSettingsTest {
         show { controller -> ExperimentalSection(state, controller) }
 
         onNodeWithContentDescription(string(Res.string.settings_experimental_trusted_device)).performClick()
-        waitUntil { !biometrics.isEnabled() }
+        // The trust goes in steps — `vault.bio` first, the keyring entry a D-Bus beat later, the
+        // offered flag on the click's own thread — so the wait covers every postcondition the
+        // asserts check, not the first one to land (#418).
+        waitUntil(
+            "the flag off to land everywhere: biometrics, the offered flag, the keyring entry",
+            timeoutMillis = 5_000,
+        ) { !biometrics.isEnabled() && !state.settings.trustedDeviceOffered && secrets.isEmpty() }
 
         assertFalse(state.settings.trustedDeviceOffered)
         assertTrue(secrets.isEmpty(), "the keyring entry goes with it")
@@ -209,10 +216,15 @@ class TrustedDeviceSettingsTest {
     }
 }
 
-/** The OS keyring, in memory. */
+/**
+ * The OS keyring, in memory. A delete lands [KEYRING_DELETE_MS] after it is asked for, like the
+ * D-Bus call it stands for — that gap after `vault.bio` is already gone is the interleaving a
+ * loaded runner caught (#418). The controller writes from its io dispatcher while the test reads,
+ * so the entries are a concurrent map.
+ */
 private class InMemorySecrets : DeviceSecretStore {
-    private val entries = mutableMapOf<String, ByteArray>()
-    var available = true
+    private val entries = ConcurrentHashMap<String, ByteArray>()
+    @Volatile var available = true
     fun isEmpty() = entries.isEmpty()
     override fun isAvailable() = available
     override fun read(name: String) = entries[name]?.copyOf()
@@ -220,9 +232,12 @@ private class InMemorySecrets : DeviceSecretStore {
         entries[name] = secret.copyOf()
     }
     override fun delete(name: String) {
+        Thread.sleep(KEYRING_DELETE_MS)
         entries.remove(name)
     }
 }
+
+private const val KEYRING_DELETE_MS = 200L
 
 private val PROMPT = BiometricPrompt(title = "Trust", cancelLabel = "Cancel")
 private const val PASSWORD = "correct horse battery"

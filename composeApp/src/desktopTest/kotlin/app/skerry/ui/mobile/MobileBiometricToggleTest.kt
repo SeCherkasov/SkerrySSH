@@ -84,8 +84,10 @@ class MobileBiometricToggleTest {
             waitUntil { switchIsOn() }
 
             onSwitch().performClick()
-            waitUntil { !artifacts.exists() }
-            waitForIdle()
+            // The artifact goes first and the row follows it back from another dispatcher (#418):
+            // wait on everything this test asserts, or the row can still read on over a key that
+            // is on its way out.
+            waitUntil { !artifacts.exists() && !switchIsOn() && keyStore.deleted.isNotEmpty() }
             // The row has to follow the artifact: a switch stuck on over a deleted key tells the user
             // they can unlock with a fingerprint when they no longer can.
             onSwitch().assertIsOff()
