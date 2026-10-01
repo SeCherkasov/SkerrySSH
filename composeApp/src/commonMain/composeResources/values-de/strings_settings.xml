@@ -235,6 +235,10 @@
     <string name="settings_kb_sudo_password">Gespeichertes Passwort an sudo senden</string>
     <string name="settings_kb_open_link_or_path">Link oder Dateipfad öffnen</string>
     <string name="settings_kb_mouse_click">Strg+Klick</string>
+    <string name="settings_kb_jump_prev_command">Zum vorherigen Befehl springen</string>
+    <string name="settings_kb_jump_next_command">Zum nächsten Befehl springen</string>
+    <string name="settings_kb_select_command_output">Befehlsausgabe auswählen</string>
+    <string name="settings_kb_mouse_gutter">Auf die Befehlsmarkierung klicken</string>
     <string name="settings_kb_files_drag_copy">In das andere Pane kopieren</string>
     <string name="settings_kb_files_drag_move">In das andere Pane verschieben</string>
     <string name="settings_kb_mouse_drag">Ziehen</string>

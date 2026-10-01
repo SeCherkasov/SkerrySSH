@@ -231,6 +231,10 @@
     <string name="settings_kb_sudo_password">Kayıtlı şifreyi sudo'ya gönder</string>
     <string name="settings_kb_open_link_or_path">Bağlantı veya dosya yolu aç</string>
     <string name="settings_kb_mouse_click">Ctrl+tıklama</string>
+    <string name="settings_kb_jump_prev_command">Önceki komuta git</string>
+    <string name="settings_kb_jump_next_command">Sonraki komuta git</string>
+    <string name="settings_kb_select_command_output">Komut çıktısını seç</string>
+    <string name="settings_kb_mouse_gutter">Komut işaretine tıkla</string>
     <string name="settings_kb_files_drag_copy">Diğer bölmeye kopyala</string>
     <string name="settings_kb_files_drag_move">Diğer bölmeye taşı</string>
     <string name="settings_kb_mouse_drag">Sürükle</string>

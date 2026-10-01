@@ -159,4 +159,10 @@
     <string name="term_key_armed">armed</string>
     <string name="term_key_open">open</string>
     <string name="term_sudo_offer">Enter — send the saved password for %1$s</string>
+    <string name="term_marks_strip">Command marks</string>
+    <string name="term_jump_announced">Jumped to %1$s</string>
+    <string name="term_jump_announced_exit">Jumped to %1$s — exit %2$s</string>
+    <string name="term_jump_none">No more commands</string>
+    <string name="term_mark_select_prev">Select previous command's output</string>
+    <string name="term_mark_select_next">Select next command's output</string>
 </resources>

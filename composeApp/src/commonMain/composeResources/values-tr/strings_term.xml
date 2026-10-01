@@ -154,4 +154,10 @@
     <string name="term_key_armed">etkin</string>
     <string name="term_key_open">açık</string>
     <string name="term_sudo_offer">Enter — kayıtlı şifreyi gönder: %1$s</string>
+    <string name="term_marks_strip">Komut işaretleri</string>
+    <string name="term_jump_announced">Şuraya geçildi: %1$s</string>
+    <string name="term_jump_announced_exit">Şuraya geçildi: %1$s — çıkış kodu %2$s</string>
+    <string name="term_jump_none">Başka komut yok</string>
+    <string name="term_mark_select_prev">Önceki komutun çıktısını seç</string>
+    <string name="term_mark_select_next">Sonraki komutun çıktısını seç</string>
 </resources>

@@ -235,6 +235,10 @@
     <string name="settings_kb_sudo_password">Отправить сохранённый пароль в sudo</string>
     <string name="settings_kb_open_link_or_path">Открыть ссылку или файловый путь</string>
     <string name="settings_kb_mouse_click">Ctrl+клик</string>
+    <string name="settings_kb_jump_prev_command">К предыдущей команде</string>
+    <string name="settings_kb_jump_next_command">К следующей команде</string>
+    <string name="settings_kb_select_command_output">Выделить вывод команды</string>
+    <string name="settings_kb_mouse_gutter">Клик по метке команды</string>
     <string name="settings_kb_files_drag_copy">Копировать в другую панель</string>
     <string name="settings_kb_files_drag_move">Переместить в другую панель</string>
     <string name="settings_kb_mouse_drag">Перетаскивание</string>

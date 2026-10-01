@@ -15,6 +15,7 @@ import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.SessionRecorder
+import app.skerry.shared.terminal.ShellCommandMark
 import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.terminal.isPasswordPrompt
 import app.skerry.shared.terminal.MouseEventType
@@ -204,6 +205,17 @@ class TerminalScreenState(
 
     /** Current mouse selection (or `null` if nothing is selected). Render highlights it. */
     var selection: TerminalSelection? by mutableStateOf(null)
+        private set
+
+    /**
+     * Shell integration marks (OSC 133), oldest first, in [screen]'s row coordinates — one per
+     * command the shell bracketed. Empty until the host's shell has the integration installed.
+     */
+    var commandMarks: List<ShellCommandMark> by mutableStateOf(emptyList())
+        private set
+
+    /** Working directory the shell last reported (OSC 7); `null` until it does. Feeds the SFTP panel. */
+    var workingDirectory: String? by mutableStateOf<String?>(null)
         private set
 
     // Session recording (asciinema v2). Touched only by the command loop below, the same coroutine
@@ -567,6 +579,10 @@ class TerminalScreenState(
             rows = emulator.rows
             cursorRow = emulator.cursorRow
             cursorCol = emulator.cursorCol
+            // Marks and cwd ride the same atomic group as the rows they address: a marker drawn
+            // against a newer screen than its mark list would point one publish off.
+            commandMarks = emulator.shellCommandMarks()
+            workingDirectory = emulator.workingDirectory
         }
         cursorVisible = emulator.cursorVisible
         cursorShape = emulator.cursorShape
@@ -672,8 +688,25 @@ class TerminalScreenState(
      * selected, so the AI sees the recent result rather than the whole screen (a long login banner
      * would otherwise drown it out). `null` when the command boundary can't be found; the caller then
      * falls back to the whole visible screen. See [lastCommandBlock] for the heuristic.
+     *
+     * With shell integration (OSC 133) the boundaries are exact: the last command that reported an
+     * output start is quoted from its own C anchor to its D (see [commandOutputSelection]) — the
+     * heuristic only serves a shell without integration.
      */
-    fun lastOutput(): String? = lastCommandBlock(output)
+    fun lastOutput(): String? {
+        for (mark in commandMarks.asReversed()) {
+            val text = commandOutputSelection(mark)?.let { outputSelection ->
+                outputSelection.extract(screen).takeIf { it.isNotEmpty() }
+            }
+            if (text != null) return text
+        }
+        return lastCommandBlock(output)
+    }
+
+    /** Selects a command's output — the gutter marker's click. Copy then works as with any selection. */
+    fun selectCommandOutput(mark: ShellCommandMark) {
+        selection = commandOutputSelection(mark)?.takeIf { !it.isEmpty }
+    }
 
     /**
      * In-app PRIMARY buffer: text of the last mouse selection. Used for middle-click paste where

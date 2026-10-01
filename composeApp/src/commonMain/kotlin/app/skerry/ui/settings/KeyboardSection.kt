@@ -49,6 +49,8 @@ import app.skerry.ui.generated.resources.settings_kb_files_save
 import app.skerry.ui.generated.resources.settings_kb_files_switch_pane
 import app.skerry.ui.generated.resources.settings_kb_open_assistant
 import app.skerry.ui.generated.resources.settings_kb_focus_pane
+import app.skerry.ui.generated.resources.settings_kb_jump_next_command
+import app.skerry.ui.generated.resources.settings_kb_jump_prev_command
 import app.skerry.ui.generated.resources.settings_kb_global
 import app.skerry.ui.generated.resources.settings_kb_lock
 import app.skerry.ui.generated.resources.settings_kb_new_connection
@@ -68,6 +70,8 @@ import app.skerry.ui.generated.resources.settings_kb_files_drag_move
 import app.skerry.ui.generated.resources.settings_kb_mouse_drag
 import app.skerry.ui.generated.resources.settings_kb_mouse_shift_drag
 import app.skerry.ui.generated.resources.settings_kb_mouse_click
+import app.skerry.ui.generated.resources.settings_kb_mouse_gutter
+import app.skerry.ui.generated.resources.settings_kb_select_command_output
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_add_pane
@@ -131,6 +135,10 @@ internal fun KeyboardSection() {
         // Mouse chord rather than a key, but it lives in the terminal and users look for it here:
         // Ctrl+click opens an OSC 8/plain URL, or a file path in the file panel.
         KeyboardBinding(stringResource(Res.string.settings_kb_open_link_or_path), stringResource(Res.string.settings_kb_mouse_click), live = true),
+        // Shell integration (OSC 133) — kitty's chords; need the host shell to emit the marks.
+        KeyboardBinding(stringResource(Res.string.settings_kb_jump_prev_command), ctrlShift("Z"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_jump_next_command), ctrlShift("X"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_select_command_output), stringResource(Res.string.settings_kb_mouse_gutter), live = true),
     )
 
     // File panel (SFTP view) F-keys, mc/Total Commander style — the same labels the bottom bar uses.
