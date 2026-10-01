@@ -1,0 +1,49 @@
+<resources>
+    <!-- Leftover non-@Composable user-facing strings from the vault surface (prefix vtail_). -->
+
+    <!-- Biometric prompts (title / cancel button / subtitle): vault-gate enable & unlock, secret-copy re-auth. -->
+    <string name="vtail_bio_enable_title">Biometrie aktivieren</string>
+    <string name="vtail_bio_enable_cancel">Abbrechen</string>
+    <string name="vtail_bio_enable_subtitle">Bestätige deine Biometrie, um die Tresor-Entsperrung zu verknüpfen.</string>
+    <string name="vtail_bio_verify_title">Biometrisches Entsperren prüfen</string>
+    <string name="vtail_bio_verify_subtitle">Noch eine Berührung, um zu prüfen, dass das Entsperren funktioniert.</string>
+    <string name="vtail_bio_unlock_title">Skerry entsperren</string>
+    <string name="vtail_bio_unlock_cancel">Passwort eingeben</string>
+    <string name="vtail_bio_unlock_subtitle">Bestätige deine Biometrie, um den Tresor zu öffnen.</string>
+    <string name="vtail_bio_copy_title">Bestätige, dass du es bist</string>
+    <string name="vtail_bio_copy_cancel">Abbrechen</string>
+    <string name="vtail_bio_copy_subtitle">Bestätige deine Biometrie, um dieses Secret in die Zwischenablage zu kopieren.</string>
+    <string name="vtail_bio_export_subtitle">Bestätige deine Biometrie, um diesen privaten Schlüssel in eine Datei zu schreiben.</string>
+
+    <!-- Auth picker: keychain credential type labels. -->
+    <string name="vtail_picker_type_password">Passwort</string>
+    <string name="vtail_picker_type_ssh_key">SSH-Schlüssel</string>
+    <string name="vtail_picker_type_certificate">Zertifikat</string>
+
+    <!-- Vault-gate error messages (keys ready; wiring blocked by VaultGateErrorMessageTest). -->
+    <string name="vtail_error_password_too_short">Passwort ist zu kurz — mindestens %1$d Zeichen.</string>
+    <string name="vtail_error_password_mismatch">Passwörter stimmen nicht überein.</string>
+    <string name="vtail_error_wrong_password">Falsches Master-Passwort.</string>
+    <string name="vtail_error_corrupted">Die Tresor-Datei ist beschädigt oder nicht lesbar.</string>
+    <string name="vtail_error_not_writable">Tresor-Datei konnte nicht geschrieben werden — prüfe Berechtigungen des Ordners und freien Speicherplatz.</string>
+    <string name="vtail_error_biometric_reset">Biometrie wurde zurückgesetzt — melde dich mit deinem Master-Passwort an.</string>
+    <string name="vtail_error_biometric_failed">Biometrie hat nicht funktioniert — gib dein Master-Passwort ein.</string>
+    <string name="vtail_error_trusted_device_failed">Der System-Schlüsselbund antwortet nicht — gib dein Master-Passwort ein.</string>
+    <string name="vtail_error_trusted_device_reset">Gerätevertrauen wurde zurückgesetzt — gib dein Master-Passwort ein.</string>
+    <string name="vtail_error_biometric_locked_out">Biometrie ist vorübergehend gesperrt — gib dein Master-Passwort ein.</string>
+    <string name="vtail_error_biometric_unsupported">Biometrie funktioniert auf diesem Telefon nicht — nutze dein Master-Passwort.</string>
+
+    <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
+    <string name="vtail_used_by_snippets_one">von 1 Snippet verwendet</string>
+    <string name="vtail_used_by_snippets_other">von %1$d Snippets verwendet</string>
+    <string name="vtail_snippets_frag_one">1 Snippet</string>
+    <string name="vtail_snippets_frag_other">%1$d Snippets</string>
+
+    <!-- Vault sidebar category titles (keys ready; wiring blocked by field access in VaultView/MobileVaultView). -->
+    <string name="vtail_category_ssh_keys">SSH-Schlüssel</string>
+    <string name="vtail_category_passwords">Passwörter</string>
+    <string name="vtail_category_certificates">Zertifikate</string>
+
+    <!-- Secret card meta line: %1$s — cert principals / key fingerprint, %2$s — "used by" fragment. -->
+    <string name="vtail_picker_type_key_file">Schlüsseldatei</string>
+</resources>

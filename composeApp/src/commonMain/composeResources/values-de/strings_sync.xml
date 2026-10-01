@@ -1,0 +1,160 @@
+<resources>
+    <!-- Sync / self-hosted синхронизация (mobile Sync screen, онбординг, диалоги паринга) -->
+    <string name="sync_title">Sync</string>
+    <string name="sync_mobile_intro">Ende-zu-Ende-verschlüsselter Sync über deine Geräte hinweg. Skerry sieht deine Daten niemals im Klartext.</string>
+    <string name="sync_unavailable_title">Sync nicht verfügbar</string>
+    <string name="sync_unavailable_subtitle">Auf diesem Gerät nicht konfiguriert.</string>
+    <string name="sync_back">Zurück</string>
+
+    <!-- Онбординг / форма подключения -->
+    <string name="sync_setup_title">Sync einrichten</string>
+    <string name="sync_setup_desc">Verbinde dieses Gerät mit deinem Sync-Server. Ende-zu-Ende-verschlüsselt — Skerry sieht deine Daten niemals im Klartext.</string>
+    <string name="sync_connecting">Verbinde…</string>
+    <string name="sync_connecting_sub">Kommuniziert mit deinem Sync-Server.</string>
+    <string name="sync_syncing">Synchronisiere…</string>
+
+    <!-- Развилка хранения -->
+    <string name="sync_storage_choice_title">Wo soll Skerry deinen Tresor aufbewahren?</string>
+    <string name="sync_storage_choice_desc">Deine Hosts und Schlüssel sind immer verschlüsselt. Behalte sie nur auf diesem Gerät oder synchronisiere über deine Geräte hinweg mit einem selbst betriebenen Server.</string>
+    <string name="sync_storage_local_title">Lokaler verschlüsselter Speicher</string>
+    <string name="sync_storage_local_sub">Alles bleibt auf diesem Gerät. Kein Konto, kein Server.</string>
+    <string name="sync_storage_server_title">Selbst gehosteter Sync-Server</string>
+    <string name="sync_storage_server_sub">Ende-zu-Ende-verschlüsselter Sync über deine Geräte hinweg, über einen selbst betriebenen Server.</string>
+    <string name="sync_switch_later">Du kannst später in den Einstellungen wechseln.</string>
+
+    <!-- Перерегистрация биометрии после смены ключа -->
+    <string name="sync_reenroll_title">Fingerabdruck erneut aktivieren</string>
+    <string name="sync_reenroll_desc">Die Verbindung mit deinem Konto hat den Tresor-Schlüssel geändert, darum wurde die biometrische Entsperrung deaktiviert. Richte sie erneut ein, um mit deinem Fingerabdruck zu entsperren.</string>
+    <string name="sync_reenroll_action">Erneut aktivieren</string>
+    <string name="sync_not_now">Nicht jetzt</string>
+
+    <!-- Подключённое состояние -->
+    <string name="sync_connected_title">Verbunden · %1$s</string>
+    <string name="sync_session_stats">In dieser Sitzung %1$d gesendet · %2$d abgerufen</string>
+    <string name="sync_sync_now">Jetzt synchronisieren</string>
+    <string name="sync_disconnect">Trennen</string>
+    <string name="sync_linked_title">Verknüpft · %1$s</string>
+    <string name="sync_reconnect_password">Neu verbinden mit deinem Master-Passwort.</string>
+
+    <!-- Поля формы -->
+    <string name="sync_field_server_url">Server-URL</string>
+    <string name="sync_placeholder_server_url">https://sync.example.com</string>
+    <string name="sync_field_account">Konto</string>
+    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_field_master_password">Master-Passwort</string>
+    <string name="sync_placeholder_master_password">Master-Passwort</string>
+    <string name="sync_keep_connected">Angemeldet bleiben</string>
+    <string name="sync_keep_connected_sub">Nach einem Neustart automatisch neu verbinden.</string>
+    <string name="sync_keep_connected_sub_long">Nach einem Neustart automatisch neu verbinden — ohne Passwort.</string>
+    <string name="sync_insecure_url_warning">Pures http:// — unverschlüsselte Übertragung. Nutze https:// für alles außer lokale Tests.</string>
+    <string name="sync_connect">Verbinden</string>
+    <string name="sync_zero_knowledge">Zero-Knowledge</string>
+    <string name="sync_zero_knowledge_password">Zero-Knowledge · Passwort verlässt dieses Gerät nie</string>
+
+    <!-- Связывание по коду (join) -->
+    <string name="sync_join_title">Mit Code verknüpfen</string>
+    <string name="sync_join_desc">Öffne auf einem bereits angemeldeten Gerät Einstellungen → Sync → Gerät verknüpfen und scanne dann dessen QR-Code oder füge den Code hier ein. Das Passwort unten verschlüsselt den Tresor dieses Geräts und kann nicht wiederhergestellt werden — verlierst du es, musst du von vorn verknüpfen.</string>
+    <string name="sync_field_pairing_code">Kopplungscode</string>
+    <string name="sync_placeholder_pairing_code">Code einfügen (sk1.…)</string>
+    <string name="sync_scan_qr">QR-Code scannen</string>
+    <string name="sync_field_choose_password">Wähle ein Passwort für dieses Gerät</string>
+    <string name="sync_placeholder_min_chars">mindestens %1$d Zeichen</string>
+    <string name="sync_field_repeat_password">Passwort wiederholen</string>
+    <string name="sync_placeholder_repeat">zum Bestätigen wiederholen</string>
+    <string name="sync_passwords_mismatch">Passwörter stimmen nicht überein.</string>
+    <string name="sync_link_this_device">Dieses Gerät verknüpfen</string>
+    <string name="sync_zero_knowledge_account">Zero-Knowledge · das Kontopasswort wird nie übertragen</string>
+
+    <!-- Что синхронизируется -->
+    <string name="sync_what_syncs">WAS SYNCHRONISIERT WIRD</string>
+    <string name="sync_what_hosts">Hosts &amp; Gruppen</string>
+    <string name="sync_what_snippets">Snippets</string>
+
+    <!-- Секция связывания устройства -->
+    <string name="sync_link_device">Gerät verknüpfen</string>
+    <string name="sync_hide">Ausblenden</string>
+
+    <!-- Связанные устройства -->
+    <string name="sync_linked_devices">VERKNÜPFTE GERÄTE</string>
+    <string name="sync_loading_devices">Geräte werden geladen…</string>
+    <string name="sync_load_devices_failed">Geräte konnten nicht geladen werden. Versuche Jetzt synchronisieren.</string>
+    <string name="sync_only_this_device">Bisher nur dieses Gerät.</string>
+    <string name="sync_this_device_badge">● dieses Gerät</string>
+    <string name="sync_confirm">Bestätigen</string>
+    <string name="sync_cancel">Abbrechen</string>
+    <string name="sync_revoke">Widerrufen</string>
+    <!-- Last resort for a linked device whose name and id both filter away to nothing -->
+    <string name="sync_device_unnamed">Unbenanntes Gerät</string>
+
+    <!-- Desktop-диалоги -->
+    <string name="sync_setup_dialog_desc">Ende-zu-Ende-verschlüsselt. Skerry sieht deine Daten niemals im Klartext — das Master-Passwort bleibt auf deinem Gerät.</string>
+    <string name="sync_pairing_dialog_desc">Wähle auf dem neuen Gerät „Ich habe einen Kopplungscode“ und scanne dann diesen QR-Code oder füge den Code unten ein. Er funktioniert einmal.</string>
+    <string name="sync_done">Fertig</string>
+    <string name="sync_pairing_gen_failed">Kopplungscode konnte nicht erstellt werden.</string>
+    <string name="sync_pairing_password_prompt">Gib dein Master-Passwort ein, um den Code anzuzeigen.</string>
+    <string name="sync_pairing_show_code">Code anzeigen</string>
+    <string name="sync_generating_code">Code wird erstellt…</string>
+    <string name="sync_code_expired">Code abgelaufen — schließen und neu starten</string>
+    <string name="sync_expires_in">Läuft ab in %1$s</string>
+    <string name="sync_copied">Kopiert</string>
+    <string name="sync_copy">Kopieren</string>
+
+    <!-- Причины SyncStatus.Failed (typed reason → текст; техническая деталь добавляется после двоеточия) -->
+    <string name="sync_fail_vault_locked">Tresor ist gesperrt</string>
+    <string name="sync_fail_unauthorized">Falsches Passwort oder Konto. Nutze für ein neues Konto das Passwort dieses Tresors.</string>
+    <string name="sync_fail_account_not_found">Konto nicht gefunden</string>
+    <string name="sync_fail_account_exists">Konto existiert bereits</string>
+    <string name="sync_fail_pairing_expired">Kopplungscode abgelaufen</string>
+    <string name="sync_fail_network">Server ist nicht erreichbar</string>
+    <string name="sync_fail_protocol">Sync-Protokollfehler</string>
+    <string name="sync_fail_connect">Verbinden fehlgeschlagen</string>
+    <string name="sync_fail_code_malformed">Das sieht nicht nach einem Kopplungscode aus</string>
+    <string name="sync_fail_code_invalid">Kopplungscode ist ungültig</string>
+    <string name="sync_fail_wrong_device_password">Falsches Passwort für dieses Gerät</string>
+    <string name="sync_fail_local_vault_corrupted">Lokaler Tresor ist beschädigt</string>
+    <string name="sync_fail_pairing">Gerät konnte nicht verknüpft werden. Prüfe den Code und versuche es erneut.</string>
+    <string name="sync_fail_save_settings">Sync-Einstellungen konnten nicht gespeichert werden</string>
+    <string name="sync_fail_sync">Synchronisierung fehlgeschlagen</string>
+    <string name="sync_fail_revoke">Gerät konnte nicht widerrufen werden</string>
+    <string name="sync_fail_too_many_requests">Der Server drosselt Anfragen — warte einen Moment und versuche es erneut</string>
+    <string name="sync_fail_server_error">Der Server antwortet nicht korrekt — versuche es später erneut</string>
+    <string name="sync_fail_rejected">Der Server hat diese Anfrage abgelehnt — wende dich an dessen Administrator</string>
+    <string name="sync_fail_registration_refused_signin">Der Server hat Registrierung und Anmeldung abgelehnt — prüfe das Passwort</string>
+    <string name="sync_fail_reconcile_required">Dieses Gerät muss seine Daten vom Server neu aufbauen — zum Synchronisieren neu verbinden</string>
+
+    <!-- issue #28: joining an existing account whose password differs re-keys this device to it -->
+    <string name="sync_password_replace_title">Dein Kontopasswort verwenden?</string>
+    <string name="sync_password_replace_body">Das Konto „%1$s“ nutzt ein anderes Passwort. Zum Synchronisieren wechselt dieses Gerät zum Entsperren mit deinem Kontopasswort.</string>
+    <string name="sync_password_replace_confirm">Kontopasswort verwenden</string>
+    <string name="sync_password_replace_cancel">Abbrechen</string>
+
+    <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
+    <string name="sync_account_id_label">Konto-ID</string>
+    <string name="sync_sharing_fingerprint_label">Fingerprint des Freigabeschlüssels</string>
+    <string name="sync_identity_hint">Ein Team-Besitzer benötigt diese Kennungen, um dich in ein Team einzuladen.</string>
+
+    <!-- Web access: the password for the browser account zone at /account (Settings -> Sync) -->
+    <string name="web_access_label">WEB-ZUGRIFF</string>
+    <string name="web_access_title">Kontoseite im Browser</string>
+    <string name="web_access_desc">Das Web-Passwort ist vom Master-Passwort getrennt. Ein Browser zeigt Geräte, Aktivität und Datensatzgrößen — nicht die Datensätze.</string>
+    <string name="web_access_state_on">Aktiviert</string>
+    <string name="web_access_state_off">Nicht gesetzt</string>
+    <string name="web_access_state_unknown">Status nicht lesbar</string>
+    <string name="web_access_checking">Prüfen…</string>
+    <!-- Screen-reader confirmation after a set/change/remove; %1$s — one of the state lines above -->
+    <string name="web_access_announce">Web-Zugriff: %1$s</string>
+    <string name="web_access_set">Passwort festlegen</string>
+    <string name="web_access_change">Ändern</string>
+    <string name="web_access_open">Öffnen</string>
+    <string name="web_access_remove">Deaktivieren</string>
+    <string name="web_access_field_new">Web-Passwort</string>
+    <string name="web_access_field_repeat">Passwort wiederholen</string>
+    <string name="web_access_save">Speichern</string>
+    <string name="web_access_cancel">Abbrechen</string>
+    <string name="web_access_too_short">Mindestens %1$d Zeichen.</string>
+    <string name="web_access_too_long">Höchstens %1$d Zeichen.</string>
+    <string name="web_access_mismatch">Passwörter stimmen nicht überein.</string>
+    <string name="web_access_not_connected">Verbinde dich zuerst mit dem Sync-Server.</string>
+    <string name="web_access_remove_title">Web-Zugriff deaktivieren?</string>
+    <string name="web_access_remove_body">Ein aktuell angemeldeter Browser wird abgemeldet. Ein erneutes Festlegen eines Passworts öffnet die Seite wieder.</string>
+</resources>

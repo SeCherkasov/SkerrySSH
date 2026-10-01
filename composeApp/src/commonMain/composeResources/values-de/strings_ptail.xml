@@ -1,0 +1,15 @@
+<resources>
+    <string name="ptail_dynamic_proxy">dynamischer Proxy</string>
+    <string name="ptail_ports_active">%1$d aktiv</string>
+    <string name="ptail_all_verified">Alle verifiziert</string>
+    <string name="ptail_changed">%1$d geändert</string>
+    <string name="ptail_err_host_not_trusted">Host-Schlüssel nicht vertrauenswürdig</string>
+    <string name="ptail_err_auth_failed">Authentifizierung fehlgeschlagen</string>
+    <string name="ptail_err_forward_failed">Portweiterleitung fehlgeschlagen</string>
+    <string name="ptail_err_connection_failed">Verbindung fehlgeschlagen</string>
+
+    <!-- Throughput templates: unit name and decimal separator are part of the translation -->
+    <string name="ptail_rate_bytes">%1$d B/s</string>
+    <string name="ptail_rate_kb">%1$d KB/s</string>
+    <string name="ptail_rate_mb">%1$d,%2$d MB/s</string>
+</resources>

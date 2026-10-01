@@ -1,0 +1,17 @@
+<resources>
+    <string name="guard_prod_connect_title">Mit Produktion verbinden?</string>
+    <string name="guard_prod_connect_message">%1$s ist mit #prod getaggt. In dieser Sitzung verlangen riskante Befehle vor der Ausführung eine Bestätigung.</string>
+    <string name="guard_prod_connect_confirm">Verbinden</string>
+    <string name="guard_prod_command_title">Das auf Produktion ausführen?</string>
+    <string name="guard_prod_command_host">%1$s ist mit #prod getaggt.</string>
+    <string name="guard_prod_nothing_to_show">kein Befehl anzuzeigen</string>
+    <string name="guard_prod_on_line">bereits in der Zeile</string>
+    <string name="guard_prod_further_in">weiter hinten in dieser Eingabe</string>
+    <string name="guard_prod_sending">wird gesendet</string>
+    <string name="guard_prod_command_confirm">Ausführen</string>
+    <string name="guard_prod_broadcast_title">Broadcast an Produktion?</string>
+    <string name="guard_prod_broadcast_message">%1$d der ausgewählten Sitzungen laufen auf Produktionssystemen. Der Befehl geht gleichzeitig an jede Sitzung.</string>
+    <string name="guard_prod_broadcast_confirm">Senden</string>
+    <string name="guard_prod_snippet_title">Das Snippet auf Produktion ausführen?</string>
+    <string name="guard_prod_snippet_message">%1$s ist mit #prod getaggt. Das Snippet läuft, sobald die Sitzung geöffnet wird.</string>
+</resources>

@@ -1,0 +1,130 @@
+<resources>
+    <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
+    <string name="runbook_section">Runbooks</string>
+    <string name="runbook_new">Neues Runbook</string>
+    <string name="runbook_untitled">Unbenanntes Runbook</string>
+    <string name="runbook_palette_placeholder">Runbook ausführen…</string>
+    <string name="runbook_toolbar_tip">Runbook ausführen</string>
+    <string name="runbook_search">Runbooks durchsuchen…</string>
+    <string name="runbook_select_or_create">Runbook auswählen oder ein neues erstellen.</string>
+    <string name="runbook_empty">Noch keine Runbooks</string>
+    <string name="runbook_no_matches">Keine Treffer</string>
+    <string name="runbook_none_runnable">Kein Runbook hat einen ausführbaren Schritt</string>
+    <string name="runbook_empty_mobile">Noch keine Runbooks. Zum Schreiben einer Prozedur auf + tippen.</string>
+    <string name="runbook_field_name">Name</string>
+    <string name="runbook_field_description">Beschreibung</string>
+    <string name="runbook_field_tags">Tags</string>
+    <string name="runbook_ph_name">API neu starten</string>
+    <string name="runbook_ph_tags">#ops</string>
+    <string name="runbook_ph_description">Was diese Prozedur tut und wann du sie abbrechen solltest.</string>
+    <string name="runbook_steps">Schritte</string>
+    <string name="runbook_step_n">Schritt %1$d</string>
+    <string name="runbook_step_title">Schrittname</string>
+    <string name="runbook_step_command">Befehl</string>
+    <string name="runbook_step_add">Schritt hinzufügen</string>
+    <string name="runbook_step_remove">Schritt entfernen</string>
+    <string name="runbook_step_up">Nach oben</string>
+    <string name="runbook_step_down">Nach unten</string>
+    <string name="runbook_step_confirm">Vor dem Ausführen nachfragen</string>
+    <string name="runbook_step_continue_on_error">Bei Fehler fortfahren</string>
+    <string name="runbook_step_interactive">Interaktiv</string>
+    <string name="runbook_save">Speichern</string>
+    <string name="runbook_delete">Löschen</string>
+    <string name="runbook_delete_title">Runbook löschen</string>
+    <string name="runbook_delete_message">„%1$s“ und sein Ausführungsverlauf werden gelöscht.</string>
+    <string name="runbook_run">Ausführen</string>
+    <string name="runbook_run_needs_save">Zum Ausführen die bearbeitete Prozedur speichern</string>
+    <string name="runbook_run_title">Runbook ausführen</string>
+    <string name="runbook_run_needs_session">Zuerst eine Sitzung verbinden — ein Runbook läuft in einem Terminal.</string>
+    <string name="runbook_run_busy">Ein anderes Runbook läuft bereits.</string>
+    <string name="runbook_run_no_steps">Zuerst einen Schritt speichern — ein Runbook führt seine gespeicherten Schritte aus.</string>
+    <string name="runbook_step_count">Schritte: %1$d</string>
+
+    <!-- Run panel -->
+    <string name="runbook_panel_running">Läuft</string>
+    <string name="runbook_panel_stalled">Noch keine Ausgabe und kein Status — die Shell wartet vielleicht auf Eingaben. Prüfe das Terminal.</string>
+    <string name="runbook_panel_waiting">Wartet auf dich</string>
+    <string name="runbook_panel_done">Abgeschlossen</string>
+    <string name="runbook_panel_done_with_failures">Mit Fehlern abgeschlossen</string>
+    <string name="runbook_panel_failed">Bei einem Fehler gestoppt</string>
+    <string name="runbook_panel_stopped">Gestoppt</string>
+    <string name="runbook_panel_run_step">Diesen Schritt ausführen</string>
+    <string name="runbook_panel_complete_step">Schritt abschließen</string>
+    <string name="runbook_panel_skip_step">Überspringen</string>
+    <string name="runbook_panel_stop">Ausführung stoppen</string>
+    <string name="runbook_panel_close">Schließen</string>
+    <string name="runbook_panel_collapse">Panel einklappen</string>
+    <string name="runbook_panel_expand">Panel ausklappen</string>
+    <string name="runbook_panel_exit_code">Exit-Code %1$d</string>
+    <string name="runbook_panel_status_unreadable">Status nicht lesbar</string>
+    <string name="runbook_panel_progress">%1$d von %2$d</string>
+    <string name="runbook_panel_shell_note">Schritte laufen in der Shell dieser Sitzung; der Exit-Code kommt separat zurück, ohne etwas auszugeben.</string>
+    <string name="runbook_panel_transfer_failed">Übertragung fehlgeschlagen: %1$s</string>
+    <string name="runbook_panel_no_sftp">Diese Sitzung hat keinen SFTP-Kanal.</string>
+
+    <!-- Library screen -->
+    <string name="runbook_edit">Bearbeiten</string>
+    <string name="runbook_cancel">Abbrechen</string>
+    <plurals name="runbook_count">
+        <item quantity="one">%1$d Runbook</item>
+        <item quantity="other">%1$d Runbooks</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="one">%1$d Schritt</item>
+        <item quantity="other">%1$d Schritte</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">Befehl</string>
+    <string name="runbook_kind_transfer">Datei</string>
+    <string name="runbook_step_local">Lokaler Pfad</string>
+    <string name="runbook_step_remote">Remote-Pfad</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">Hochladen</string>
+    <string name="runbook_direction_download">Herunterladen</string>
+    <string name="runbook_transfer_note">Übertragungen nutzen den SFTP-Kanal derselben Sitzung.</string>
+    <string name="runbook_vars_hint">${{name}} fragt vor der Ausführung nach einem Wert; ${{vault:entry}} und ${{clipboard}} füllen sich selbst aus.</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">Ausführungsrichtlinie</string>
+    <string name="runbook_policy_stop">Beim ersten Fehler stoppen</string>
+    <string name="runbook_policy_watchdog">Watchdog</string>
+    <string name="runbook_policy_watchdog_value">%1$d min</string>
+    <string name="runbook_policy_watchdog_off">Aus</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">Runbook</string>
+    <string name="runbook_run_step_of">Schritt %1$d von %2$d</string>
+    <string name="runbook_run_output">Ausgabe</string>
+    <string name="runbook_run_no_output">Noch keine Ausgabe</string>
+    <string name="runbook_run_output_lost">Ausgabe nicht erfasst — der Terminalpuffer hat sich während des Schritts geändert</string>
+    <string name="runbook_run_back">Zurück zum Terminal</string>
+    <string name="runbook_run_open">Ausführung öffnen</string>
+    <string name="runbook_status_waiting">wartet</string>
+    <string name="runbook_status_running">läuft</string>
+    <string name="runbook_status_skipped">übersprungen</string>
+    <string name="runbook_status_stopped">gestoppt</string>
+    <string name="runbook_status_failed">fehlgeschlagen</string>
+    <string name="runbook_status_failed_count">%1$d Schritte fehlgeschlagen</string>
+    <string name="runbook_status_confirm">braucht eine Freigabe</string>
+    <string name="runbook_status_interactive">interaktiv — selbst abschließen</string>
+    <string name="runbook_dur_seconds">%1$s s</string>
+    <string name="runbook_dur_minutes">%1$d m %2$d s</string>
+    <string name="runbook_transfer_of">%1$s von %2$s</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Frühere Ausführungen</string>
+    <string name="runbook_history_empty">Noch keine Ausführungen</string>
+    <string name="runbook_history_failed_at">bei Schritt %1$d fehlgeschlagen</string>
+    <string name="runbook_history_last">letzte Ausführung %1$s</string>
+
+    <!-- Runbooks help dialog -->
+    <string name="runbook_help_title">Runbooks</string>
+    <string name="runbook_help_intro">Ein Runbook ist eine geordnete Prozedur, die in der Shell einer Sitzung Schritt für Schritt läuft. Exit-Codes bestimmen, wie die Ausführung fortfährt; ${{…}}-Werte werden einmal beim Start gesammelt und von allen Schritten geteilt.</string>
+    <string name="runbook_help_flags">Schrittoptionen</string>
+    <string name="runbook_help_flag_confirm">pausiert vor dem Schritt, bis du ihn freigibst</string>
+    <string name="runbook_help_flag_continue">ein Fehler wird festgehalten und die Ausführung läuft weiter</string>
+    <string name="runbook_help_flag_interactive">die Zeile wird unverändert gesendet und du schließt den Schritt selbst ab — für TUI-Programme und Menüs, die das Terminal belegen</string>
+    <string name="runbook_help_examples">Beispiele</string>
+</resources>

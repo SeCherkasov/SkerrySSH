@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- German (values-de). See values/strings.xml for the full set — keys must stay in sync across
+     values / values-ru / values-zh / values-tr / values-de. -->
+<resources>
+    <string name="app_name">Skerry</string>
+    <string name="session_keepalive_channel_name">Sitzung aktiv halten</string>
+    <string name="session_keepalive_title">Aktive Sitzungen</string>
+    <string name="session_keepalive_public_title">Sitzung aktiv</string>
+    <string name="session_keepalive_text">Tippen, um zu diesem Terminal zurückzukehren</string>
+    <string name="session_keepalive_disconnect">Trennen</string>
+    <plurals name="session_keepalive_count">
+        <item quantity="one">%1$d aktive Sitzung</item>
+        <item quantity="other">%1$d aktive Sitzungen</item>
+    </plurals>
+</resources>

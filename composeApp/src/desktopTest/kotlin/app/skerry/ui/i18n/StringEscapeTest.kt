@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * The gradle plugin decodes `\n`, `\t`, `\uXXXX` and `\\` and nothing else, so the `\"`, `\'`, `\@`
  * and `\?` an Android `strings.xml` defines survive the build and reach the screen with the
  * backslash still on them: `Disconnect \"my-host\"?`. Nothing else in the project catches it — the
- * XML is valid, the key exists in all three locales, and the parity check compares keys, not text.
+ * XML is valid, the key exists in every locale, and the parity check compares keys, not text.
  *
  * The strings are read through the same resource reader the UI uses, which resolves the locale from
  * the JVM default and asks AWT for the screen density — so this test needs the display `desktopTest`
@@ -49,6 +49,10 @@ class StringEscapeTest {
             assertEquals("“my-host” bağlantısı kesilsin mi?", getString(Res.string.shell_disconnect_title, HOST))
             assertEquals("“my-host” silinsin mi?", getString(Res.string.shell_delete_host_title, HOST))
         }
+        inLocale("de") {
+            assertEquals("„my-host“ trennen?", getString(Res.string.shell_disconnect_title, HOST))
+            assertEquals("„my-host“ löschen?", getString(Res.string.shell_delete_host_title, HOST))
+        }
     }
 
     @Test
@@ -63,9 +67,10 @@ class StringEscapeTest {
     }
 
     /**
-     * A locale quotes with its own marks: “ ” in English, Chinese and Turkish, « » in Russian, corner
-     * brackets nowhere. Mixed marks are what the escape sweep leaves behind — a string can lose the
-     * backslash and still end up with another language's quotes around the host name.
+     * A locale quotes with its own marks: “ ” in English, Chinese and Turkish, „ “ in German,
+     * « » in Russian, corner brackets nowhere. Mixed marks are what the escape sweep leaves
+     * behind — a string can lose the backslash and still end up with another language's quotes
+     * around the host name.
      */
     @Test
     fun `no locale borrows another locale's quote marks`() {
@@ -136,7 +141,7 @@ class StringEscapeTest {
     private companion object {
         const val HOST = "my-host"
         /**
-         * The languages the app ships, from the enum that defines them — a fourth one fails on
+         * The languages the app ships, from the enum that defines them — a new one fails on
          * [FOREIGN_QUOTES] until its quote marks are declared, rather than going unswept.
          */
         val LOCALES = UiLanguage.entries.mapNotNull { it.localeTag }
@@ -169,6 +174,9 @@ class StringEscapeTest {
             // Turkish suffixes a proper noun with a plain apostrophe (Skerry'nin), so ’ is foreign
             // here for the same reason it is in English.
             "tr" to "\"«»„「」’‘『』",
+            // German quotes are „…“ (U+201E opens, U+201C closes), so the guillemets and the
+            // English closing ” are foreign; ’ is foreign for the same reason it is in English.
+            "de" to "\"«»”「」’‘『』",
         )
 
         /**

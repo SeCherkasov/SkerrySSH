@@ -85,7 +85,14 @@ function applyI18n(titleKey, root) {
   });
   document.documentElement.lang = lang;
   if (titleKey) document.title = t(titleKey);
-  document.querySelectorAll("[data-lang]").forEach(b => b.classList.toggle("on", b.dataset.lang === lang));
+  document.querySelectorAll("[data-lang]").forEach(b => {
+    const active = b.dataset.lang === lang;
+    // The `.on` class is colour-only, so the state has to be programmatically determinable too
+    // (WCAG 4.1.2) — a screen reader otherwise hears "DE, button" with no way to tell whether
+    // German is already active.
+    b.classList.toggle("on", active);
+    b.setAttribute("aria-pressed", String(active));
+  });
 }
 
 /** Switch, persist, keep the URL shareable, then let the page re-render. */

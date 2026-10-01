@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_title">Assistent</string>
+    <string name="assistant_clear">Konversation löschen</string>
+    <string name="assistant_thinking">Denkt…</string>
+    <string name="assistant_empty">Frag zu dieser Sitzung: Ausgabe, Fehler, der nächste Schritt.</string>
+    <string name="assistant_explain_request">Erkläre die Ausgabe oben.</string>
+    <string name="assistant_ask_placeholder">Frag etwas zu dieser Sitzung…</string>
+    <string name="assistant_context_chip">Kontext: %1$d</string>
+    <string name="assistant_context_title">LETZTE AUSGABEN ZUM SENDEN</string>
+    <string name="assistant_context_off">Aus</string>
+    <string name="assistant_policy_note">Destruktive Befehle laufen nie ohne deinen Klick. Gesendeter Kontext: nur Befehlsausgabe — keine Schlüssel, kein Tresor.</string>
+    <string name="assistant_run">In Sitzung ausführen</string>
+    <string name="assistant_run_anyway">Trotzdem ausführen</string>
+    <string name="assistant_confirm_run">Ausführung bestätigen</string>
+    <string name="assistant_no_answer">Das Modell hat nichts zurückgegeben. Frag erneut oder füge mehr Kontext hinzu.</string>
+    <string name="assistant_attached">gesendete Ausgaben: %1$d</string>
+    <string name="assistant_copy">Kopieren</string>
+    <string name="assistant_copy_failed">Die System-Zwischenablage hat verweigert</string>
+    <string name="assistant_edit">Bearbeiten</string>
+    <string name="shell_tip_assistant">Assistent</string>
+    <string name="assistant_explain_action">Ausgabe erklären</string>
+</resources>

@@ -1,0 +1,58 @@
+<resources>
+    <!-- Settings nav labels (SettingsPanel.kt · SettingsTab.navLabel) -->
+    <string name="shtail_nav_ai">AI</string>
+    <string name="shtail_nav_sync">Sync</string>
+    <string name="shtail_nav_security">Sicherheit</string>
+    <string name="shtail_nav_appearance">Erscheinungsbild</string>
+    <string name="shtail_nav_terminal">Terminal</string>
+    <string name="shtail_nav_keyboard">Tastatur</string>
+    <string name="shtail_nav_about">Über</string>
+
+    <!-- Mobile host detail rows (MobileHostDetailView.kt · mobileHostDetailRows) -->
+    <string name="shtail_host_address">Adresse</string>
+    <string name="shtail_host_port">Port</string>
+    <string name="shtail_host_auth">Auth</string>
+    <string name="shtail_host_saved_credential">Gespeicherte Zugangsdaten</string>
+    <string name="shtail_host_ask_on_connect">Beim Verbinden fragen</string>
+    <string name="shtail_host_group">Gruppe</string>
+    <string name="shtail_host_jump">Jump-Host</string>
+    <string name="shtail_host_notes">Notizen</string>
+
+    <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
+    <string name="shtail_ungrouped">Ohne Gruppe</string>
+
+    <!-- Caption of the "Group" field wherever a record is filed into a folder (snippet, runbook, keychain) -->
+    <string name="shtail_group_label">Gruppe</string>
+
+    <!-- Folder header/picker: a name that filtered away to nothing (only invisible characters) -->
+    <string name="shtail_group_unnamed">Unbenannter Ordner</string>
+
+    <!-- Host filter chips: "no tag filter" chip label (display only, see ALL_HOSTS_CHIP) -->
+    <string name="shtail_chip_all">Alle</string>
+
+    <!-- Folder header: the chevron that folds a group away (%1$s is the group name) -->
+    <string name="shtail_group_collapse">%1$s einklappen</string>
+    <string name="shtail_group_expand">%1$s ausklappen</string>
+    <string name="shtail_group_state_collapsed">Eingeklappt</string>
+    <string name="shtail_group_state_expanded">Ausgeklappt</string>
+
+    <!-- Folder header: the pencil opening the rename/delete dialog (%1$s is the group name) -->
+    <string name="shtail_group_rename">%1$s umbenennen</string>
+
+    <!-- Rename dialog opened from a library folder header: the same dialog the host sidebar uses,
+         with a subtitle that does not say "hosts" (GroupDialog) -->
+    <string name="shtail_group_rename_records">Alles in dieser Gruppe zieht mit dem neuen Namen um.</string>
+
+    <!-- Sidebar search field: the cross that empties the query (SidebarSearchField) -->
+    <string name="shtail_search_clear">Suche leeren</string>
+
+    <!-- Mobile known hosts (MobileKnown.kt) -->
+    <string name="shtail_known_changed">geändert</string>
+    <string name="shtail_known_key_changed_title">Schlüssel geändert: %1$s</string>
+    <string name="shtail_known_mismatch_body">Der %1$s-Fingerprint stimmt nicht mit dem hinterlegten überein. Prüfe vor dem Neuverbinden; eine Abweichung kann auf das Abfangen der Verbindung hindeuten.</string>
+
+    <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
+    <string name="shtail_new_tab">Neuer Tab</string>
+    <string name="shtail_nav_experimental">Experimentell</string>
+    <string name="shtail_nav_trash">Papierkorb</string>
+</resources>

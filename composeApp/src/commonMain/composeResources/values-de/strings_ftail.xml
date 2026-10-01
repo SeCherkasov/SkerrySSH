@@ -1,0 +1,55 @@
+<resources>
+    <!-- SFTP / file transfer tail: deferred non-@Composable strings (F-key panel labels + controller errors) -->
+
+    <!-- F-key panel labels (mc/Total Commander bottom bar) -->
+    <string name="ftail_fkey_rename">Umbenennen</string>
+    <string name="ftail_fkey_view">Ansehen</string>
+    <string name="ftail_fkey_edit">Bearbeiten</string>
+    <string name="ftail_fkey_copy">Kopieren</string>
+    <string name="ftail_fkey_move">Verschieben</string>
+    <string name="ftail_fkey_mkdir">MkDir</string>
+    <string name="ftail_fkey_delete">Löschen</string>
+    <string name="ftail_fkey_refresh">Aktualisieren</string>
+    <string name="ftail_fkey_quit">Beenden</string>
+    <string name="ftail_fkey_save">Speichern</string>
+    <string name="ftail_fkey_search">Suchen</string>
+
+    <!-- Controller / effect error fallbacks -->
+    <string name="ftail_open_failed">SFTP konnte nicht geöffnet werden</string>
+    <string name="ftail_transfer_error">Übertragungsfehler</string>
+    <string name="ftail_delete_source_failed">Quelle konnte nach dem Verschieben nicht gelöscht werden</string>
+    <string name="ftail_file_fallback">Datei</string>
+
+    <!-- Typed file browser / transfer failures (raw platform text never reaches the user) -->
+    <string name="ftail_err_local_io">Fehler im lokalen Dateisystem</string>
+    <string name="ftail_err_sftp">SFTP-Fehler</string>
+    <string name="ftail_err_illegal_name">Unsicherer Dateiname</string>
+    <string name="ftail_err_open_source">Ausgewählte Datei konnte nicht geöffnet werden</string>
+    <string name="ftail_err_open_target">Speicherziel konnte nicht geöffnet werden</string>
+    <string name="ftail_err_session_closed">Sitzung wurde vor dem Start geschlossen</string>
+    <string name="ftail_err_too_large">Datei ist zu groß zum Öffnen</string>
+    <string name="ftail_err_tree_too_large">Ordnerbaum ist zu tief oder zu groß für die Übertragung</string>
+    <string name="ftail_err_dir_too_large">Ordnerbaum ist zu tief oder der Ordner hat zu viele Einträge</string>
+    <string name="ftail_err_unexpected">Unerwarteter Fehler</string>
+
+    <!-- Viewer/editor (F3/F4) failures -->
+    <string name="ftail_edit_err_read">Datei konnte nicht gelesen werden</string>
+    <string name="ftail_edit_err_too_large">Datei ist zu groß für den Editor</string>
+    <string name="ftail_edit_err_binary">Binärdatei — nicht als Text bearbeitbar</string>
+    <string name="ftail_edit_err_write">Datei konnte nicht gespeichert werden</string>
+
+    <!-- Local filesystem source, shown in the pane header and breadcrumbs -->
+    <string name="ftail_local_label">Dieses Gerät</string>
+
+    <!-- Size templates: unit name and decimal separator are part of the translation -->
+    <string name="ftail_size_bytes">%1$d B</string>
+    <string name="ftail_size_kb">%1$d,%2$d KB</string>
+    <string name="ftail_size_mb">%1$d,%2$d MB</string>
+    <string name="ftail_size_gb">%1$d,%2$d GB</string>
+    <string name="ftail_size_tb">%1$d,%2$d TB</string>
+    <string name="ftail_size_pb">%1$d,%2$d PB</string>
+
+    <!-- Transfer strip: file name with a batch counter, and transferred-of-total -->
+    <string name="ftail_transfer_counter">%1$s (%2$d/%3$d)</string>
+    <string name="ftail_transfer_progress">%1$s / %2$s</string>
+</resources>

@@ -1,0 +1,147 @@
+<resources>
+    <!-- Vault lock / unlock / create / reset (LockScreen.kt, MobileDesignApp.kt) -->
+    <string name="shell_lock_title">Skerry ist gesperrt</string>
+    <string name="shell_unlock_subtitle_desktop">Gib dein Master-Passwort ein, um den Hafen zu entsperren</string>
+    <string name="shell_unlock_subtitle_mobile">Gib dein Master-Passwort ein</string>
+    <string name="shell_master_password">Master-Passwort</string>
+    <string name="shell_unlock">Entsperren</string>
+    <string name="shell_forgot_password">Master-Passwort zurücksetzen</string>
+    <string name="shell_use_biometrics">Biometrie verwenden</string>
+    <string name="shell_footer_never_leaves">Master-Passwort bleibt auf diesem Gerät</string>
+    <string name="shell_footer_never_leaves_short">Verlässt dieses Gerät nie</string>
+
+    <string name="shell_create_title">Master-Passwort festlegen</string>
+    <string name="shell_create_subtitle">Verschlüsselt diesen Tresor und verlässt das Gerät nie. Keine Wiederherstellung.</string>
+    <string name="shell_repeat_password">Passwort wiederholen</string>
+    <string name="shell_create_vault">Tresor erstellen</string>
+    <string name="shell_pairing_link">Von einem anderen Gerät aus koppeln? Nutze einen Kopplungscode</string>
+    <string name="shell_no_recovery_ack">Ich verstehe, dass das Master-Passwort nicht wiederhergestellt oder zurückgesetzt werden kann. Verlierst du es, ist dieser Tresor weg.</string>
+
+    <string name="shell_password_strength">Passwortstärke: %1$s</string>
+    <string name="shell_password_strength_weak">Schwach</string>
+    <string name="shell_password_strength_fair">Ausreichend</string>
+    <string name="shell_password_strength_good">Gut</string>
+    <string name="shell_password_strength_strong">Stark</string>
+    <string name="shell_password_min_length">Benutze mindestens %1$d Zeichen, um den Tresor zu erstellen</string>
+    <string name="shell_password_blank">Das Passwort darf nicht nur aus Leerzeichen bestehen</string>
+
+    <string name="shell_quick_unlock_title">Schnelles Entsperren</string>
+    <string name="shell_quick_unlock_subtitle">Öffne Skerry mit deinem Fingerabdruck statt mit dem Master-Passwort.</string>
+    <string name="shell_not_now">Jetzt nicht</string>
+
+    <string name="shell_corrupted_title">Speicher ist beschädigt</string>
+    <string name="shell_corrupted_subtitle">Die Tresordatei kann nicht gelesen oder entschlüsselt werden. Setze sie zurück, um Skerry wieder zu verwenden.</string>
+
+    <string name="shell_reset_skerry">Skerry zurücksetzen</string>
+    <string name="shell_reset_subtitle">Dauerhaft. Gespeicherte Passwörter, Schlüssel und Identitäten werden gelöscht. Keine Wiederherstellung.</string>
+    <string name="shell_reset_scope_secrets_title">Nur Secrets</string>
+    <string name="shell_reset_scope_secrets_subtitle">Host-Profile und known_hosts bleiben erhalten.</string>
+    <string name="shell_reset_scope_all_title">Alles löschen</string>
+    <string name="shell_reset_scope_all_subtitle">Entfernt auch Host-Profile, known_hosts und Einstellungen.</string>
+    <string name="shell_reset_confirm_placeholder">Gib %1$s zur Bestätigung ein</string>
+    <string name="shell_reset_permanently">Dauerhaft zurücksetzen</string>
+
+    <!-- Common actions -->
+    <string name="shell_cancel">Abbrechen</string>
+    <string name="shell_save">Speichern</string>
+    <string name="shell_create">Erstellen</string>
+    <string name="shell_connect">Verbinden</string>
+    <string name="shell_delete">Löschen</string>
+
+    <!-- Group dialog (GroupDialog.kt) -->
+    <string name="shell_group_rename_title">Gruppe umbenennen</string>
+    <string name="shell_group_new_title">Neue Gruppe</string>
+    <string name="shell_group_rename_subtitle">Hosts in dieser Gruppe folgen dem neuen Namen.</string>
+    <string name="shell_group_new_subtitle">Erstellt eine leere Gruppe. Zieh Hosts hinein oder wähle sie beim Hinzufügen einer Verbindung.</string>
+    <string name="shell_group_name_placeholder">Gruppenname</string>
+    <string name="shell_group_delete">Gruppe löschen</string>
+
+    <!-- Password dialog (PasswordDialog.kt) -->
+    <string name="shell_connect_to">Verbinden mit %1$s</string>
+    <string name="shell_password_caps">PASSWORT</string>
+    <string name="shell_password_host_placeholder">Verbindungspasswort</string>
+    <string name="shell_not_stored_once">Wird nicht gespeichert · einmalig verwendet</string>
+    <string name="shell_use_saved_secret">ODER GESPEICHERTES SECRET VERWENDEN</string>
+
+    <!-- Delete host dialog (DeleteHostDialog.kt) -->
+    <string name="shell_delete_host_title">„%1$s“ löschen?</string>
+    <string name="shell_delete_host_body">Wird aus deinen Hosts entfernt. Gespeicherte Zugangsdaten bleiben in deinem Tresor. Das kann nicht rückgängig gemacht werden.</string>
+
+    <!-- Mobile host detail (MobileHostDetailView.kt) -->
+    <string name="shell_host">Host</string>
+    <string name="shell_host_not_found">Host nicht gefunden</string>
+    <string name="shell_quick_sftp">SFTP</string>
+    <string name="shell_quick_tunnels">Tunnel</string>
+    <string name="shell_quick_snippets">Snippets</string>
+    <string name="shell_details">Details</string>
+    <string name="shell_edit_host">Host bearbeiten</string>
+    <string name="shell_duplicate_host">Host duplizieren</string>
+    <string name="shell_delete_host">Host löschen</string>
+
+    <!-- Mobile hosts list (MobileHostsView.kt) -->
+    <string name="shell_hosts">Hosts</string>
+    <string name="shell_search_hosts">Hosts, Tags, IPs suchen…</string>
+
+    <!-- Mobile route placeholder (MobileDesignApp.kt) -->
+    <string name="shell_route_team">Team</string>
+
+    <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
+    <string name="shell_this_session">diese Sitzung</string>
+    <string name="shell_disconnect_title">„%1$s“ trennen?</string>
+    <string name="shell_disconnect_message">Die Sitzung und ihr Terminal werden geschlossen.</string>
+    <string name="shell_disconnect">Trennen</string>
+    <string name="shell_disconnect_all_title">Alle Sitzungen in diesem Tab trennen?</string>
+    <string name="shell_disconnect_all_message">Diese Sitzungen werden geschlossen: %1$s</string>
+    <string name="shell_close_pane_title">Bereich schließen?</string>
+    <string name="shell_close_pane_message">Diese Sitzung wird geschlossen: %1$s</string>
+    <string name="shell_replace_pane_title">Sitzung dieses Bereichs durch „%1$s“ ersetzen?</string>
+    <string name="shell_close_panel">Bereich schließen</string>
+    <string name="shell_lock">Sperren</string>
+    <string name="shell_settings">Einstellungen</string>
+    <string name="shell_status_connected">Verbunden</string>
+    <string name="shell_status_disconnected">Getrennt</string>
+    <string name="shell_status_encoding">UTF-8 · LF</string>
+    <string name="shell_tip_add_pane">Bereich hinzufügen</string>
+    <string name="shell_tip_new_tab">Neuer Tab</string>
+    <string name="shell_tip_close_tab">%1$s schließen</string>
+    <string name="shell_tip_more_actions">Weitere Aktionen</string>
+    <string name="shell_tip_sync_panes">Synchronisierte Eingabe zwischen Bereichen</string>
+    <string name="shell_tip_files">Dateien (SFTP)</string>
+    <string name="shell_tip_snippets">Snippets</string>
+    <string name="shell_tip_record">Sitzung aufzeichnen</string>
+    <string name="shell_tip_record_stop">Aufzeichnung stoppen</string>
+    <string name="shell_tip_play">Aufzeichnung abspielen</string>
+    <string name="shell_tip_minimize">Minimieren</string>
+    <string name="shell_tip_maximize">Maximieren</string>
+    <string name="shell_tip_restore">Wiederherstellen</string>
+    <string name="shell_tip_close_window">Fenster schließen</string>
+    <string name="shell_tip_close">Schließen</string>
+    <string name="shell_tip_show_options">Optionen anzeigen</string>
+    <string name="shell_tip_show_hosts">Hosts anzeigen</string>
+    <string name="shell_tip_hide_hosts">Hosts ausblenden</string>
+    <string name="shell_tip_back">Zurück</string>
+    <string name="shell_tip_remove">Entfernen</string>
+    <string name="shell_tip_pause">Pause</string>
+    <string name="shell_tip_replay">Erneut abspielen</string>
+    <string name="shell_tip_monitor">Überwachung</string>
+    <string name="shell_view_terminal">Terminal</string>
+    <string name="shell_view_files">Dateien</string>
+    <string name="shell_view_monitor">Überwachung</string>
+    <string name="shell_view_runbook">Runbook</string>
+    <string name="shell_view_player">Aufzeichnung</string>
+    <string name="shell_view_desktop">Remote-Desktop</string>
+    <string name="shell_tip_disconnect">Trennen</string>
+    <string name="shell_no_hosts_yet">Noch keine Hosts</string>
+    <string name="shell_add_first_host">Füge eine Verbindung hinzu, um sie hier zu sehen.</string>
+    <string name="shell_kbdint_title">Zusätzliche Verifizierung</string>
+    <string name="shell_kbdint_jump">Vom Jump-Host angefordert</string>
+    <string name="shell_kbdint_continue">Fortfahren</string>
+    <string name="shell_kbdint_asks">Der Server fragt:</string>
+
+    <!-- Sessions root tab (MobileSessionsView.kt): what is open right now -->
+    <string name="shell_sessions_title">Sitzungen</string>
+    <string name="shell_sessions_count">%1$d offen</string>
+    <string name="shell_sessions_none">Keine offenen Sitzungen</string>
+    <string name="shell_sessions_none_hint">Verbinde dich aus einem Katalog — die Sitzung bleibt hier, bis du sie schließt.</string>
+    <string name="shell_sessions_close">Sitzung schließen</string>
+</resources>

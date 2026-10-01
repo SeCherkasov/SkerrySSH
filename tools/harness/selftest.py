@@ -76,7 +76,7 @@ class Sandbox:
         environment.pop("SKERRY_GATE_OVERRIDE", None)
         environment.update(env or {})
         return subprocess.run(
-            [sys.executable, os.path.join(self.path, ".claude", "hooks", "guard-git.py")],
+            [policy.PY, os.path.join(self.path, ".claude", "hooks", "guard-git.py")],
             input=payload, capture_output=True, text=True, cwd=self.path,
             env=environment, check=False,
         )
@@ -89,13 +89,13 @@ class Sandbox:
 
     def raw_hook(self, payload: dict) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, os.path.join(self.path, ".claude", "hooks", "record-review.py")],
+            [policy.PY, os.path.join(self.path, ".claude", "hooks", "record-review.py")],
             input=json.dumps(payload), capture_output=True, text=True, cwd=self.path, check=False,
         )
 
     def gate(self, *args: str, stdin: str = "") -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, os.path.join(self.path, "tools", "harness", "gate.py"), *args],
+            [policy.PY, os.path.join(self.path, "tools", "harness", "gate.py"), *args],
             input=stdin, capture_output=True, text=True, cwd=self.path, check=False,
         )
 
@@ -949,13 +949,24 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-zh/strings.xml", "<resources></resources>")
         self.box.write(f"{base}/values-tr/strings.xml",
                        '<resources><string name="a">A</string></resources>')
+        self.box.write(f"{base}/values-de/strings.xml",
+                       '<resources><string name="a">A</string></resources>')
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1)
         self.assertIn("values-zh", found[0].message)
 
-    def test_i18n_complete_is_clean(self):
+    def test_i18n_gap_in_german_is_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
         for locale in ("values", "values-ru", "values-zh", "values-tr"):
+            self.box.write(f"{base}/{locale}/strings.xml",
+                           '<resources><string name="a">A</string></resources>')
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1)
+        self.assertIn("values-de", found[0].message)
+
+    def test_i18n_complete_is_clean(self):
+        base = "composeApp/src/commonMain/composeResources"
+        for locale in ("values", "values-ru", "values-zh", "values-tr", "values-de"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         self.assertEqual(self._findings("i18n-parity"), [])
@@ -970,6 +981,7 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-ru/strings.xml", both("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", "<resources></resources>")
         self.box.write(f"{base}/values-tr/strings.xml", both("one", "other"))
+        self.box.write(f"{base}/values-de/strings.xml", both("one", "other"))
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 2, "a plural and an array ship in every language like a string")
         self.assertTrue(all("values-zh" in f.message for f in found))
@@ -983,6 +995,7 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
         self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-de/strings.xml", body("one", "other"))
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
                        "val t = stringResource(Res.string.count)\n")
         found = self._findings("i18n-parity")
@@ -991,7 +1004,7 @@ class TestChecks(SandboxCase):
 
     def test_undefined_string_key_is_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
-        for locale in ("values", "values-ru", "values-zh", "values-tr"):
+        for locale in ("values", "values-ru", "values-zh", "values-tr", "values-de"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
@@ -1010,7 +1023,7 @@ class TestChecks(SandboxCase):
                        '<item quantity="one">А</item><item quantity="few">А</item>'
                        '<item quantity="many">А</item><item quantity="other">А</item>'
                        '</plurals></resources>')
-        for locale in ("values-zh", "values-tr"):
+        for locale in ("values-zh", "values-tr", "values-de"):
             self.box.write(f"{base}/{locale}/strings.xml",
                            '<resources><string name="a">A</string></resources>')
         messages = [f.message for f in self._findings("i18n-parity")]
@@ -1031,6 +1044,9 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-tr/strings.xml",
                        '<resources><plurals name="n"><item quantity="one">A</item>'
                        '<item quantity="other">A</item></plurals></resources>')
+        self.box.write(f"{base}/values-de/strings.xml",
+                       '<resources><plurals name="n"><item quantity="one">A</item>'
+                       '<item quantity="other">A</item></plurals></resources>')
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1, "Chinese needs `other` alone; Russian needs one/few/many too")
         self.assertIn("one, few, many", found[0].message)
@@ -1044,9 +1060,26 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
         self.box.write(f"{base}/values-tr/strings.xml", body("other"))
+        self.box.write(f"{base}/values-de/strings.xml", body("one", "other"))
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1, "CLDR gives Turkish `one` — Chinese's lone `other` is not enough")
         self.assertIn("values-tr", found[0].message)
+
+    def test_a_german_plural_needs_one_as_well_as_other(self):
+        # German shares English's one/other split; the positive pin keeps a future edit from
+        # dropping values-de out of the CLDR table while every other selftest stays green.
+        base = "composeApp/src/commonMain/composeResources"
+        def body(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d</item>' for c in categories)
+            return f'<resources><plurals name="n">{items}</plurals></resources>'
+        self.box.write(f"{base}/values/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
+        self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-de/strings.xml", body("other"))
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1, "German splits one/other like English — a lone `other` is not a translation")
+        self.assertIn("values-de", found[0].message)
 
     def test_undefined_plural_and_array_keys_are_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
@@ -1058,6 +1091,7 @@ class TestChecks(SandboxCase):
         self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
         self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-de/strings.xml", body("one", "other"))
         self.box.write("composeApp/src/commonMain/kotlin/S.kt",
                        "val a = pluralStringResource(Res.plurals.here, 1)\n"
                        "val b = stringArrayResource(Res.array.also)\n"
@@ -1072,10 +1106,10 @@ class TestChecks(SandboxCase):
         base = "composeApp/src/commonMain/composeResources"
         self.box.write(f"{base}/values/strings.xml",
                        '<resources><string translatable="false" name="a">A</string></resources>')
-        for locale in ("values-ru", "values-zh", "values-tr"):
+        for locale in ("values-ru", "values-zh", "values-tr", "values-de"):
             self.box.write(f"{base}/{locale}/strings.xml", "<resources></resources>")
         found = self._findings("i18n-parity")
-        self.assertEqual(len(found), 3, "a key the pattern misses is silently exempt from parity")
+        self.assertEqual(len(found), 4, "a key the pattern misses is silently exempt from parity")
 
     def test_an_unreadable_resource_file_says_so(self):
         base = "composeApp/src/commonMain/composeResources"
@@ -1139,6 +1173,10 @@ class TestChecks(SandboxCase):
                        '<resources><string name="a">Silinsin mi?</string>'
                        '<plurals name="p"><item quantity="one">%1$d dosya</item>'
                        '<item quantity="other">dosyalar</item></plurals></resources>')
+        self.box.write(f"{base}/values-de/strings.xml",
+                       '<resources><string name="a">„%1$s“ löschen?</string>'
+                       '<plurals name="p"><item quantity="one">%1$d Datei</item>'
+                       '<item quantity="other">%1$d Dateien</item></plurals></resources>')
         messages = [f.message for f in self._findings("i18n-parity")]
         self.assertEqual(len(messages), 2, messages)
         self.assertTrue(all("values-tr" in m and "%1$" in m for m in messages), messages)
@@ -1156,6 +1194,7 @@ class TestChecks(SandboxCase):
                        '<item quantity="other">%1$d файла</item></plurals></resources>')
         self.box.write(f"{base}/values-zh/strings.xml", body("other"))
         self.box.write(f"{base}/values-tr/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-de/strings.xml", body("one", "other"))
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1, "an item with no text draws a blank where the number goes")
         self.assertIn("few", found[0].message)
@@ -1957,7 +1996,7 @@ class TestTestResults(SandboxCase):
         os.chdir(self.cwd)
         try:
             with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
-                                          {"tests": [sys.executable, "-c", ""]}):
+                                          {"tests": [policy.PY, "-c", ""]}):
                 self.assertFalse(gate.run_stage("tests", self.cwd))
             recorded = state.load(self.cwd)
             self.assertFalse(recorded["stages"]["tests"]["ok"])
@@ -1981,7 +2020,7 @@ class TestTestResults(SandboxCase):
         """A stubbed stage command that writes its result file the way a real run does."""
         target = os.path.join(self.cwd, module, "build", "test-results", task, f"TEST-{name}.xml")
         body = junit_xml(name, **kw)
-        return [sys.executable, "-c",
+        return [policy.PY, "-c",
                 "import os,sys\n"
                 "os.makedirs(os.path.dirname(sys.argv[1]), exist_ok=True)\n"
                 "open(sys.argv[1], 'w').write(sys.argv[2])\n", target, body]
@@ -1999,7 +2038,7 @@ class TestTestResults(SandboxCase):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         self.results("composeApp", "desktopTest", "a.Yesterday")
         self.backdate("composeApp", "desktopTest", "a.Yesterday")
-        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        self.assertFalse(self.stage([policy.PY, "-c", ""]))
         recorded = state.load(self.cwd)
         self.assertIn("nothing ran", recorded["stages"]["tests"]["detail"])
         self.assertTrue(recorded["test_cache_dirty"])
@@ -2011,7 +2050,7 @@ class TestTestResults(SandboxCase):
         self.box.branch("fix/whatever")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         self.results("shared", "gone", "b.Orphan", failures=1)
-        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        self.assertFalse(self.stage([policy.PY, "-c", ""]))
         self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
         self.assertFalse(os.path.exists(os.path.join(self.cwd, "shared/build/test-results/gone")))
         self.assertFalse(state.load(self.cwd)["test_cache_dirty"])
@@ -2023,7 +2062,7 @@ class TestTestResults(SandboxCase):
         self.box.branch("fix/whatever")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         self.results("composeApp", "desktopTest", "a.Red", failures=1)
-        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        self.assertFalse(self.stage([policy.PY, "-c", ""]))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertFalse(self.stage(self.writer("composeApp", "desktopTest", "a.Red",
@@ -2045,7 +2084,7 @@ class TestTestResults(SandboxCase):
         self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
         self.backdate("shared", "desktopTest", "b.Fresh")
         self.box.write("tools/harness/checks.py", "# a rule changed\n")
-        self.assertTrue(self.stage([sys.executable, "-c", ""]))
+        self.assertTrue(self.stage([policy.PY, "-c", ""]))
 
     def test_a_kotlin_edit_does_demand_a_re_run(self):
         self.box.branch("fix/whatever")
@@ -2053,7 +2092,7 @@ class TestTestResults(SandboxCase):
         self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
         self.backdate("shared", "desktopTest", "b.Fresh")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 2\n")
-        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        self.assertFalse(self.stage([policy.PY, "-c", ""]))
 
     def test_a_run_that_failed_on_its_own_does_not_force_the_next_one_to_rerun(self):
         # A red test task did execute; making the retry re-run every module on top of that only
@@ -2065,7 +2104,7 @@ class TestTestResults(SandboxCase):
         os.chdir(self.cwd)
         try:
             with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
-                                          {"tests": [sys.executable, "-c", "raise SystemExit(1)"]}):
+                                          {"tests": [policy.PY, "-c", "raise SystemExit(1)"]}):
                 self.assertFalse(gate.run_stage("tests", self.cwd))
             self.assertFalse(state.load(self.cwd).get("test_cache_dirty"))
         finally:
@@ -2079,7 +2118,7 @@ class TestTestResults(SandboxCase):
         os.chdir(self.cwd)
         try:
             with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
-                                          {"tests": [sys.executable, "-c", ""]}):
+                                          {"tests": [policy.PY, "-c", ""]}):
                 self.assertTrue(gate.run_stage("tests", self.cwd))
             self.assertTrue(state.load(self.cwd)["stages"]["tests"]["ok"])
         finally:

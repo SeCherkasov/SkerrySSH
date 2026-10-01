@@ -1,0 +1,23 @@
+<resources>
+    <string name="risk_fork_bomb">Fork-Bombe — erschöpft die Systemressourcen.</string>
+    <string name="risk_recursive_force_delete">Rekursives erzwungenes Löschen — irreversibler Datenverlust.</string>
+    <string name="risk_recursive_broad_delete">Rekursives Löschen eines breiten Pfads — irreversibler Datenverlust.</string>
+    <string name="risk_disk_device_write">Schreibt direkt auf ein Disk-Gerät — kann das Dateisystem zerstören.</string>
+    <string name="risk_download_to_shell">Leitet ein heruntergeladenes Skript direkt in eine Shell — führt unverifizierten Remote-Code aus.</string>
+    <string name="risk_pipe_to_interpreter">Leitet Ausgaben in einen Interpreter — führt konstruierten oder Remote-Code aus.</string>
+    <string name="risk_mirror_delete">Mirror-Delete — löscht Dateien im Ziel, die in der Quelle fehlen.</string>
+    <string name="risk_power_off">Fährt die Maschine herunter oder startet sie neu.</string>
+    <string name="risk_recursive_permissions">Rekursive Änderung von Berechtigungen/Eigentümern auf einem Systempfad.</string>
+    <string name="risk_security_file_overwrite">Überschreibt eine sicherheitskritische Datei.</string>
+    <string name="risk_firewall_flush">Leert Firewall-Regeln — kann den Remote-Zugriff abschneiden.</string>
+    <string name="risk_deletes_files">Löscht Dateien.</string>
+    <string name="risk_kills_processes">Beendet laufende Prozesse.</string>
+    <string name="risk_uninstalls_packages">Deinstalliert Pakete.</string>
+    <string name="risk_git_destructive">Verwirft lokale Änderungen oder schreibt die History neu.</string>
+    <string name="risk_world_writable">Vergibt World-writable-Berechtigungen.</string>
+    <string name="risk_stops_service">Stoppt oder deaktiviert einen Dienst.</string>
+    <string name="risk_bulk_delete">Löscht passende Dateien massenweise.</string>
+    <string name="risk_truncates_content">Verwirft Dateiinhalte.</string>
+    <string name="risk_elevated">Läuft mit erhöhten Rechten.</string>
+    <string name="risk_beyond_inspection">Übersteigt, was der Guard liest — ein Teil dieser Eingabe wurde nicht klassifiziert.</string>
+</resources>
