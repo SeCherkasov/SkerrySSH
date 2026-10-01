@@ -235,6 +235,10 @@
     <string name="settings_kb_sudo_password">向 sudo 发送已保存的密码</string>
     <string name="settings_kb_open_link_or_path">打开链接或文件路径</string>
     <string name="settings_kb_mouse_click">Ctrl+点击</string>
+    <string name="settings_kb_jump_prev_command">跳到上一条命令</string>
+    <string name="settings_kb_jump_next_command">跳到下一条命令</string>
+    <string name="settings_kb_select_command_output">选中命令输出</string>
+    <string name="settings_kb_mouse_gutter">点击命令标记</string>
     <string name="settings_kb_files_drag_copy">复制到另一面板</string>
     <string name="settings_kb_files_drag_move">移动到另一面板</string>
     <string name="settings_kb_mouse_drag">拖动</string>

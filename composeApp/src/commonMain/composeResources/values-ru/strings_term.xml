@@ -158,4 +158,10 @@
     <string name="term_key_armed">взведён</string>
     <string name="term_key_open">открыт</string>
     <string name="term_sudo_offer">Enter — отправить сохранённый пароль для %1$s</string>
+    <string name="term_marks_strip">Метки команд</string>
+    <string name="term_jump_announced">Переход к %1$s</string>
+    <string name="term_jump_announced_exit">Переход к %1$s — код выхода %2$s</string>
+    <string name="term_jump_none">Команд больше нет</string>
+    <string name="term_mark_select_prev">Выбрать вывод предыдущей команды</string>
+    <string name="term_mark_select_next">Выбрать вывод следующей команды</string>
 </resources>

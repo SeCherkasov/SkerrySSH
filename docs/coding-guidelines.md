@@ -37,6 +37,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | "Just a stream" transport (telnet/serial) | `ssh/StreamOnlyConnection` (jvmShared) |
 | Blocking read loop of a shell channel (ssh/telnet/serial) | `ssh/StreamShellChannel` |
 | SGR parsing, glyph metrics, reflow | `terminal/SgrParser`, `CharMetrics`, `TerminalReflow` |
+| Shell integration marks and the shell's cwd (OSC 133/OSC 7), kept on rows through scrollback and reflow | `terminal/ShellMarks` (`ShellCommandMark`, the parsers; anchors ride `TerminalReflow`) — the UI consumes them through `TerminalScreenState` |
 | Out-of-band step status from the shell, and hiding the echo of what the client typed | `terminal/TerminalStepMark` (`STEP_MARK_OSC`, `TerminalStepMark`) + `TerminalEmulator.expectStep`, `terminal/TerminalEchoFilter` — the runbook layer only builds the probes (`runbook/RunbookMarker`) |
 | HTTP to a server the app does not control (sync, AI endpoint, model or release host) | `io/untrustedHttpClient` (bounded header section, whole-call timeout) + a per-caller `io/ResponseSizeLimit` — never `HttpClient(CIO)` or a bare engine |
 | WebSocket to such a server | `io/untrustedWebSocket` + `WebSocketLimits` (frame cap, queue depth, pings, handshake deadline) — never Ktor's client `webSocket {}` |

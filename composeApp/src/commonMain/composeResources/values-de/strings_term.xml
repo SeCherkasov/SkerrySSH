@@ -159,4 +159,10 @@
     <string name="term_key_armed">aktiviert</string>
     <string name="term_key_open">offen</string>
     <string name="term_sudo_offer">Enter — sendet das gespeicherte Passwort für %1$s</string>
+    <string name="term_marks_strip">Befehlsmarkierungen</string>
+    <string name="term_jump_announced">Gesprungen zu %1$s</string>
+    <string name="term_jump_announced_exit">Gesprungen zu %1$s — Exit-Code %2$s</string>
+    <string name="term_jump_none">Keine weiteren Befehle</string>
+    <string name="term_mark_select_prev">Ausgabe des vorherigen Befehls auswählen</string>
+    <string name="term_mark_select_next">Ausgabe des nächsten Befehls auswählen</string>
 </resources>

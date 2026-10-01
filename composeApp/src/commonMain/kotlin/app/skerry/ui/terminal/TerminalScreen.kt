@@ -67,6 +67,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import app.skerry.shared.ssh.PtySize
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -109,6 +112,11 @@ import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
 import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
+import app.skerry.ui.generated.resources.term_jump_announced
+import app.skerry.ui.generated.resources.term_jump_announced_exit
+import app.skerry.ui.generated.resources.term_jump_none
+import app.skerry.ui.generated.resources.term_mark_select_next
+import app.skerry.ui.generated.resources.term_mark_select_prev
 import app.skerry.ui.generated.resources.term_sudo_offer
 import app.skerry.ui.theme.Skerry
 
@@ -139,6 +147,8 @@ private const val GLYPH_RUN_CACHE_RUNS = 16_384
 internal var terminalScreenCompositions = 0
 
 private const val PADDING_DP = 14
+// Longest command text the jump announcement quotes — a screen reader reads it aloud whole.
+private const val MAX_JUMP_ANNOUNCE_CHARS = 80
 // Number of history matches shown at once in the reverse-search (Ctrl-R) overlay.
 private const val REVERSE_SEARCH_ROWS = 6
 
@@ -271,6 +281,16 @@ fun TerminalScreen(
     // hidden field is a no-op (focus remains after hiding, so the keyboard would not reappear).
     val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    // Shell-integration jump strings, resolved once: the announcement template for
+    // [jumpToCommand], and the custom accessibility action labels (the screen-reader way to
+    // jump + select — no chord exists under TalkBack).
+    val jumpAnnounceTemplate = stringResource(Res.string.term_jump_announced)
+    val jumpAnnounceExitTemplate = stringResource(Res.string.term_jump_announced_exit)
+    val jumpNoneText = stringResource(Res.string.term_jump_none)
+    val selectPrevLabel = stringResource(Res.string.term_mark_select_prev)
+    val selectNextLabel = stringResource(Res.string.term_mark_select_next)
+    var jumpAnnounce by remember(state) { mutableStateOf("") }
 
     // Bumped every time a selection is actually copied to the clipboard (right click / Ctrl+Shift+C /
     // touch "Copy" menu) — drives the transient "Copied" banner overlay below. Starts at 0 (no banner
@@ -670,6 +690,29 @@ fun TerminalScreen(
         )
     }
 
+    // Jump to the previous/next command mark (OSC 133), select its output, and say what was
+    // landed on — the Ctrl+Shift+Z/X chord and the terminal node's custom accessibility actions
+    // (the screen-reader path; no keyboard chord exists under TalkBack) both land here. False
+    // when there is no mark in that direction; the chord still consumes the key (see below).
+    fun jumpToCommand(forward: Boolean): Boolean {
+        val topRow = (scroll.value / metrics.cellHeight).toInt()
+        val target = (if (forward) state.commandMarkAfter(topRow) else state.commandMarkBefore(topRow))
+            ?: return false
+        state.selectCommandOutput(target)
+        clipboardScope.launch { scroll.scrollTo((target.promptRow * metrics.cellHeight).toInt()) }
+        // The jump's target, announced: the scroll itself is invisible to a screen reader. The
+        // exit code rides along when the shell reported one — a silently failing command is the
+        // one a jump is most often about.
+        val command = state.screen.getOrNull(target.promptRow)
+            ?.joinToString("") { it.text }?.trim()?.take(MAX_JUMP_ANNOUNCE_CHARS).orEmpty()
+            .ifEmpty { "?" }
+        jumpAnnounce = when (val exit = target.exitCode) {
+            null -> jumpAnnounceTemplate.replace("%1\$s", command)
+            else -> jumpAnnounceExitTemplate.replace("%1\$s", command).replace("%2\$s", exit.toString())
+        }
+        return true
+    }
+
     Box(modifier.onSizeChanged { viewportSize = it }.background(termTheme.background)) {
       // The whole visible screen is drawn by a single per-cell overlay on the monospace grid (not a
       // flowing Text): cell backgrounds across the full row width (including TUI trailing reverse-spaces),
@@ -868,6 +911,24 @@ fun TerminalScreen(
           Modifier
               .fillMaxSize()
               .focusRequester(focusRequester)
+              // Screen-reader path for the command-mark jumps (SC 2.1.1): the gutter is a pointer
+              // surface and the chords need a hardware keyboard, so the terminal node itself
+              // carries select-previous/next actions whenever marks are on screen.
+              .semantics {
+                  if (state.commandMarks.isNotEmpty() && !state.altScreen) {
+                      // At the end of the jump list the action still speaks — a screen-reader
+                      // user gets "no more commands" instead of silence.
+                      fun jumpOrAnnounceEnd(forward: Boolean): Boolean {
+                          if (jumpToCommand(forward)) return true
+                          jumpAnnounce = jumpNoneText
+                          return false
+                      }
+                      customActions = listOf(
+                          CustomAccessibilityAction(selectPrevLabel) { jumpOrAnnounceEnd(forward = false) },
+                          CustomAccessibilityAction(selectNextLabel) { jumpOrAnnounceEnd(forward = true) },
+                      )
+                  }
+              }
               // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
               .onFocusChanged {
                   hasFocus.value = it.isFocused
@@ -932,6 +993,19 @@ fun TerminalScreen(
                         ClipboardChord.Paste -> pasteFromClipboard()
                     }
                     return@onPreviewKeyEvent true
+                }
+                // Shell integration (OSC 133) jumps, kitty's chords: Ctrl+Shift+Z/X between command
+                // prompts. The chord is claimed only while marks exist AND the primary buffer is
+                // on screen (on the alternate screen the rows are a TUI's, not the marked ones),
+                // and then always consumed — at the end of the jump list a fall-through would
+                // reach the PTY as 0x1A/0x18 and suspend the foreground job. Otherwise it falls
+                // through to the PTY, as before.
+                val jumpKey = event.key == Key.Z || event.key == Key.X
+                if (event.isCtrlPressed && event.isShiftPressed && jumpKey) {
+                    if (state.commandMarks.isNotEmpty() && !state.altScreen) {
+                        jumpToCommand(forward = event.key == Key.X)
+                        return@onPreviewKeyEvent true
+                    }
                 }
                 val bytes = mapTerminalKey(
                     key = event.key,
@@ -1377,6 +1451,27 @@ fun TerminalScreen(
           }
       }
 
+      // Command-mark gutter (OSC 133): the left padding strip, above the (input-only) text
+      // underlay and below the overlays that follow. Composes nothing until the shell reports
+      // a mark, so an ordinary session draws and hits exactly what it did before.
+      val markColors = remember(termTheme) {
+          MarkColors(
+              ok = termTheme.ansi[2],
+              fail = termTheme.ansi[1],
+              // 0.55 keeps the dim marker above the 3:1 non-text contrast floor on light themes.
+              dim = termTheme.foreground.copy(alpha = 0.55f),
+          )
+      }
+      CommandMarkGutter(
+          state,
+          metrics.cellHeight,
+          scrollPx = { scroll.value.toFloat() },
+          colors = markColors,
+          width = PADDING_DP.dp,
+          topInset = PADDING_DP.dp,
+          modifier = Modifier.align(Alignment.TopStart),
+      )
+
       // Sharing hint under the cursor (see [cursorOverlay]): positioned from the bottom edge, so it
       // tracks the line being typed into — the live screen keeps the cursor on one of the last rows,
       // and measuring from the top would need the scrollback offset the canvas owns.
@@ -1421,7 +1516,11 @@ fun TerminalScreen(
       // still talking to them - an inner ssh or su leaves the prompt looking the same.
       val sudoOffer = state.sudoOffer && !closed
       val sudoHint = stringResource(Res.string.term_sudo_offer, state.sudoAccount)
-      StatusAnnouncer(if (sudoOffer) sudoHint else "")
+      // The sudo prompt outranks the jump announcement — both share the one live region. When it
+      // takes the region the stale jump text is dropped, or the region would re-announce a
+      // minutes-old jump the moment the offer clears.
+      LaunchedEffect(sudoOffer) { if (sudoOffer) jumpAnnounce = "" }
+      StatusAnnouncer(if (sudoOffer) sudoHint else jumpAnnounce)
       if (sudoOffer) {
           TerminalOverlayBanner(
               icon = "password",

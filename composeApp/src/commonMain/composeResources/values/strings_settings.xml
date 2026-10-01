@@ -235,6 +235,10 @@
     <string name="settings_kb_sudo_password">Send the saved password to sudo</string>
     <string name="settings_kb_open_link_or_path">Open a link or file path</string>
     <string name="settings_kb_mouse_click">Ctrl+click</string>
+    <string name="settings_kb_jump_prev_command">Jump to previous command</string>
+    <string name="settings_kb_jump_next_command">Jump to next command</string>
+    <string name="settings_kb_select_command_output">Select a command's output</string>
+    <string name="settings_kb_mouse_gutter">Click the command mark</string>
     <string name="settings_kb_files_drag_copy">Copy to the other pane</string>
     <string name="settings_kb_files_drag_move">Move to the other pane</string>
     <string name="settings_kb_mouse_drag">Drag</string>

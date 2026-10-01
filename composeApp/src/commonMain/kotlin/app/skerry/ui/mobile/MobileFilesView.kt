@@ -120,8 +120,25 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     val c = coord
     // A path opened from terminal output ("Open in Files" on a selection): reveal it in the remote
     // pane once the coordinator is up. Keyed on the request so a repeat click is honoured too.
+    // The shell's cwd (OSC 7) is the FIRST-open fallback, same as the desktop SFTP view (parity).
+    // One effect, not two: takeRevealRequest() clears the pending state as a side effect, so a
+    // sibling effect reading it afterwards would always see `null` and queue its cwd reveal
+    // behind the click — and the pane serializes reveals, the last one wins. [openedWith] makes
+    // the cwd half run exactly once per coordinator: the take() above restarts this effect with
+    // pending == null, and a naive fallback would re-reveal cwd right after honouring the click.
+    var openedWith by remember(controller) { mutableStateOf<Any?>(null) }
     LaunchedEffect(c, controller.pendingRevealPath) {
-        if (c != null) controller.takeRevealRequest()?.let { c.remote.revealPath(it) }
+        if (c == null) return@LaunchedEffect
+        val clicked = controller.takeRevealRequest()
+        if (clicked != null) {
+            openedWith = c
+            c.remote.revealPath(clicked)
+            return@LaunchedEffect
+        }
+        if (openedWith == c) return@LaunchedEffect
+        openedWith = c
+        val cwd = (controller.uiState as? ConnectionUiState.Connected)?.terminal?.workingDirectory ?: return@LaunchedEffect
+        c.remote.revealPath(cwd)
     }
     val openEditor = editor
     // Built-in viewer/editor (long-press → View/Edit): takes over the screen instead of opening a

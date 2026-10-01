@@ -466,6 +466,20 @@ class TerminalEmulator(
     private var stepMarkRow = NO_STEP_MARK
     private var stepMarkCol = 0
 
+    // Shell integration marks (OSC 133): one per bracketed command, oldest first, in the same
+    // absolute row coordinates as [lines]. Unlike the step capture, anchors survive a reflow —
+    // [TerminalReflow] re-maps them onto the re-split rows — because a command's prompt stays worth
+    // jumping to after a resize. [openShellMark] is the command between its A and its D.
+    private val shellMarks = ArrayList<MutableShellMark>()
+    private var openShellMark: MutableShellMark? = null
+    private var shellMarksVersion = 0L
+    private var shellMarksCacheVersion = -1L
+    private var shellMarksCache: List<ShellCommandMark> = emptyList()
+
+    /** Working directory the shell last reported (OSC 7), or `null` until it does. */
+    var workingDirectory: String? = null
+        private set
+
     // Palette overrides (OSC 4): index 0..255 → Rgb. Empty means theme defaults are used.
     // The renderer consults this layer when resolving TermColor.Indexed.
     private val paletteOverrides = HashMap<Int, TermColor.Rgb>()
@@ -493,6 +507,19 @@ class TerminalEmulator(
     /** The colors to report to color queries (see [TerminalColors]). Call from the owner coroutine. */
     fun applyColors(colors: TerminalColors?) {
         this.colors = colors
+    }
+
+    /**
+     * The shell integration marks (OSC 133) as an immutable snapshot: one [ShellCommandMark] per
+     * bracketed command, oldest first, in [lines]' coordinates. Cached until the next change.
+     */
+    fun shellCommandMarks(): List<ShellCommandMark> {
+        applyPendingMarkShift()
+        if (shellMarksCacheVersion != shellMarksVersion) {
+            shellMarksCache = if (shellMarks.isEmpty()) emptyList() else shellMarks.map { it.snapshot() }
+            shellMarksCacheVersion = shellMarksVersion
+        }
+        return shellMarksCache
     }
 
     // --- Parser --------------------------------------------------------------
@@ -785,6 +812,26 @@ class TerminalEmulator(
         if (b != '\\'.code) { parser = State.Esc; process(b) }
     }
 
+    /**
+     * OSC 0/1/2 — the window title. C0/C1/DEL are stripped from it: a server must not corrupt the
+     * tab UI or smuggle control bytes into consumers of the string (logs, etc). Format characters
+     * go with them — the title is also the name of the tab's close button, and a bidi override in
+     * it can make "Close prod-db-01" read as another session.
+     *
+     * Capped as well as filtered: MAX_OSC_LEN is 4 MiB (shared with the graphics path), and the
+     * title is laid out on the tab, in its tooltip and in the close button's name — three passes
+     * over whatever a host chose to send. The cap counts UTF-16 units, so it can land between the
+     * halves of a surrogate pair and leave a lone high surrogate — U+FFFD on the tab, in its
+     * tooltip and in the close button's name. Drop it rather than draw the replacement glyph.
+     */
+    private fun setTitle(rest: String) {
+        title = rest.asSequence()
+            .filter { (it.code in 0x20..0x7e || it.code >= 0xa0) && isTitleChar(it) }
+            .take(MAX_TITLE_CHARS)
+            .joinToString("")
+            .dropLastWhile { it.isHighSurrogate() }
+    }
+
     private fun finishOsc() {
         // OSC bytes were accumulated as characters 1:1 (byte->char), but the payload is UTF-8 (window
         // title, hyperlink URI; the terminal is UTF-8-only overall, like the Ground state). The whole
@@ -796,26 +843,14 @@ class TerminalEmulator(
         val code = (if (sep < 0) s else s.substring(0, sep)).toIntOrNull() ?: return
         val rest = if (sep < 0) "" else s.substring(sep + 1)
         when (code) {
-            // C0/C1/DEL are stripped from the title: a server must not corrupt the tab UI or smuggle
-            // control bytes into consumers of the string (logs, etc). Format characters go with them
-            // — the title is also the name of the tab's close button, and a bidi override in it can
-            // make "Close prod-db-01" read as another session.
-            // Capped as well as filtered: MAX_OSC_LEN is 4 MiB (shared with the graphics path), and
-            // the title is laid out on the tab, in its tooltip and in the close button's name —
-            // three passes over whatever a host chose to send.
-            0, 1, 2 -> title = rest.asSequence()
-                .filter { (it.code in 0x20..0x7e || it.code >= 0xa0) && isTitleChar(it) }
-                .take(MAX_TITLE_CHARS)
-                .joinToString("")
-                // The cap counts UTF-16 units, so it can land between the halves of a surrogate pair
-                // and leave a lone high surrogate — U+FFFD on the tab, in its tooltip and in the
-                // close button's name. Drop it rather than draw the replacement glyph.
-                .dropLastWhile { it.isHighSurrogate() }
+            0, 1, 2 -> setTitle(rest)
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
             in DYNAMIC_FOREGROUND..DYNAMIC_CURSOR -> queryDynamicColors(code, rest) // OSC 10/11/12 ; ?
+            7 -> setWorkingDirectory(rest) // OSC 7 ; file://host/path — the shell's cwd
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
             104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (empty = whole palette)
+            133 -> shellMark(rest)    // OSC 133 ; A/B/C/D[;exit] — semantic command marks
             STEP_MARK_OSC -> stepMark(rest) // OSC 8375 ; token ; exit code  (runbook step boundary)
         }
     }
@@ -878,6 +913,100 @@ class TerminalEmulator(
             }
         }
         onStepMark(TerminalStepMark(token, exitCode, output))
+    }
+
+    /**
+     * OSC 133: the shell bracketed a command — see [ShellCommandMark]. Anchors are parked only on
+     * the primary buffer: the alternate screen is a TUI's canvas, and a cursor position there
+     * belongs to the TUI, not to the shell's command. An open command is closed by the next `A` as
+     * well as by `D` — a line abandoned at the prompt (Ctrl+C, a fresh line) never gets a status,
+     * and leaving it open would graft the next command onto it.
+     */
+    private fun shellMark(rest: String) {
+        // Fold any owed trim shift BEFORE parking a new anchor: cursorRow is already in
+        // post-trim coordinates, and the later fold subtracts from every anchor alike — an
+        // unfolded write would be shifted a second time, off its own text by however many
+        // rows scrolled inside this publish window (the steady state of a saturated scrollback).
+        applyPendingMarkShift()
+        when (val event = parseShellMark(rest) ?: return) {
+            ShellMarkEvent.PromptStart -> {
+                if (altScreen) return
+                openShellMark = null // abandoned at the prompt: what it has is all it gets
+                val mark = MutableShellMark(ReflowAnchor(cursorRow, cx))
+                shellMarks.add(mark)
+                openShellMark = mark
+                trimShellMarks()
+            }
+            ShellMarkEvent.InputStart -> {
+                // Anchors park on the primary buffer only; on alt nothing changes, and the
+                // version must not bump for a snapshot-identical list.
+                if (altScreen) return
+                val open = openShellMark ?: return
+                open.input = ReflowAnchor(cursorRow, cx)
+            }
+            ShellMarkEvent.OutputStart -> {
+                if (altScreen) return // see InputStart
+                val open = openShellMark ?: return
+                open.output = ReflowAnchor(cursorRow, cx)
+            }
+            is ShellMarkEvent.CommandEnd -> {
+                val open = openShellMark ?: return
+                openShellMark = null
+                open.exitCode = event.exitCode
+                // A command that ran a TUI usually reports after it exited (back on the primary
+                // buffer); if the D arrives while the TUI still owns the screen, keep the exit code
+                // — the shell did say it — but not the alt cursor as the command's end.
+                if (!altScreen) open.end = ReflowAnchor(cursorRow, cx)
+            }
+        }
+        shellMarksVersion++
+    }
+
+    /** OSC 7: the shell's cwd. A rejected payload leaves the last good directory in place. */
+    private fun setWorkingDirectory(rest: String) {
+        parseWorkingDirectory(rest)?.let { workingDirectory = it }
+    }
+
+    /** Keeps the [MAX_COMMAND_MARKS] newest marks — the oldest left with the front of the scrollback. */
+    private fun trimShellMarks() {
+        val excess = shellMarks.size - MAX_COMMAND_MARKS
+        if (excess > 0) {
+            shellMarks.subList(0, excess).clear()
+            shellMarksVersion++
+        }
+    }
+
+    /**
+     * Shifts mark anchors after [dropped] rows left the front of history; a mark whose prompt row
+     * went with them is dropped whole (see [MutableShellMark.shiftUp]).
+     */
+    private fun shiftShellMarks(dropped: Int) {
+        if (dropped <= 0 || shellMarks.isEmpty()) return
+        val iterator = shellMarks.iterator()
+        while (iterator.hasNext()) {
+            val mark = iterator.next()
+            if (!mark.shiftUp(dropped)) {
+                iterator.remove()
+                if (mark === openShellMark) openShellMark = null
+            }
+        }
+        shellMarksVersion++
+    }
+
+    /**
+     * Rows trimmed from history whose anchor shift is still owed. A saturated scrollback trims a
+     * row on EVERY scrolled line, and paying the O(marks) walk (plus the version bump, plus the
+     * snapshot rebuild it forces) per line sits right on the print path — instead the trim only
+     * counts here, and the walk happens once at the next read ([shellCommandMarks]) or reflow,
+     * which is per publish at worst.
+     */
+    private var pendingMarkShift = 0
+
+    private fun applyPendingMarkShift() {
+        val dropped = pendingMarkShift
+        if (dropped == 0) return
+        pendingMarkShift = 0
+        shiftShellMarks(dropped)
     }
 
     /**
@@ -1412,6 +1541,7 @@ class TerminalEmulator(
     private fun trimScrollback() {
         val dropped = scrollback.trimTo(maxScrollback)
         if (dropped > 0) markDirty()
+        if (dropped > 0 && shellMarks.isNotEmpty()) pendingMarkShift += dropped
         if (dropped == 0 || stepMarkRow == NO_STEP_MARK) return
         val shifted = stepMarkRow - dropped
         stepMarkRow = shifted.coerceAtLeast(0)
@@ -1445,7 +1575,15 @@ class TerminalEmulator(
             // ED 3 is "erase saved lines" — history goes. `clear` sends it right after ED 2, which is
             // what makes that command drop the output instead of only paging past it. Not from the alt
             // screen: a TUI resetting its display would take history it never owned with it.
-            3 -> if (!altScreen) { scrollback.clear(); stepMarkRow = NO_STEP_MARK }
+            3 -> if (!altScreen) {
+                val dropped = scrollback.size
+                scrollback.clear()
+                stepMarkRow = NO_STEP_MARK
+                // Marks still on the visible screen keep their command; the history rows went.
+                // The pending trim shift folds in first so both drops apply in order.
+                applyPendingMarkShift()
+                shiftShellMarks(dropped)
+            }
         }
     }
 
@@ -1657,6 +1795,12 @@ class TerminalEmulator(
         pendingDesignation = -1
         strSeq.clear(); strSeqIsDcs = false; parser = State.Ground // RIS aborts any partial sequence
         title = ""; titleStack.clear() // RIS resets the title to default (the tab falls back to host.label)
+        // The buffer the mark anchors pointed into is gone with the reset. The working directory
+        // stays: OSC 7 says where the shell is, and RIS did not move it.
+        shellMarks.clear()
+        openShellMark = null
+        pendingMarkShift = 0 // nothing left to shift — the marks themselves are gone
+        shellMarksVersion++
     }
 
     // --- Tab stops ---------------------------------------------------------
@@ -1735,18 +1879,44 @@ class TerminalEmulator(
         val src = ArrayList<List<TermCell>>(scrollback.size + primaryGrid.size).apply {
             addAll(scrollback.frozen()); addAll(primaryGrid)
         }
+        // Any trim-shift still owed applies before the anchors are read here.
+        applyPendingMarkShift()
         val result = TerminalReflow.reflow(
             src = src,
             nc = nc,
             nr = nr,
             maxScrollback = maxScrollback,
-            cursorAbs = scrollback.size + cursorRow,
-            cursorCol = cursorCol,
-            rowsBelowCursor = rows - 1 - cursorRow,
-            trackCursor = true,
+            cursor = TerminalReflow.Cursor(
+                abs = scrollback.size + cursorRow,
+                col = cursorCol,
+                rowsBelow = rows - 1 - cursorRow,
+                tracked = true,
+            ),
+            // Shell integration anchors follow their text through the re-split (TerminalReflow
+            // rewrites them in place); the step capture still drops, by its own contract above.
+            anchors = if (shellMarks.isEmpty()) null else shellMarks.flatMap { it.anchors() },
         )
         scrollback.clear()
         stepMarkRow = NO_STEP_MARK // reflow rebuilds history: the row the mark pointed at is gone
+        shellMarksVersion++ // the anchors moved even if the mark set itself did not
+        // An anchor whose row left with the reflow's own history trim is parked at -1. A mark
+        // without its prompt dies here — same contract as trimScrollback's shiftShellMarks: the
+        // gutter marker and the jump list key off the prompt, and a mark pointing at someone
+        // else's text is worse than no mark. A mark that lost a lesser anchor (its output end)
+        // keeps going from the buffer head.
+        // Same as shiftShellMarks: a dropped mark that was still open must not keep receiving
+        // B/C/D writes into an object nobody will publish.
+        val open = openShellMark
+        if (open != null && open.prompt.row < 0) openShellMark = null
+        shellMarks.removeAll { it.prompt.row < 0 }
+        for (mark in shellMarks) {
+            for (anchor in mark.anchors()) {
+                if (anchor.row < 0) {
+                    anchor.row = 0
+                    anchor.col = 0
+                }
+            }
+        }
         result.scrollback.forEach { scrollback.push(it) } // already ≤ maxScrollback after reflow
         primaryGrid = result.grid
         return Pair(result.cursorRow, result.cursorCol)

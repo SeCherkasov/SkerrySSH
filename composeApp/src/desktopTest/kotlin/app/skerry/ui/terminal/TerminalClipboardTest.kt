@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Base64
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -71,17 +72,23 @@ private fun osc52(text: String): String {
     return "${Char(0x1b)}]52;c;$payload${Char(0x07)}"
 }
 
-/** Replays scripted shell output on demand; input and resize are accepted and dropped. */
+/** Replays scripted shell output on demand; input and resize are accepted, input is recorded. */
 internal class ScriptedSession : TerminalSession {
     override val state: StateFlow<TerminalState> = MutableStateFlow(TerminalState.Open)
     private val chunks = MutableSharedFlow<ByteArray>(replay = 8, extraBufferCapacity = 64)
     override val output: Flow<ByteArray> = chunks
 
+    /** Everything typed into the pane, in order — what the PTY would have received. */
+    val sent = CopyOnWriteArrayList<ByteArray>()
+
     fun print(text: String) {
         check(chunks.tryEmit(text.encodeToByteArray()))
     }
 
-    override suspend fun send(data: ByteArray) = Unit
+    override suspend fun send(data: ByteArray) {
+        sent.add(data)
+    }
+
     override suspend fun resize(size: PtySize) = Unit
     override suspend fun close() = Unit
 }

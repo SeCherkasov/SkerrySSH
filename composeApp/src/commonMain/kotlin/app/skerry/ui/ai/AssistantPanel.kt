@@ -70,6 +70,7 @@ import app.skerry.ui.generated.resources.assistant_thinking
 import app.skerry.ui.generated.resources.assistant_title
 import app.skerry.ui.terminal.WORK_BAR_HEIGHT
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.lastOutputWithExit
 import app.skerry.ui.terminal.lastCommandBlocks
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.delay
@@ -295,7 +296,7 @@ private fun AssistantAskRow(
                     // The hand-back follows the click: a press while the assistant is busy does
                     // nothing, and moving the caret for it would be a jump the user did not ask for.
                     .handsKeyboardBack(!controller.busy).clickable(enabled = !controller.busy) {
-                        controller.explain(request, terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
+                        controller.explain(request, terminal.selectedText() ?: terminal.lastOutputWithExit() ?: terminal.output)
                     },
                 contentAlignment = Alignment.Center,
             ) {

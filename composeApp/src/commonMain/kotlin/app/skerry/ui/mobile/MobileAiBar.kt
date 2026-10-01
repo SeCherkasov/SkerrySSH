@@ -46,6 +46,7 @@ import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.lastOutputWithExit
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_open_path_in_files
 import app.skerry.ui.generated.resources.term_ai_thinking
@@ -225,7 +226,7 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                             .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
                             .clickable(enabled = !controller.busy) {
                                 // Selection wins; else the last command's output; else the whole screen.
-                                controller.explain(terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
+                                controller.explain(terminal.selectedText() ?: terminal.lastOutputWithExit() ?: terminal.output)
                             },
                         contentAlignment = Alignment.Center,
                     ) {

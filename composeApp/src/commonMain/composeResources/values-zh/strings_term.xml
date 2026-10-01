@@ -155,4 +155,10 @@
     <string name="term_key_armed">已启用</string>
     <string name="term_key_open">已打开</string>
     <string name="term_sudo_offer">Enter — 发送 %1$s 的已保存密码</string>
+    <string name="term_marks_strip">命令标记</string>
+    <string name="term_jump_announced">已跳转到 %1$s</string>
+    <string name="term_jump_announced_exit">已跳转到 %1$s — 退出码 %2$s</string>
+    <string name="term_jump_none">没有更多命令</string>
+    <string name="term_mark_select_prev">选择上一条命令的输出</string>
+    <string name="term_mark_select_next">选择下一条命令的输出</string>
 </resources>
