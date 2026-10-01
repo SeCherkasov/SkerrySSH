@@ -1,0 +1,131 @@
+<resources>
+    <!-- SFTP / file transfer: the two-pane desktop (SftpView) and mobile Files (MobileFilesView) -->
+
+    <!-- Titles and work bar -->
+    <string name="sftp_wbar_subtitle">SFTP · %1$s</string>
+    <string name="sftp_files_title">Dateien</string>
+
+    <!-- Tooltips of the work-bar icons -->
+    <string name="sftp_tip_back">Zurück zum Terminal (F10)</string>
+    <string name="sftp_tip_refresh">Beide Ansichten aktualisieren (F9)</string>
+    <string name="sftp_tip_filter">Liste filtern (Strg+F)</string>
+    <string name="sftp_tip_upload">Auswahl hochladen (F5)</string>
+    <string name="sftp_tip_download">Auswahl herunterladen (F5)</string>
+
+    <!-- Toolbar / FAB actions -->
+    <string name="sftp_new_folder">Neuer Ordner</string>
+    <string name="sftp_create">Erstellen</string>
+    <string name="sftp_create_directory">Verzeichnis erstellen</string>
+    <string name="sftp_upload_file">Datei hochladen</string>
+    <string name="sftp_download_to_device">Auf das Gerät herunterladen</string>
+
+    <!-- Pane labels -->
+    <string name="sftp_pane_local">Lokal</string>
+    <string name="sftp_pane_remote">Remote</string>
+
+    <!-- Statuses / notices -->
+    <string name="sftp_unavailable">SFTP nicht verfügbar</string>
+    <string name="sftp_opening">SFTP wird geöffnet…</string>
+    <string name="sftp_connecting">Verbinden…</string>
+    <string name="sftp_loading">Laden…</string>
+    <string name="sftp_error">Fehler</string>
+    <string name="sftp_no_session">Keine aktive Sitzung</string>
+    <string name="sftp_no_session_hint">Host verbinden, um Dateien zu durchsuchen</string>
+
+    <!-- Shared dialog buttons -->
+    <string name="sftp_cancel">Abbrechen</string>
+    <string name="sftp_delete">Löschen</string>
+    <string name="sftp_copy">Kopieren</string>
+    <string name="sftp_move">Verschieben</string>
+    <string name="sftp_rename">Umbenennen</string>
+
+    <!-- Name dialog (New folder / Rename) -->
+    <string name="sftp_already_exists">„%1$s“ existiert bereits</string>
+
+    <!-- Delete dialogs -->
+    <string name="sftp_delete_folder_q">Ordner löschen?</string>
+    <string name="sftp_delete_file_q">Datei löschen?</string>
+    <string name="sftp_delete_items_q">%1$d Elemente löschen?</string>
+    <string name="sftp_delete_folder_body">„%1$s“ und alles darin wird endgültig gelöscht.</string>
+    <string name="sftp_delete_file_body">„%1$s“ wird endgültig gelöscht.</string>
+    <string name="sftp_delete_items_dirs_body">%1$d Elemente (Ordner samt Inhalt) werden endgültig gelöscht.</string>
+    <string name="sftp_delete_items_body">%1$d Elemente werden endgültig gelöscht.</string>
+
+    <!-- Copy / move dialogs -->
+    <string name="sftp_what_single">„%1$s“</string>
+    <string name="sftp_items_count">%1$d Elemente</string>
+    <string name="sftp_drag_shift_move">Umschalt: verschieben</string>
+    <string name="sftp_copy_to_remote_q">Auf den Server kopieren?</string>
+    <string name="sftp_copy_to_local_q">Auf diesen Rechner kopieren?</string>
+    <string name="sftp_move_to_remote_q">Auf den Server verschieben?</string>
+    <string name="sftp_move_to_local_q">Auf diesen Rechner verschieben?</string>
+    <string name="sftp_transfer_body">%1$s → %2$s</string>
+
+    <!-- Transfer error (name: message) -->
+    <string name="sftp_transfer_error">%1$s: %2$s</string>
+
+    <!-- Overwrite confirmation: the destination already holds entries with these names -->
+    <string name="sftp_overwrite_q">Bestehende überschreiben?</string>
+    <string name="sftp_overwrite_one">%1$s existiert bereits im Ziel.</string>
+    <string name="sftp_overwrite_many">%1$d Elemente existieren bereits im Ziel und werden überschrieben.</string>
+    <string name="sftp_overwrite">Überschreiben</string>
+
+    <!-- Listing columns (modified date / permissions) and the quick name filter -->
+    <string name="sftp_columns">Spalten</string>
+    <string name="sftp_col_name">Name</string>
+    <!-- Row name for an entry whose name is nothing but characters that cannot be drawn -->
+    <string name="sftp_unprintable_name">Nicht druckbarer Name</string>
+    <string name="sftp_col_size">Größe</string>
+    <string name="sftp_col_modified">Geändert</string>
+    <string name="sftp_col_permissions">Berechtigungen</string>
+    <!-- Caption over the permissions column: the full word doesn't fit the slot -->
+    <string name="sftp_col_permissions_short">Rechte</string>
+    <string name="sftp_filter_hint">Filtern (Name oder *.Maske)</string>
+    <string name="sftp_tip_filter_toggle">Liste filtern</string>
+    <string name="sftp_meta_joined">%1$s · %2$s</string>
+    <!-- Modified column date: recent — current year (month, day, HH:mm), day — without time,
+         old — past years (month, day, year); component order is per-locale -->
+    <string name="sftp_date_recent">%2$d. %1$s %3$s</string>
+    <string name="sftp_date_day">%2$d. %1$s</string>
+    <string name="sftp_date_old">%2$d. %1$s %3$d</string>
+    <string-array name="sftp_months">
+        <item>Jan</item>
+        <item>Feb</item>
+        <item>Mär</item>
+        <item>Apr</item>
+        <item>Mai</item>
+        <item>Jun</item>
+        <item>Jul</item>
+        <item>Aug</item>
+        <item>Sep</item>
+        <item>Okt</item>
+        <item>Nov</item>
+        <item>Dez</item>
+    </string-array>
+
+    <!-- Built-in viewer/editor (F3/F4) -->
+    <string name="sftp_edit_title">Bearbeiten</string>
+    <string name="sftp_edit_title_view">Anzeigen</string>
+    <string name="sftp_edit_readonly">schreibgeschützt</string>
+    <string name="sftp_edit_modified">geändert</string>
+    <string name="sftp_edit_saving">Speichern…</string>
+    <string name="sftp_edit_find">Suchen:</string>
+    <string name="sftp_edit_not_found">nicht gefunden</string>
+    <string name="sftp_edit_discard_q">Änderungen verwerfen?</string>
+    <string name="sftp_edit_discard_body">„%1$s“ hat ungespeicherte Änderungen. Beim Schließen gehen sie verloren.</string>
+    <string name="sftp_edit_discard">Verwerfen</string>
+    <string name="sftp_edit_conflict_q">Datei auf der Quelle geändert?</string>
+    <string name="sftp_edit_conflict_body">„%1$s“ wurde geändert, seit du sie geöffnet hast. Speichern überschreibt sie mit deiner Version.</string>
+
+    <!-- Transfer queue under the panes -->
+    <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
+    <string name="sftp_queue_done">fertig</string>
+    <string name="sftp_queue_waiting">wartet</string>
+    <string name="sftp_queue_backlog">Warten auf den Kanal: %1$d</string>
+    <string name="sftp_queue_cancel">%1$s abbrechen</string>
+    <string name="sftp_queue_clear">%1$s leeren</string>
+    <string name="sftp_queue_state">%1$s: %2$s</string>
+    <!-- Accessible names for the two inputs the panes draw without a caption (issue #228) -->
+    <string name="sftp_path_field">Zu Pfad springen</string>
+    <string name="sftp_edit_buffer">Dateiinhalt</string>
+</resources>

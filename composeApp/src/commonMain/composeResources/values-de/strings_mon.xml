@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mon_tip_back">Zurück zum Terminal</string>
+    <string name="mon_tip_refresh">Jetzt aktualisieren</string>
+    <string name="mon_tip_interval">Poll-Intervall</string>
+    <string name="mon_subtitle_pending">Monitoring · warte auf Daten</string>
+    <string name="mon_subtitle_seconds">Monitoring · aktualisiert vor %1$d s</string>
+    <string name="mon_subtitle_minutes">Monitoring · aktualisiert vor %1$d m</string>
+    <string name="mon_no_session">Verbinde dich mit einem Host, um seine Ressourcen zu beobachten.</string>
+
+    <string name="mon_stat_cpu">CPU</string>
+    <string name="mon_stat_memory">Speicher</string>
+    <string name="mon_stat_disk">Disk /</string>
+    <string name="mon_stat_network">Netzwerk</string>
+    <string name="mon_unit_percent">%</string>
+    <string name="mon_foot_cpu">%1$d Kerne · Load %2$s</string>
+    <string name="mon_foot_memory">%1$s / %2$s · Swap %3$s</string>
+    <string name="mon_foot_disk">%1$s / %2$s · %3$s frei</string>
+    <string name="mon_foot_network">%1$s · ↑ %2$s ↓ %3$s</string>
+
+    <string name="mon_card_processes">Top-Prozesse</string>
+    <string name="mon_col_command">Befehl</string>
+    <string name="mon_col_pid">PID</string>
+    <string name="mon_col_cpu">CPU</string>
+    <string name="mon_col_rss">RSS</string>
+
+    <string name="mon_card_services">Dienste und Mounts</string>
+    <string name="mon_mounts">Mounts</string>
+    <string name="mon_no_services">Keine systemd-Units gemeldet</string>
+    <string name="mon_service_state">%1$s (%2$s)</string>
+
+    <string name="mon_card_containers">Container</string>
+    <string name="mon_col_name">Name</string>
+    <string name="mon_col_image">Image</string>
+    <string name="mon_col_status">Status</string>
+
+    <string name="mon_card_alerts">Warnungen</string>
+    <string name="mon_no_alerts">Keine Schwellwerte überschritten</string>
+    <string name="mon_collection">Erfassung</string>
+    <string name="mon_interval">Intervall</string>
+    <string name="mon_interval_seconds">%1$d s</string>
+    <string name="mon_interval_value">%1$d s · ein exec-Roundtrip</string>
+    <string name="mon_source">Quelle</string>
+    <string name="mon_source_value">/proc, df, systemctl</string>
+
+    <string name="mon_alert_disk">Disk %1$s über dem Limit</string>
+    <string name="mon_alert_disk_ok">Disk %1$s wieder unter dem Limit</string>
+    <string name="mon_alert_memory">Speicher bei %1$s%</string>
+    <string name="mon_alert_memory_ok">Speicher wieder normal</string>
+    <string name="mon_alert_swap">Swap bei %1$s%</string>
+    <string name="mon_alert_swap_ok">Swap wieder normal</string>
+    <string name="mon_alert_load">Load %1$s über der Kernanzahl</string>
+    <string name="mon_alert_load_ok">Load wieder unter der Kernanzahl</string>
+
+    <string name="mon_age_now">jetzt</string>
+    <string name="mon_age_minutes">vor %1$d m</string>
+    <string name="mon_age_hours">vor %1$d h</string>
+    <string name="mon_age_yesterday">gestern</string>
+    <string name="mon_age_days">vor %1$d d</string>
+
+    <string name="mon_card_connection">Verbindung</string>
+    <string name="mon_card_system">System</string>
+</resources>

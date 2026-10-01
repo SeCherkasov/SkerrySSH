@@ -14,9 +14,26 @@ import glob
 import os
 import hashlib
 import re
+import shutil
+import sys
 import time
 
 from . import state
+
+# The interpreter child processes are spawned as. `sys.executable` is the honest answer except
+# under a proxied python — ZCode's appimage sandbox runs the code but reports the app binary
+# there — and a child spawned as that path starts the app instead of the script, exit 0, so a
+# hook the selftest drives would silently "pass". The proxy honours the `python3` name, so a
+# non-python executable resolves through PATH instead — and if even that misses, refusing to run
+# beats a hook suite that validates nothing while reporting green.
+if os.path.basename(sys.executable).startswith("python"):
+    PY = sys.executable
+else:
+    PY = shutil.which("python3") or ""
+    if not PY:
+        raise SystemExit(
+            f"harness: no usable child interpreter — sys.executable is {sys.executable!r} "
+            "and python3 is not on PATH")
 
 KINDS = ("bug", "feature", "refactor", "docs")
 # How much each kind owes, so a declaration can be compared against what the branch already proves.

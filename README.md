@@ -158,7 +158,7 @@ Building from source is covered [below](#building-from-source).
 - **Teams** — end-to-end encrypted sharing of hosts, snippets and runbooks, access scopes per
   member, an activity feed of who changed which host and who opened a session.
 - **Interface** — dark and light themes, the terminal following the app theme, System mode
-  tracking the OS, UI in English, Russian, Simplified Chinese and Turkish.
+  tracking the OS, UI in English, Russian, Simplified Chinese, Turkish and German.
 
 ---
 

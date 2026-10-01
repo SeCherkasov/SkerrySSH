@@ -1,0 +1,25 @@
+<resources>
+    <string name="more_title">Mehr</string>
+    <string name="more_port_forwarding">Portweiterleitung</string>
+    <string name="more_known_hosts">Bekannte Hosts</string>
+    <string name="more_team">Team</string>
+    <string name="more_ai_privacy">KI-Assistent</string>
+    <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
+    <string name="more_ai_subtitle_local">Lokal</string>
+    <string name="more_ai_subtitle_off">Aus</string>
+    <string name="more_sync">Sync</string>
+    <string name="more_lock">Skerry sperren</string>
+    <string name="more_sync_local_only">Nur lokal</string>
+    <string name="more_sync_synced">Synchronisiert</string>
+    <string name="more_sync_syncing">Sync läuft…</string>
+    <string name="more_sync_linked_locked">Verknüpft · gesperrt</string>
+    <string name="more_sync_error">Sync-Fehler</string>
+    <string name="more_biometric_prompt_title">Biometrisches Entsperren aktivieren</string>
+    <string name="more_biometric_prompt_cancel">Abbrechen</string>
+    <string name="more_biometric_prompt_subtitle">Entsperre Skerry mit Biometrie — kein Master-Passwort nötig.</string>
+    <string name="more_biometric_verify_title">Biometrisches Entsperren prüfen</string>
+    <string name="more_biometric_verify_subtitle">Noch eine Berührung, um zu prüfen, dass das Entsperren funktioniert.</string>
+    <string name="more_about">Über</string>
+    <string name="more_experimental">Experimentell</string>
+    <string name="more_trash">Papierkorb</string>
+</resources>

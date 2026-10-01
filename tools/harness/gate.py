@@ -357,7 +357,7 @@ def cmd_red(args: argparse.Namespace) -> int:
             print("harness: --tests takes a test name or a glob of one, not an option — "
                   f"`{args.tests}` would be handed to the suite as an argument.")
             return 2
-        command = [sys.executable, "tools/harness/selftest.py", "-k", args.tests.strip("*")]
+        command = [policy.PY, "tools/harness/selftest.py", "-k", args.tests.strip("*")]
         empty = "Ran 0 tests"
     else:
         command = ["./gradlew", task_name, "--tests", args.tests, "--rerun"]

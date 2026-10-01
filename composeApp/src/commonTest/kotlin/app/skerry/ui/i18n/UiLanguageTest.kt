@@ -27,9 +27,23 @@ class UiLanguageTest {
                 UiLanguage.Russian to "ru",
                 UiLanguage.Chinese to "zh",
                 UiLanguage.Turkish to "tr",
+                UiLanguage.German to "de",
             ),
             UiLanguage.entries.associateWith { it.id },
         )
+    }
+
+    @Test
+    fun `german parses from its stored id and carries its tag`() {
+        val german = UiLanguage.fromId("de")
+        assertEquals("de", german.localeTag)
+        assertEquals("Deutsch", german.displayName)
+    }
+
+    @Test
+    fun `the AI answers in german for a de locale`() {
+        assertEquals("German", aiResponseLanguageName("de-DE"))
+        assertEquals("German", aiResponseLanguageName("de"))
     }
 
     @Test
@@ -50,6 +64,7 @@ class UiLanguageTest {
         assertEquals("ru", UiLanguage.Russian.localeTag)
         assertEquals("zh", UiLanguage.Chinese.localeTag)
         assertEquals("tr", UiLanguage.Turkish.localeTag)
+        assertEquals("de", UiLanguage.German.localeTag)
     }
 
     @Test

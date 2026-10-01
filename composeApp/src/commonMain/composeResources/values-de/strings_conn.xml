@@ -1,0 +1,195 @@
+<resources>
+    <string name="conn_title_new">Neue Verbindung</string>
+    <string name="conn_title_edit">Verbindung bearbeiten</string>
+    <string name="conn_subtitle_new">Host hinzufügen. Zugangsdaten werden mit deinem Master-Passwort verschlüsselt.</string>
+    <string name="conn_subtitle_edit">Diesen Host bearbeiten. Zugangsdaten werden mit deinem Master-Passwort verschlüsselt.</string>
+    <string name="conn_subtitle_mobile">Mit deinem Master-Passwort verschlüsselt. Bleibt auf diesem Gerät.</string>
+    <string name="conn_duplicate_name">%1$s (Kopie)</string>
+
+    <string name="conn_field_name">Name</string>
+    <string name="conn_field_protocol">Protokoll</string>
+    <string name="conn_field_host_address">Hostadresse</string>
+    <string name="conn_field_device">Gerät</string>
+    <string name="conn_field_shell_placeholder">/bin/bash — leer für die Standard-Shell</string>
+    <string name="conn_field_port">Port</string>
+    <string name="conn_field_baud">Baud</string>
+    <string name="conn_field_username">Benutzername</string>
+    <string name="conn_field_domain">Domain</string>
+    <string name="conn_field_authentication">Authentifizierung</string>
+    <string name="conn_field_tags">Tags</string>
+    <string name="conn_field_notes">Notizen</string>
+    <string name="conn_notes_placeholder">Wartungsfenster, Besitzer, alles Erwähnenswerte</string>
+    <string name="conn_field_jump_host">Jump-Host</string>
+    <string name="conn_field_keep_alive">Keep-alive</string>
+    <string name="conn_field_ai_policy">KI-Richtlinie für diese Verbindung</string>
+    <string name="conn_field_ai_policy_short">KI-Richtlinie</string>
+
+    <string name="conn_policy_strict_title">Strikt — Produktionssicherheit</string>
+    <string name="conn_policy_strict_desc">Cloud-KI aus. Nichts verlässt das Gerät; nur das lokale Modell wird verwendet.</string>
+    <string name="conn_policy_strict_short">Strikt</string>
+    <string name="conn_policy_balanced_title">Ausgewogen — Cloud erlaubt</string>
+    <string name="conn_policy_balanced_desc">Cloud-KI an. Geheimnisse werden vor dem Senden aus jedem Prompt entfernt.</string>
+    <string name="conn_policy_balanced_short">Ausgewogen</string>
+    <string name="conn_policy_permissive_title">Permissiv — Dev / Homelab</string>
+    <string name="conn_policy_permissive_desc">Cloud-KI aktiviert. Prompts werden unverändert gesendet, ohne Geheimnisse zu entfernen.</string>
+    <string name="conn_policy_permissive_short">Permissiv</string>
+    <string name="conn_policy_off_title">Aus — keine KI</string>
+    <string name="conn_policy_off_desc">KI-Funktionen für diese Verbindung deaktivieren.</string>
+    <string name="conn_policy_off_short">Aus</string>
+
+    <string name="conn_protocol_ssh">SSH</string>
+    <string name="conn_protocol_mosh">Mosh</string>
+    <string name="conn_protocol_telnet">Telnet</string>
+    <string name="conn_protocol_serial">Seriell</string>
+    <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_rdp">RDP</string>
+    <string name="conn_protocol_local">Lokal</string>
+    <string name="conn_telnet_plaintext_warning">Telnet ist unverschlüsselt — Zugangs- und Sitzungsdaten reisen im Klartext. Nutze SSH, außer das Netzwerk ist vertrauenswürdig.</string>
+    <string name="conn_vnc_plaintext_warning">VNC (RFB) ist unverschlüsselt — Bildschirm und Eingaben reisen im Klartext. Nutze ein vertrauenswürdiges Netzwerk oder einen SSH-Tunnel.</string>
+
+    <string name="conn_jump_none">Keiner — direkt</string>
+    <string name="conn_jump_error_title">Jump-Host nicht verfügbar</string>
+    <string name="conn_jump_error_missing">Der Jump-Host, auf den dieses Profil verweist, existiert nicht mehr. Wähle einen anderen in den Profileinstellungen.</string>
+    <string name="conn_jump_error_not_ssh">Der Jump-Host ist kein SSH-Profil und kann daher keinen Tunnel tragen.</string>
+    <string name="conn_jump_error_no_credential">Der Jump-Host hat kein gespeichertes Geheimnis. Füge seinem Profil zuerst ein Passwort oder einen Schlüssel hinzu.</string>
+    <string name="conn_jump_error_cycle">Jump-Host-Verweise bilden eine Schleife. Korrigiere die Kette in den Profileinstellungen.</string>
+    <string name="conn_jump_error_ok">OK</string>
+    <string name="conn_keepalive_off">Aus</string>
+    <string name="conn_keepalive_every">Alle %1$ds</string>
+
+    <string name="conn_cancel">Abbrechen</string>
+    <string name="conn_test">Testen</string>
+    <string name="conn_save">Speichern</string>
+    <string name="conn_save_changes">Änderungen speichern</string>
+    <string name="conn_save_connection">Verbindung speichern</string>
+    <string name="conn_create">Erstellen</string>
+    <string name="conn_footer_encrypted">Verschlüsselt · bleibt auf diesem Gerät</string>
+
+    <string name="conn_auth_ask">Jedes Mal nachfragen</string>
+    <string name="conn_auth_password">Passwort</string>
+    <string name="conn_auth_private_key">Privater Schlüssel</string>
+    <string name="conn_auth_select_credential">Zugangsdaten wählen…</string>
+    <string name="conn_auth_existing_saved">%1$s (gespeichert)</string>
+    <string name="conn_auth_ask_desc">Passwort wird beim Verbinden abgefragt</string>
+    <string name="conn_auth_password_option">Passwort…</string>
+    <string name="conn_auth_password_desc">ein Passwort in deinem Tresor speichern</string>
+    <string name="conn_auth_key_option">Privaten Schlüssel einfügen…</string>
+    <string name="conn_auth_key_desc">einen SSH-Schlüssel in deinem Tresor speichern</string>
+    <string name="conn_auth_password_placeholder">zu speicherndes Passwort</string>
+    <string name="conn_auth_passphrase_placeholder">Schlüssel-Passphrase (optional)</string>
+
+    <string name="conn_group_none">Keine Gruppe</string>
+    <string name="conn_group_new">Neue Gruppe…</string>
+    <string name="conn_group_new_title">Neue Gruppe</string>
+    <string name="conn_group_rename_title">Gruppe umbenennen</string>
+    <string name="conn_group_rename_hint">Hosts in dieser Gruppe wechseln gemeinsam zum neuen Namen.</string>
+    <string name="conn_group_delete">Gruppe löschen</string>
+    <string name="conn_tag_add_placeholder">Tag hinzufügen…</string>
+
+    <string name="conn_test_checking">Verbindung wird getestet…</string>
+    <string name="conn_test_connected">Verbunden</string>
+    <string name="conn_test_rtt_ms">%1$d ms</string>
+    <string name="conn_test_incomplete">Zum Testen Host, Benutzernamen und Zugangsdaten eingeben</string>
+
+    <string name="conn_test_err_auth">Authentifizierung fehlgeschlagen</string>
+    <string name="conn_test_err_host_key">Host-Schlüssel abgelehnt</string>
+    <string name="conn_test_err_connection">Verbindung fehlgeschlagen</string>
+    <string name="conn_error_failed">Verbinden nicht möglich</string>
+    <string name="conn_error_failed_detail">Verbinden nicht möglich (%1$s)</string>
+
+    <string name="conn_tunnel_error_host_missing">Host nicht gefunden</string>
+    <string name="conn_tunnel_error_no_credential">Keine gespeicherten Zugangsdaten</string>
+    <string name="conn_error_jump_shell_disabled">Das Eintippen von ssh auf dem Jump-Host ist auf diesem Gerät deaktiviert. Aktiviere es unter Einstellungen → Experimentell.</string>
+    <string name="conn_error_jump_shell_address">Die Adresse ist kein reiner Hostname und keine IP; sie wird nicht in die Shell des Jump-Hosts getippt.</string>
+    <string name="conn_tunnel_error_jump_shell">Über die Shell eines Jump-Hosts nicht verfügbar</string>
+    <string name="conn_tunnel_error_link_lost">Verbindung verloren</string>
+
+    <string name="conn_serial_err_unsupported">Serielle Schnittstellen sind auf diesem Gerät nicht verfügbar.</string>
+    <string name="conn_serial_err_not_found">Port %1$s nicht gefunden. Gerät neu anschließen oder anderen Port wählen.</string>
+    <string name="conn_serial_err_permission">Zugriff auf Port %1$s wurde verweigert.</string>
+    <string name="conn_serial_err_open">Port %1$s konnte nicht geöffnet werden — er ist eventuell durch ein anderes Programm belegt.</string>
+    <string name="conn_serial_err_configure">Port %1$s hat die gewählte Geschwindigkeit oder das Frameformat abgelehnt.</string>
+    <string name="conn_type_ssh">SSH</string>
+    <string name="conn_type_mosh">Mosh</string>
+    <string name="conn_type_telnet">Telnet</string>
+    <string name="conn_type_serial">Seriell</string>
+    <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_rdp">RDP</string>
+    <string name="conn_type_local">Lokale Shell</string>
+
+    <string name="conn_import_action">Aus ssh_config importieren</string>
+    <string name="conn_import_title">Aus ssh_config importieren</string>
+    <string name="conn_import_subtitle">Wähle die Hosts zum Hinzufügen. Schlüssel werden nicht importiert — die Authentifizierung legst du beim Verbinden fest.</string>
+    <string name="conn_import_select_all">Alle auswählen</string>
+    <string name="conn_import_empty">Keine Hosts in dieser Datei gefunden.</string>
+    <string name="conn_import_button">Importieren (%1$d)</string>
+    <string name="conn_import_skipped">Einige Zeilen wurden beim Import übersprungen.</string>
+    <string name="conn_rdp_import_farm">Farm: %1$s</string>
+    <string name="conn_rdp_import_gateway">RD-Gateway wird nicht unterstützt: Die Verbindung geht direkt zum Host.</string>
+    <string name="conn_rdp_import_empty">Diese Datei nennt keine Adresse zum Verbinden.</string>
+    <string name="conn_rdp_import_button">Importieren</string>
+    <string name="conn_rdp_import_subtitle">Aus der Datei wird ein Profil erstellt. Passwörter werden nicht importiert — die Authentifizierung legst du beim Verbinden fest.</string>
+    <string name="conn_rdp_import_title">.rdp-Datei importieren</string>
+    <string name="conn_rdp_import_action">.rdp-Datei importieren</string>
+
+    <!-- Container profiles (Docker / Kubernetes exec) -->
+    <string name="conn_protocol_container">Container</string>
+    <string name="conn_type_container">Container</string>
+    <string name="conn_runtime_docker">Docker</string>
+    <string name="conn_runtime_kubernetes">Kubernetes</string>
+    <string name="conn_field_runtime">Container-Runtime</string>
+    <string name="conn_field_container">Container</string>
+    <string name="conn_field_pod">Pod</string>
+    <string name="conn_field_namespace">Namespace</string>
+    <string name="conn_field_pod_container">Container im Pod</string>
+    <string name="conn_field_container_shell">Shell</string>
+    <string name="conn_container_hint">Die Adresse oben ist der Host, der docker/kubectl über SSH ausführt.</string>
+    <string name="conn_container_browse">Durchsuchen</string>
+    <string name="conn_container_loading">Liste wird geladen…</string>
+    <string name="conn_container_empty">Auf diesem Host läuft nichts</string>
+    <string name="conn_container_err_auth">Authentifizierung fehlgeschlagen</string>
+    <string name="conn_container_err_host_key">Host-Schlüssel abgelehnt</string>
+    <string name="conn_container_err_connection">Verbindung fehlgeschlagen</string>
+    <string name="conn_container_incomplete">Zuerst Host, Benutzernamen und Zugangsdaten eingeben</string>
+    <string name="conn_container_err_command">Der Host konnte Container nicht auflisten</string>
+    <string name="conn_auth_interactive">Interaktiv (2FA)</string>
+    <string name="conn_auth_interactive_desc">der Server fragt beim Verbinden nach einem Code</string>
+    <string name="conn_import_keys_note">IdentityFile und CertificateFile werden über den Speicherort verknüpft — kein Schlüsselmaterial wird in den Tresor kopiert.</string>
+
+    <!-- RDP audio redirection -->
+    <string name="conn_field_audio">Audio</string>
+    <string name="conn_audio_redirect">Ton der Sitzung hier wiedergeben</string>
+    <string name="conn_audio_redirect_desc">Der Remote-Desktop spielt über dieses Gerät ab, statt auf dem Server zu bleiben.</string>
+    <string name="conn_field_clipboard">Zwischenablage</string>
+    <string name="conn_rdp_import_no_address">Die Datei nennt keine Adresse zum Verbinden.</string>
+    <string name="conn_rdp_import_port">Der Port in der Datei liegt außerhalb des gültigen Bereichs; der Standard wird verwendet.</string>
+    <string name="conn_rdp_import_malformed">Teile der Datei konnten nicht gelesen werden und wurden übersprungen.</string>
+    <string name="conn_clipboard_share">Zwischenablage teilen</string>
+    <string name="conn_clipboard_share_desc">Auf einer Seite kopierter Text steht auf der anderen zur Verfügung, solange die Sitzung offen ist.</string>
+    <string name="conn_audio_output_device">Ausgabegerät</string>
+    <string name="conn_audio_device_default">Systemstandard</string>
+    <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
+    <string name="conn_field_image_quality">Bildqualität</string>
+    <string name="conn_image_quality_low_desc">Kein Hintergrundbild, keine Themes, Animationen oder Cursor-Effekte.</string>
+    <string name="conn_image_quality_medium_desc">Kein Hintergrundbild, keine Themes oder Animationen.</string>
+    <string name="conn_image_quality_high_desc">Vollständiger Desktop, Schriftglättung und Komposition.</string>
+    <string name="conn_image_quality_note">Wird beim Verbinden der Sitzung angewendet; RDP legt es für die gesamte Sitzung fest.</string>
+    <string name="conn_field_display">Anzeige</string>
+    <string name="conn_rdp_gfx">Grafik-Pipeline (MS-RDPEGFX)</string>
+    <string name="conn_rdp_gfx_desc">Aus fällt auf den Legacy-Zeichenpfad zurück.</string>
+    <string name="conn_rdp_remotefx">RemoteFX</string>
+    <string name="conn_rdp_remotefx_desc">Codec auf dem Legacy-Pfad; wird angekündigt, wenn der Server ihn anbietet.</string>
+    <string name="conn_rdp_h264">H.264</string>
+    <string name="conn_rdp_h264_auto">Auto</string>
+    <string name="conn_rdp_h264_off">Aus</string>
+    <string name="conn_rdp_h264_desc">Braucht einen lokalen H.264-Decoder (ffmpeg am Desktop); Auto kündigt alles an, was es dekodieren kann.</string>
+    <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
+    <string name="conn_err_hostkey_changed">Host-Schlüssel geändert. Behebe das unter „Bekannte Hosts“.</string>
+    <string name="conn_err_hostkey_untrusted">Host-Schlüssel ist noch nicht vertrauenswürdig. Verbinde dich einmal über ein Terminal oder füge seine CA unter „Bekannte Hosts“ hinzu.</string>
+    <string name="conn_err_hostkey_refused">Host-Schlüssel nicht akzeptiert. Verbinde dich erneut, um den Schlüssel zu sehen.</string>
+    <string name="conn_err_hostkey_locked">Tresor gesperrt: Vertrauen des Host-Schlüssels kann nicht gelesen werden. Entsperre und versuche es erneut.</string>
+    <string name="conn_err_hostkey_cert">Dieser Host muss ein Zertifikat einer vertrauenswürdigen CA vorweisen; das Vorgelegte wurde abgelehnt.</string>
+    <string name="conn_err_hostkey_jump">Jump-Host — %1$s</string>
+    <string name="conn_jump_via_shell">ssh auf dem Jump-Host tippen</string>
+    <string name="conn_jump_via_shell_desc">Für einen Bastion-Host, der nur eine Shell erlaubt. Anmeldung erfolgt als Jump-Host-Profil; das Ziel wird mit den Schlüsseln des Jump-Hosts erreicht. Nur Terminal.</string>
+</resources>

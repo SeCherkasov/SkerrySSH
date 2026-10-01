@@ -177,7 +177,7 @@ def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
             if re.search(r"[A-Za-z]{2,}", prose):
                 found.append(Finding("i18n-hardcoded", BLOCK, path, line,
                                      f"user-visible literal \"{prose[:40]}\" — move it to "
-                                     "composeResources and ship en + ru + zh + tr. A brand name or a "
+                                     "composeResources and ship en + ru + zh + tr + de. A brand name or a "
                                      "protocol token takes `// harness-allow: i18n-hardcoded`."))
         if (ui and HEX_COLOUR.search(text) and not any(t in path for t in THEME_PATHS)
                 and not _allowed(text, "design-hex")):
@@ -283,11 +283,11 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
         return key if kind == "string" else f"{kind} {key}"
 
     en, found = keys("values"), []
-    for locale in ("values-ru", "values-zh", "values-tr"):
+    for locale in ("values-ru", "values-zh", "values-tr", "values-de"):
         other = keys(locale)
         for key in sorted(set(en) - set(other)):
             found.append(Finding("i18n-parity", BLOCK, en[key], 0,
-                                 f"`{label(key)}` has no {locale} translation — strings ship en + ru + zh + tr."))
+                                 f"`{label(key)}` has no {locale} translation — strings ship en + ru + zh + tr + de."))
         for key in sorted(set(other) - set(en)):
             found.append(Finding("i18n-parity", BLOCK, other[key], 0,
                                  f"`{label(key)}` exists only in {locale} — a stale or misspelt key."))
@@ -298,7 +298,8 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
     required = {"values": ("one", "other"),
                 "values-ru": ("one", "few", "many", "other"),
                 "values-zh": ("other",),
-                "values-tr": ("one", "other")}
+                "values-tr": ("one", "other"),
+                "values-de": ("one", "other")}
     for locale, categories in required.items():
         for file in sorted(glob.glob(os.path.join(base, locale, "*.xml"))):
             rel = os.path.relpath(file, root)
@@ -342,7 +343,7 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
         return out
 
     source = placeholders("values")
-    for locale in ("values-ru", "values-zh", "values-tr"):
+    for locale in ("values-ru", "values-zh", "values-tr", "values-de"):
         for entry, items in sorted(placeholders(locale).items()):
             if entry not in source:
                 continue

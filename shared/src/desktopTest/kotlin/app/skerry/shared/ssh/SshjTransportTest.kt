@@ -171,15 +171,18 @@ class SshjTransportTest {
     }
 
     /**
-     * Choosing Turkish in Appearance sets the JVM default locale, and under `tr` Java's
+     * Choosing Turkish or German in Appearance sets the JVM default locale, and under `tr` Java's
      * `toUpperCase()`/`toLowerCase()` map `i` to `İ` and `I` to `ı`. Algorithm names, key-type
      * tags and fingerprints on the whole SSH path go through code we do not own, so the same
-     * connection is made under `Locale.ROOT` and under Turkish and must come out identical. The
-     * server's host key is EC, so `ecdsa-sha2-nistp256` — a name with an `i` in it — is negotiated,
-     * offered and fingerprinted under both.
+     * connection is made under `Locale.ROOT` and under both locales and must come out identical.
+     * The server's host key is EC, so `ecdsa-sha2-nistp521` — a name with an `i` in it, and the
+     * curve sshd's key provider picks unconfigured (the largest it knows) — is negotiated,
+     * offered and fingerprinted under all three. German runs the same gauntlet as a second
+     * non-ROOT default locale the UI can set; in Java its case rules match ROOT (only tr/az
+     * rewrite), so this guards the path, not a German-specific transform.
      */
     @Test
-    fun `key auth, host-key offer and exec are unchanged with the default locale set to Turkish`() = runTest {
+    fun `key auth, host-key offer and exec are unchanged with the default locale set to Turkish or German`() = runTest {
         suspend fun handshakeUnder(locale: java.util.Locale): Pair<String?, String?> {
             val saved = java.util.Locale.getDefault()
             java.util.Locale.setDefault(locale)
@@ -209,6 +212,8 @@ class SshjTransportTest {
         val turkish = handshakeUnder(java.util.Locale.forLanguageTag("tr-TR"))
         assertTrue(!root.first.isNullOrBlank() && root.second.orEmpty().startsWith("SHA256:"), "baseline: $root")
         assertEquals(root, turkish, "the host key reads differently under the Turkish locale")
+        val german = handshakeUnder(java.util.Locale.forLanguageTag("de-DE"))
+        assertEquals(root, german, "the host key reads differently under the German locale")
     }
 
     @Test

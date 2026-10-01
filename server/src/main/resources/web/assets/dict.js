@@ -1,6 +1,6 @@
 "use strict";
 /*
-  Skerry Sync web frontend — the en/ru/zh/tr dictionaries. One file, because three would be three more
+  Skerry Sync web frontend — the en/ru/zh/tr/de dictionaries. One file, because four would be four more
   script tags for the same bytes: the page needs every language at once to switch without a reload.
 
   Copy rule: a string earns its place by carrying a label, a number, or a fact that is not already on
@@ -9,7 +9,7 @@
   translated value would be a divergence, not a courtesy.
 */
 
-const LANGS = ["en", "ru", "zh", "tr"];
+const LANGS = ["en", "ru", "zh", "tr", "de"];
 const LANG_KEY = "skerry.lang";
 
 const DICT = {
@@ -738,6 +738,188 @@ const DICT = {
     "n.viewers":  { one: "{n} izleyici",  other: "{n} izleyici" },
 
     "t.now":  "az önce",
+    "unit.b": "B", "unit.kib": "KiB", "unit.mib": "MiB"
+  },
+
+  de: {
+    "title.public":    "Skerry Sync — Instanz",
+    "title.account":   "Skerry Sync — Konto",
+    "title.operator":  "Skerry Sync — Operatorkonsole",
+    "zone.account":    "Konto",
+    "zone.operator":   "Operator",
+    "zone.account.d":  "Geräte, Teams, gespeicherte Datensätze",
+    "zone.operator.d": "Summen, Konten, Audit-Log",
+
+    "front.doors":     "Zugänge",
+    "front.lead":      "Der Server speichert nur Chiffretext. Schlüssel werden auf deinen Geräten abgeleitet und erreichen ihn nie.",
+    "sec.overview":    "Übersicht",
+    "sec.devices":     "Geräte",
+    "sec.teams":       "Teams",
+    "sec.sessions":    "Aktive Sitzungen",
+    "sec.storage":     "Speicher",
+    "sec.log":         "Log",
+    "sec.security":    "Sicherheit",
+    "sec.stats":       "Instanz",
+    "sec.accounts":    "Konten",
+    "sec.audit":       "Audit-Log",
+    "sec.health":      "Zustand",
+
+    "instance.version":      "Version",
+    "instance.storage":     "Speicher",
+    "instance.storage.val": "Nur Chiffretext",
+    "instance.status.up":    "Verfügbar",
+    "instance.status.down":  "Nicht verfügbar",
+    "instance.reg":          "Registrierung",
+    "instance.reg.open":     "Offen",
+    "instance.reg.closed":   "Geschlossen",
+    "instance.transport":    "Transport",
+    "instance.transport.plain": "kein TLS — Tokens und Wrapped Keys überqueren die Leitung im Klartext",
+
+    "connect.url":     "Server-URL",
+    "connect.s1":      "URL in den Client einfügen",
+    "connect.s1d":     "Einstellungen → Sync → Selbst gehosteter Server.",
+    "connect.s2":      "Anmelden oder Konto erstellen",
+    "connect.s2d":     "Der Server erhält einen SRP-Verifier, nicht das Passwort.",
+    "connect.s3":      "Restliche Geräte hinzufügen",
+    "connect.s3d":     "Einmalcode von einem angemeldeten Gerät; der Datenschlüssel reist verschlüsselt.",
+    "connect.copy":    "Kopieren",
+    "connect.copied":  "Kopiert",
+    "connect.copy.manual": "Ausgewählt — kopieren",
+
+    "gate.account.h":  "Anmelden",
+    "gate.account.p":  "Das Web-Passwort wird in der App gesetzt. Es ist nicht das Master-Passwort und kann den Tresor nicht öffnen.",
+    "gate.acct.ph":    "you@example.com",
+    "gate.acct.label": "Konto-ID",
+    "gate.pw.ph":      "Web-Passwort",
+    "gate.account.go": "Anmelden",
+    "gate.account.hint": "Vergessen? Setze ein neues in der App: Einstellungen → Sync → Web-Zugriff.",
+    "gate.account.err": "Falsches Konto oder Passwort.",
+    "gate.operator.h": "Operatorkonsole",
+    "gate.operator.p": "Instanz-Metadaten: Summen, Geräte, Audit-Ereignisse.",
+    "gate.operator.ph": "SKERRY_ADMIN_TOKEN",
+    "gate.operator.go": "Entsperren",
+    "gate.operator.err": "Ungültiges Token.",
+    "gate.throttled":  "Zu viele Versuche. Versuche es in einer Minute erneut.",
+    "gate.back":       "Zurück",
+
+    "act.signout":     "Abmelden",
+    "act.lock":        "Sperren",
+    "act.refresh":     "Aktualisieren",
+    "act.revoke":      "Widerrufen",
+    "act.open":        "Öffnen",
+    "act.delete":      "Löschen",
+    "act.purge":       "Tombstones bereinigen",
+    "act.close":       "Schließen",
+    "act.enter":       "Eintreten",
+
+    "ov.h":            "Übersicht",
+    "ov.devices":      "Geräte",
+    "ov.records":      "Datensätze",
+    "ov.storage":      "Chiffretext",
+    "ov.lastsync":     "Letzter Sync",
+    "ov.devices.sub":  "{n} aktiv",
+    "ov.records.sub":  "{n} Tombstones",
+
+    "dev.h":           "Geräte",
+    "dev.p":           "Widerrufen killt die Tokens des Geräts und schließt seine Sockets.",
+    "dev.revoked.hidden": { one: "{n} widerrufenes Gerät ist nicht aufgeführt.", other: "{n} widerrufene Geräte sind nicht aufgeführt." },
+    "dev.name":        "Gerät",
+    "dev.platform":    "Plattform",
+    "dev.created":     "Hinzugefügt",
+    "dev.seen":        "Zuletzt gesehen",
+    "dev.cursor":      "Sync-Cursor",
+    "dev.state":       "Status",
+    "dev.current":     "Diese Sitzung",
+    "dev.st.ok":       "AKTIV",
+    "dev.st.stale":    "VERALTET",
+    "dev.st.revoked":  "WIDERRUFEN",
+
+    "team.h":          "Teams",
+    "team.p":          "Teamnamen liegen im Chiffretext; der Server hält Identifikatoren.",
+    "team.role":       "Rolle",
+    "team.state":      "Mitgliedschaft",
+    "team.members":    "Mitglieder",
+    "team.epoch":      "Schlüsselversion",
+    "team.st.active":  "AKTIV",
+    "team.st.invited": "EINGELADEN",
+    "team.back":       "Alle Teams",
+    "team.acct":       "Konto",
+    "team.since":      "Mitglied seit",
+    "team.scope":      "Zugriff",
+    "team.scopes":     "Zugriff",
+    "team.log":        "Log",
+    "team.scope.p":    "Eine Zugriffsregel grenzt ein, welche Datensätze ein Mitglied öffnen kann. Ihr Name reist im Umschlag, nie zum Server.",
+    "team.grants":     "Vergeben an",
+    "team.act.who":    "Konto",
+
+    "ses.h":           "Aktive Sitzungen",
+    "ses.p":           "Frames werden vor dem Relay unter dem Team-Schlüssel versiegelt.",
+    "ses.started":     "Gestartet",
+    "ses.empty":       "Nichts hier.",
+
+    "st.h":            "Speicher",
+    "st.p":            "Die Vorschau ist echter führender Chiffretext.",
+    "st.id":           "Datensatz",
+    "st.type":         "Typ",
+    "st.ver":          "Version",
+    "st.size":         "Größe",
+    "st.device":       "Von",
+    "st.preview":      "Chiffretext",
+    "st.note":         "Typ und Größe sind Klartext — Sync sortiert danach. Alles andere liegt im Blob.",
+
+    "log.h":           "Log",
+    "log.p":           "Nur Metadaten-Ereignisse.",
+    "log.when":        "Zeit",
+    "log.event":       "Ereignis",
+    "log.device":      "Gerät",
+    "log.detail":      "Detail",
+    "page.size":       "Anzeigen",
+    "page.range":      "{from}\u2013{to} von {total}",
+    "page.prev":       "Vorherige Seite",
+    "page.next":       "Nächste Seite",
+
+    "sc.h":            "Sicherheit",
+    "sc.all":          "Von jedem Gerät abmelden",
+    "sc.alld":         "Widerruft alle Tokens, auch diese Web-Sitzung.",
+    "sc.all.go":       "Alle widerrufen",
+
+    "op.h":            "Instanz",
+    "op.p":            "Alle Konten auf diesem Server.",
+    "op.accounts":     "Konten",
+    "op.devices":      "Geräte",
+    "op.records":      "Datensätze",
+    "op.storage":      "Chiffretext",
+    "op.acc.h":        "Konten",
+    "op.acc.p":        "Eine Zeile klappt zu ihren Geräten und Datensätzen auf.",
+    "op.acc.id":       "Konto",
+    "op.acc.created":  "Erstellt",
+    "op.acc.devices":  "Geräte",
+    "op.acc.records":  "Datensätze",
+    "op.acc.size":     "Größe",
+    "op.acc.seen":     "Zuletzt gesehen",
+    "op.observ.h":     "Zustand",
+    "op.observ.db":    "DB",
+    "op.observ.age":   "Alter",
+    "op.observ.never": "nie",
+    "op.audit.h":      "Audit-Log",
+    "op.acct":         "Konto",
+
+    "state.loading":   "Lädt…",
+    "err.net":         "Keine Antwort vom Server.",
+    "err.http":        "Fehler {code}.",
+    "err.session":     "Sitzung abgelaufen. Die Aktion lief nicht.",
+    "err.render":      "Die Seite ließ sich nicht zeichnen. Lade sie neu.",
+
+    "dlg.revoke":      "{name} widerrufen?\n\nSeine Tokens funktionieren nicht mehr und seine offenen Sockets schließen. Bereits synchronisierte Datensätze bleiben auf dem Gerät.",
+    "dlg.signout":     "Von jedem Gerät abmelden?\n\nJedes Token dieses Kontos wird widerrufen, auch diese Browser-Sitzung.",
+    "dlg.signout.partial": "{n} von {total} Geräten widerrufen, dann bei einem Fehler gestoppt — der Rest bleibt angemeldet.",
+    "dlg.purge":       "Tombstones von {acct} bereinigen?\n\nEs werden nur Löschmarker entfernt, an denen jedes Gerät bereits vorbeigezogen ist; ein Datensatz kann nicht zurückkommen.",
+    "dlg.delete":      "{acct} löschen?\n\nSeine Datensätze, Geräte und Kopplungssitzungen werden unumkehrbar entfernt. Teams in seinem Besitz gehen an ein anderes Mitglied oder werden mitgelöscht.",
+
+    "n.members":  { one: "{n} Mitglied",  other: "{n} Mitglieder" },
+    "n.viewers":  { one: "{n} Betrachter",  other: "{n} Betrachter" },
+
+    "t.now":  "gerade eben",
     "unit.b": "B", "unit.kib": "KiB", "unit.mib": "MiB"
   }
 };

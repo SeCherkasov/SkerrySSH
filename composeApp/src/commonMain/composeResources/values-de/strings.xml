@@ -1,0 +1,108 @@
+<resources>
+    <!-- Appearance / раздел оформления (desktop Settings → Appearance, mobile More → Appearance) -->
+    <string name="appearance_title">Darstellung</string>
+    <string name="appearance_subtitle">Theme, Oberflächensprache und die Seitenleiste.</string>
+    <string name="appearance_theme">App-Theme</string>
+    <string name="appearance_rendering">Rendering</string>
+    <string name="appearance_rendering_desc">Skia-Backend für die gesamte App; die H.264-Dekodierung folgt ihm. Beim Start gelesen — nach einem Neustart wirksam.</string>
+    <string name="render_backend_auto">Automatisch</string>
+    <string name="render_backend_hardware">Hardware</string>
+    <string name="render_backend_software">Software</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Skerry Light</string>
+    <string name="theme_dark">Skerry Dark</string>
+    <string name="theme_blackwater">Blackwater</string>
+    <string name="theme_tokyo_night">Tokyo Night</string>
+    <string name="theme_tokyo_day">Tokyo Day</string>
+    <string name="theme_catppuccin_mocha">Catppuccin Mocha</string>
+    <string name="theme_gruvbox_dark">Gruvbox Dark</string>
+    <string name="theme_dracula">Dracula</string>
+    <string name="theme_solarized_light">Solarized Light</string>
+    <string name="appearance_badge_active">AKTIV</string>
+    <string name="appearance_section_terminal">TERMINAL</string>
+    <string name="appearance_section_interface">OBERFLÄCHE</string>
+    <string name="appearance_section_theme">THEME</string>
+    <string name="appearance_custom_term_theme">Separates Terminal-Theme</string>
+    <string name="appearance_custom_term_theme_desc">Wähle ein Terminal-Theme, das vom App-Theme abweicht.</string>
+    <string name="appearance_font">Schriftart</string>
+    <string name="appearance_font_size">Schriftgröße</string>
+    <string name="appearance_line_height">Zeilenhöhe</string>
+    <string name="appearance_letter_spacing">Buchstabenabstand</string>
+    <string name="appearance_default_value">Standard: %1$s</string>
+    <string name="appearance_language">Sprache</string>
+    <string name="appearance_recent_show">Letzte Verbindungen</string>
+    <string name="appearance_recent_show_desc">Zeige die zuletzt verbundenen Hosts in der Seitenleiste.</string>
+    <string name="appearance_recent_count">Angezeigte Anzahl</string>
+
+    <!-- Языки интерфейса. Названия конкретных языков даются автонимами (English, Русский) и не
+         переводятся; локализуется только «System» (по языку ОС). -->
+    <string name="language_system">System</string>
+
+    <!-- Нижняя навигация (mobile): подписи корневых табов. -->
+    <string name="nav_tab_hosts">Hosts</string>
+    <string name="nav_tab_sessions">Sitzungen</string>
+    <string name="nav_tab_more">Mehr</string>
+
+    <!-- Левый icon-rail desktop-оболочки: подписи пунктов. -->
+    <string name="rail_terminal">Terminal</string>
+    <string name="rail_desktops">Remote-Desktops</string>
+    <string name="rail_tunnels">Tunnels</string>
+    <string name="rail_snippets">Snippets</string>
+    <string name="rail_vault">Tresor</string>
+    <string name="rail_hosts">Hosts</string>
+    <string name="rail_team">Team</string>
+
+    <!-- Нативные файловые диалоги SFTP (desktop). -->
+    <string name="sftp_dialog_save_as">Speichern unter</string>
+    <string name="sftp_dialog_pick_upload">Wähle eine Datei zum Hochladen</string>
+
+    <!-- Оверлей reverse-search истории команд (Ctrl-R) в терминале. -->
+    <string name="terminal_reverse_search_prompt">(reverse-i-search)`%1$s`:  ↑↓ auswählen · Enter einfügen · Del entfernen · Esc</string>
+    <string name="terminal_reverse_search_no_matches">— keine Treffer —</string>
+
+    <!-- Transient "copied to clipboard" banner shown after copying a terminal selection. -->
+    <string name="terminal_copied">Kopiert</string>
+
+    <!-- Панель поиска по выводу терминала (scrollback). -->
+    <string name="terminal_search_placeholder">In der Ausgabe suchen</string>
+    <string name="terminal_search_counter">%1$d/%2$d</string>
+    <string name="terminal_search_counter_capped">%1$d/%2$d+</string>
+    <string name="terminal_search_no_matches">Keine Treffer</string>
+    <string name="terminal_search_invalid_pattern">Ungültiges Muster</string>
+    <string name="terminal_search_too_complex">Muster zu komplex</string>
+    <string name="terminal_search_match_case">Groß-/Kleinschreibung beachten</string>
+    <string name="terminal_search_regex">Regulärer Ausdruck</string>
+    <string name="terminal_search_next">Nächster Treffer</string>
+    <string name="terminal_search_prev">Vorheriger Treffer</string>
+    <string name="terminal_search_close">Suche schließen</string>
+
+    <!-- Экран сканирования QR (mobile, связывание устройств). -->
+    <string name="qr_scan_hint">Richte die Kamera auf den QR-Code, der auf deinem anderen Gerät angezeigt wird.</string>
+    <string name="qr_permission_needed">Zum Scannen des Kopplungscodes wird die Kameraberechtigung benötigt.</string>
+    <string name="qr_cancel">Abbrechen</string>
+    <string name="command_clipped_partial">teilweise angezeigt</string>
+    <string name="command_clipped">teilweise angezeigt · %1$d Zeichen</string>
+
+    <!-- Help dialogs (snippets / runbooks / vault) -->
+    <string name="help_button">Hilfe</string>
+    <string name="help_close">Schließen</string>
+    <string name="help_add">Hinzufügen</string>
+    <string name="help_added">Hinzugefügt</string>
+    <string name="trust_new_key_title">Neuer Host-Schlüssel</string>
+    <string name="trust_changed_key_title">Host-Schlüssel geändert</string>
+    <string name="trust_new_cert_title">Neues Serverzertifikat</string>
+    <string name="trust_changed_cert_title">Serverzertifikat geändert</string>
+    <string name="trust_other_type_title">Host unter anderem Schlüssel bekannt</string>
+    <string name="trust_new_key_body">Für diesen Host ist noch kein Schlüssel erfasst. Vergleiche den Fingerabdruck mit dem auf dem Server, bevor du ihn akzeptierst.</string>
+    <string name="trust_new_cert_body">Für diesen Host ist noch kein Zertifikat erfasst. Vergleiche den Fingerabdruck mit dem auf dem Server, bevor du ihn akzeptierst.</string>
+    <string name="trust_fingerprint">FINGERABDRUCK (SHA256)</string>
+    <string name="trust_other_type_note">Dieser Host ist bereits mit %1$s erfasst. Der Server wählt, welchen Algorithmus der Austausch nutzt; darum kann ein geänderter Schlüssel als neuer ankommen.</string>
+    <string name="trust_accept">Akzeptieren und verbinden</string>
+    <string name="trust_accept_new_cert">Neues Zertifikat akzeptieren</string>
+    <string name="trust_reject">Ablehnen</string>
+    <string name="trust_cert_subject">Antragsteller</string>
+    <string name="trust_cert_issuer">Aussteller</string>
+    <string name="trust_cert_valid_until">Gültig bis</string>
+    <string name="trust_cert_not_verified">Das System konnte dieses Zertifikat nicht verifizieren — eine unvollständige Kette oder eine unbekannte Zertifizierungsstelle. Bei Remote Desktop normal; beurteile es anhand des Fingerabdrucks.</string>
+    <string name="trust_cert_name_mismatch">Das Zertifikat nennt einen anderen Host als den angewählten.</string>
+</resources>

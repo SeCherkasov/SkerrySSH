@@ -1,0 +1,207 @@
+<resources>
+    <!-- Vault section: keychain manager, secret cards/details, dialogs, and the master-password gate. -->
+    <string name="vault_title">Tresor</string>
+    <string name="vault_sidebar_header">TRESOR</string>
+    <string name="vault_e2e_encrypted">Ende-zu-Ende-verschlüsselt</string>
+    <string name="vault_e2e_description">Private Schlüssel werden mit deinem Master-Passwort verschlüsselt und niemals im Klartext synchronisiert.</string>
+    <string name="vault_generate_key">Schlüssel generieren</string>
+    <string name="vault_add_password">Passwort hinzufügen</string>
+    <string name="vault_import_certificate">Zertifikat importieren</string>
+    <string name="vault_import_key">Schlüssel importieren</string>
+
+
+    <!-- Empty category states. -->
+    <string name="vault_empty_ssh_title">Noch keine SSH-Schlüssel</string>
+    <string name="vault_empty_ssh_hint">Generiere oder importiere einen Schlüssel, um ihn Hosts zuzuordnen.</string>
+    <string name="vault_empty_passwords_title">Noch keine Passwörter</string>
+    <string name="vault_empty_passwords_hint">Füge ein Passwort hinzu — es wird verschlüsselt gespeichert und hostübergreifend wiederverwendbar.</string>
+    <string name="vault_empty_certificates_title">Noch keine Zertifikate</string>
+    <string name="vault_empty_certificates_hint">Importiere ein CA-signiertes Zertifikat und den zugehörigen privaten Schlüssel.</string>
+    <string name="vault_empty_certificates_hint_short">Importiere ein CA-signiertes Zertifikat und den zugehörigen privaten Schlüssel.</string>
+
+    <!-- Secret detail: subtitles and labels. -->
+    <string name="vault_subtitle_certificate">Zertifikat</string>
+    <string name="vault_subtitle_certificate_typed">%1$s-Zertifikat</string>
+    <string name="vault_subtitle_private_key">Privater Schlüssel</string>
+    <string name="vault_subtitle_password">Passwort</string>
+    <string name="vault_label_public_key">Öffentlicher Schlüssel</string>
+    <string name="vault_key_unreadable">Schlüssel konnte nicht gelesen werden</string>
+    <string name="vault_copy_certificate">Zertifikat kopieren</string>
+    <string name="vault_copy_public_key">Öffentlichen Schlüssel kopieren</string>
+    <string name="vault_copy_password">Passwort kopieren</string>
+    <string name="vault_export">Exportieren</string>
+    <string name="vault_export_key">Schlüssel exportieren</string>
+    <string name="vault_export_certificate">Zertifikat exportieren</string>
+    <string name="vault_export_failed_title">Export fehlgeschlagen</string>
+    <string name="vault_export_failed_message">Die Datei wurde nicht geschrieben.</string>
+    <string name="vault_export_dismiss">Schließen</string>
+    <string name="vault_delete">Löschen</string>
+    <string name="vault_edit">Bearbeiten</string>
+    <string name="vault_cancel">Abbrechen</string>
+    <string name="vault_used_by_one">Genutzt von · 1 Host</string>
+    <string name="vault_used_by">Genutzt von · %1$d Hosts</string>
+    <string name="vault_used_by_snippets_one">Genutzt von · 1 Snippet</string>
+    <string name="vault_used_by_snippets">Genutzt von · %1$d Snippets</string>
+    <string name="vault_not_attached">Noch keinem Host zugeordnet.</string>
+    <string name="vault_cert_key_id">Schlüssel-ID: %1$s</string>
+    <string name="vault_cert_unreadable">Zertifikat konnte nicht gelesen werden</string>
+    <string name="vault_label_principals">Principals</string>
+    <string name="vault_any_principal">beliebiger Principal</string>
+    <string name="vault_label_valid">Gültigkeit</string>
+    <string name="vault_badge_expired">ABGELAUFEN</string>
+    <string name="vault_label_serial">Seriennummer</string>
+    <string name="vault_label_signing_ca">Signierende CA</string>
+    <string name="vault_label_note">Notiz</string>
+
+    <!-- Generate SSH key dialog. -->
+    <string name="vault_dialog_generate_title">SSH-Schlüssel generieren</string>
+    <string name="vault_dialog_generate_subtitle">Ein neues Schlüsselpaar wird in deinem Tresor versiegelt — ohne Passphrase.</string>
+    <string name="vault_field_name">NAME</string>
+    <string name="vault_placeholder_name_key">z. B. work-laptop</string>
+    <string name="vault_field_algorithm">ALGORITHMUS</string>
+    <string name="vault_generate">Generieren</string>
+
+    <!-- Add password dialog. -->
+    <string name="vault_dialog_add_password_subtitle">Verschlüsselt in deinem Tresor gespeichert und hostübergreifend wiederverwendbar.</string>
+    <string name="vault_placeholder_name_password">z. B. db-admin</string>
+    <string name="vault_field_password">PASSWORT</string>
+    <string name="vault_placeholder_password">geheim</string>
+    <string name="vault_add">Hinzufügen</string>
+
+    <!-- Import certificate dialog. -->
+    <string name="vault_dialog_import_subtitle">Ein CA-signiertes Zertifikat und sein privater Schlüssel werden in deinem Tresor versiegelt.</string>
+    <string name="vault_placeholder_name_cert">z. B. prod-access</string>
+    <string name="vault_field_private_key_pem">PRIVATER SCHLÜSSEL (PEM)</string>
+    <string name="vault_field_certificate">ZERTIFIKAT (*-cert.pub)</string>
+    <string name="vault_field_passphrase">PASSPHRASE (FALLS VORHANDEN)</string>
+    <string name="vault_placeholder_optional">optional</string>
+    <string name="vault_cert_read_error">Dieses Zertifikat konnte nicht gelesen werden — erwartet wurde eine OpenSSH-*-cert.pub-Zeile.</string>
+    <string name="vault_cert_valid_summary">%1$s · %2$s · gültig bis %3$s</string>
+    <string name="vault_import">Importieren</string>
+
+    <!-- Import key dialog (the certificate import above, with the certificate optional). -->
+    <string name="vault_dialog_import_key_subtitle">Der private Schlüssel wird in deinem Tresor versiegelt. Das Zertifikat ist optional.</string>
+    <string name="vault_key_read_error">Dieser Schlüssel konnte nicht gelesen werden — falsche Passphrase oder kein OpenSSH-/PEM-Privatschlüssel.</string>
+    <string name="vault_key_valid_summary">%1$s · %2$s</string>
+    <string name="vault_key_readable">Schlüssel lesbar: %1$s</string>
+    <string name="vault_cert_key_mismatch">Dieses Zertifikat wurde für einen anderen Schlüssel ausgestellt.</string>
+
+    <!-- Confirm master password before a secret leaves the vault (clipboard copy or key export). -->
+    <string name="vault_confirm_master_title">Master-Passwort bestätigen</string>
+    <string name="vault_confirm_master_subtitle">Gib dein Master-Passwort ein, um dieses Geheimnis in die Zwischenablage zu kopieren.</string>
+    <string name="vault_confirm_master_subtitle_export">Gib dein Master-Passwort ein, um diesen privaten Schlüssel in eine Datei zu schreiben.</string>
+    <string name="vault_field_master_password">MASTER-PASSWORT</string>
+    <string name="vault_placeholder_master_password">Master-Passwort</string>
+    <string name="vault_password_mismatch_retry">Dieses Passwort stimmte nicht überein — versuche es erneut.</string>
+    <string name="vault_copy">Kopieren</string>
+
+    <!-- Edit secret dialog: name and note. -->
+    <string name="vault_edit_title">„%1$s“ bearbeiten</string>
+    <string name="vault_field_note">NOTIZ</string>
+    <string name="vault_placeholder_note">z. B. temporärer Zugriff für die Prüfung, im Mai entfernen</string>
+    <string name="vault_save">Speichern</string>
+
+    <!-- Delete secret dialog. -->
+    <string name="vault_delete_title">„%1$s“ löschen?</string>
+    <string name="vault_delete_detail_none">Wird aus deinem Tresor entfernt. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="vault_delete_detail_bound">%1$d Hosts verlieren diese Zugangsdaten und fragen beim nächsten Verbinden nach einem Passwort. Kann nicht rückgängig gemacht werden.</string>
+
+    <!-- Master-password gate: create / unlock / biometric offer / corrupted / reset. -->
+    <string name="vault_create_title">Master-Passwort erstellen</string>
+    <string name="vault_create_subtitle">Verschlüsselt deinen lokalen Tresor. Das Passwort bleibt auf diesem Gerät und kann nicht wiederhergestellt werden — vergiss es, lassen sich die Daten nicht entschlüsseln.</string>
+    <string name="vault_master_password_label">Master-Passwort</string>
+    <string name="vault_confirm_password_label">Passwort bestätigen</string>
+    <string name="vault_create_button">Tresor erstellen</string>
+    <string name="vault_biometric_offer_title">Schnelles Entsperren</string>
+    <string name="vault_biometric_offer_subtitle">Entsperre den Tresor, ohne dein Master-Passwort einzugeben. Änderbar später in den Einstellungen.</string>
+    <string name="vault_biometric_enable">Biometrie aktivieren</string>
+    <string name="vault_not_now">Nicht jetzt</string>
+    <string name="vault_unlock_title">Tresor entsperren</string>
+    <string name="vault_unlock_subtitle">Gib dein Master-Passwort ein, um deine Hosts, Schlüssel und Sitzungen zu öffnen.</string>
+    <string name="vault_unlock_button">Entsperren</string>
+    <string name="vault_unlock_biometric">Mit Biometrie entsperren</string>
+    <string name="vault_forgot_password">Master-Passwort zurücksetzen</string>
+    <string name="vault_corrupted_title">Tresor ist beschädigt</string>
+    <string name="vault_corrupted_subtitle">Die Tresor-Datei kann nicht gelesen oder entschlüsselt werden. Setze den Tresor zurück, um die App weiter zu nutzen.</string>
+    <string name="vault_reset_vault">Tresor zurücksetzen</string>
+    <string name="vault_reset_subtitle">Unumkehrbar. Gespeicherte Passwörter, Schlüssel und Zugangsdaten werden unwiederbringlich gelöscht — das Master-Passwort kann sie nicht zurückbringen.</string>
+    <string name="vault_reset_scope_secrets_title">Nur Geheimnisse</string>
+    <string name="vault_reset_scope_secrets_subtitle">Host-Profile und known_hosts bleiben erhalten.</string>
+    <string name="vault_reset_scope_everything_title">Alles löschen</string>
+    <string name="vault_reset_scope_everything_subtitle">Löscht zusätzlich Host-Profile, known_hosts und Einstellungen.</string>
+    <string name="vault_reset_confirm_label">Gib %1$s ein, um zu bestätigen</string>
+    <string name="vault_reset_confirm_button">Endgültig zurücksetzen</string>
+    <string name="vault_link_key_file">Schlüsseldatei verknüpfen</string>
+    <string name="vault_dialog_key_file_subtitle">Schlüssel und Zertifikat bleiben auf der Festplatte und werden bei jeder Verbindung neu gelesen</string>
+    <string name="vault_subtitle_key_file">Schlüsseldatei</string>
+    <string name="vault_subtitle_key_file_cert">Zertifikatsdatei</string>
+    <string name="vault_field_key_path">SCHLÜSSELDATEI</string>
+    <string name="vault_field_cert_path">ZERTIFIKATSDATEI (OPTIONAL)</string>
+    <string name="vault_placeholder_name_key_file">Arbeits-SSH-CA</string>
+    <string name="vault_hint_cert_sibling">Leer: verwendet %1$s neben dem Schlüssel, falls vorhanden</string>
+    <string name="vault_hint_cert_sibling_opaque">Leer: kein Zertifikat — der Schlüssel authentifiziert sich selbst</string>
+    <string name="vault_browse">Durchsuchen…</string>
+    <string name="vault_link">Verknüpfen</string>
+    <string name="vault_key_path_is_key">Das ist der Schlüssel selbst, kein Pfad. Nutze stattdessen Schlüssel importieren.</string>
+    <string name="vault_badge_file">DATEI</string>
+    <string name="vault_badge_file_missing">DATEI FEHLT</string>
+    <string name="vault_label_key_path">SCHLÜSSELDATEI</string>
+    <string name="vault_label_cert_path">ZERTIFIKATSDATEI</string>
+    <string name="vault_key_file_missing">Auf diesem Gerät nicht lesbar</string>
+    <string name="vault_key_file_device_only">In einer Datei gehaltene Geheimnisse werden nicht synchronisiert</string>
+    <string name="vault_cert_from_file_unreadable">Zertifikatsdatei nicht lesbar</string>
+
+    <!-- Section header: how much the vault holds and how it is protected. -->
+    <plurals name="vault_item_count">
+        <item quantity="one">%1$d Eintrag</item>
+        <item quantity="other">%1$d Einträge</item>
+    </plurals>
+    <string name="vault_header_summary">%1$s · XChaCha20-Poly1305 · Argon2id</string>
+
+    <!-- Type badges in the secret list. -->
+
+    <!-- Detail panel: facts about the selected secret. -->
+    <string name="vault_kv_type">Typ</string>
+    <string name="vault_kv_fingerprint">Fingerprint</string>
+    <string name="vault_kv_passphrase">Passphrase</string>
+    <string name="vault_kv_added">Hinzugefügt</string>
+    <string name="vault_kv_last_used">Zuletzt genutzt</string>
+    <string name="vault_value_unknown">—</string>
+    <string name="vault_value_never">nie</string>
+    <string name="vault_passphrase_set">gesetzt</string>
+    <string name="vault_passphrase_none">keine</string>
+
+    <!-- Detail panel: how the secret is stored. -->
+    <string name="vault_section_encryption">Verschlüsselung</string>
+    <string name="vault_kv_cipher">Cipher</string>
+    <string name="vault_kv_kdf">Schlüsselableitung</string>
+    <string name="vault_kv_stored">Auf dem Server gespeichert</string>
+    <string name="vault_kdf_value">Argon2id · %1$d MiB</string>
+    <string name="vault_stored_ciphertext">nur Chiffretext</string>
+    <string name="vault_stored_local">nur dieses Gerät</string>
+
+    <!-- Detail panel: what this device did with the secret. -->
+    <string name="vault_section_audit">Audit</string>
+    <string name="vault_kv_copied">Kopiert</string>
+    <plurals name="vault_copies_window">
+        <item quantity="one">%1$d-mal in %2$d Tagen</item>
+        <item quantity="other">%1$d-mal in %2$d Tagen</item>
+    </plurals>
+    <string name="vault_kv_exported">Exportiert</string>
+    <string name="vault_never_exported">nie</string>
+
+    <!-- Row meta line: the facts about a secret, type excluded (the badge says it). -->
+    <string name="vault_meta_rotated">rotiert: %1$s</string>
+    <string name="vault_meta_valid_until">gültig bis %1$s</string>
+    <string name="vault_kv_changed">Geändert</string>
+
+    <!-- Vault help dialog -->
+    <string name="vault_help_title">Tresor</string>
+    <string name="vault_help_intro">Zugangsdaten für Verbindungen, verschlüsselt unter dem Master-Passwort gespeichert. Sync überträgt nur verschlüsselte Datensätze.</string>
+    <string name="vault_help_categories">Kategorien</string>
+    <string name="vault_help_keys">hier generiert, durch Einfügen importiert oder aus einer Datei verknüpft; zur Authentifizierung an Hosts</string>
+    <string name="vault_help_passwords">Host- und Anmeldepasswörter; Kopiervorgänge werden im Nutzungsprotokoll erfasst</string>
+    <string name="vault_help_certificates">aus Dateien importierte SSH-Zertifikate, mit einem Schlüssel gepaart</string>
+    <string name="vault_help_snippets">In Snippets</string>
+    <string name="vault_help_snippets_hint">ein Snippet oder Runbook-Schritt referenziert ein gespeichertes Passwort über den Eintragsnamen; es wird in jeder Vorschau maskiert</string>
+</resources>

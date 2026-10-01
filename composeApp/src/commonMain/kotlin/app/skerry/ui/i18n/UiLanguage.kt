@@ -3,7 +3,7 @@ package app.skerry.ui.i18n
 /**
  * Interface language, selected in settings (Appearance → Language). [System] means autodetect
  * from the OS locale ([localeTag] == null): Compose string resources pick up the system locale
- * (Russian, Chinese and Turkish supported, otherwise English fallback). [id] is the stable
+ * (Russian, Chinese, Turkish and German supported, otherwise English fallback). [id] is the stable
  * persistence key (desktop `main` / Android `MainActivity`), [localeTag] is the BCP-47 tag for
  * locale override ([LocalAppLocale]).
  */
@@ -21,7 +21,10 @@ enum class UiLanguage(val id: String, val localeTag: String?, val displayName: S
     Chinese("zh", "zh", "简体中文"),
 
     /** Turkish. */
-    Turkish("tr", "tr", "Türkçe");
+    Turkish("tr", "tr", "Türkçe"),
+
+    /** German. */
+    German("de", "de", "Deutsch");
 
     companion object {
         val DEFAULT = System
@@ -40,5 +43,6 @@ fun aiResponseLanguageName(localeTag: String): String = when {
     localeTag.startsWith("ru", ignoreCase = true) -> "Russian"
     localeTag.startsWith("zh", ignoreCase = true) -> "Chinese"
     localeTag.startsWith("tr", ignoreCase = true) -> "Turkish"
+    localeTag.startsWith("de", ignoreCase = true) -> "German"
     else -> "English"
 }

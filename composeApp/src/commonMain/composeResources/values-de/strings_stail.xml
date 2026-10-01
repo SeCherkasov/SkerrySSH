@@ -1,0 +1,31 @@
+<resources>
+    <!-- Sync-индикатор (status-bar desktop / шапка mobile) — см. syncIndicator -->
+    <string name="stail_sync_online">Sync online</string>
+    <string name="stail_sync_offline">Sync offline</string>
+    <string name="stail_syncing">Sync läuft…</string>
+    <string name="stail_sync_paused">Sync pausiert</string>
+    <string name="stail_sync_error">Sync-Fehler</string>
+
+    <!-- Карточка аккаунта (Settings → Account / mobile More) — см. accountCardModel -->
+    <string name="stail_local_vault">Lokaler Tresor</string>
+    <string name="stail_encrypted_on_device">Auf diesem Gerät verschlüsselt</string>
+    <string name="stail_synced_host">Synchronisiert · %1$s</string>
+    <string name="stail_synced">Synchronisiert</string>
+    <string name="stail_linked_locked">Verknüpft · gesperrt</string>
+
+    <!-- Промпт перерегистрации биометрии после смены ключа sync -->
+    <string name="stail_reenroll_prompt_title">Biometrisches Entsperren erneut aktivieren</string>
+    <string name="stail_reenroll_prompt_cancel">Abbrechen</string>
+    <string name="stail_reenroll_prompt_subtitle">Bestätige deine Biometrie, um das schnelle Entsperren an den neuen Kontoschlüssel zu binden.</string>
+
+    <!-- Sync failures (SyncFailureReason) — see syncFailureText -->
+    <string name="stail_sync_fail_rekey">Tresor konnte nicht mit dem Konto-Passwort neu verschlüsselt werden</string>
+    <string name="stail_sync_fail_key_adopt">Kontoschlüssel konnte nicht übernommen werden</string>
+    <!-- %1$s — localized reason, %2$s — raw technical detail (server/library message) -->
+    <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
+
+    <!-- Screen-reader announcements for a sync state that changed on its own — see syncAnnouncement -->
+    <!-- %1$s — the localized failure text -->
+    <string name="stail_sync_announce_error">Sync-Fehler. %1$s</string>
+    <string name="stail_sync_announce_disconnected">Sync getrennt</string>
+</resources>

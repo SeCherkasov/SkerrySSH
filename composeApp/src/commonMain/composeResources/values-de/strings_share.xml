@@ -1,0 +1,32 @@
+<resources>
+    <string name="share_session">Sitzung teilen</string>
+    <string name="share_session_stop">Teilen beenden</string>
+    <string name="share_title">Diese Sitzung teilen</string>
+    <string name="share_pick_team">Team, mit dem geteilt wird</string>
+    <string name="share_no_teams">Tritt einem Team bei oder erstelle eins, um eine Sitzung mit ihm zu teilen.</string>
+    <string name="share_starting">Verbinde mit dem Relay…</string>
+    <string name="share_live">Geteilt mit %1$s</string>
+    <string name="share_viewers">%1$d schauen zu</string>
+    <string name="share_allow_input">Zuschauer dürfen tippen</string>
+    <string name="share_input_locked">Produktiv-Sitzung: Zuschauer können nur zusehen</string>
+    <string name="share_note">Mitglieder des Teams können beitreten und dieses Terminal ansehen. Das Relay überträgt nur verschlüsselte Frames.</string>
+    <string name="share_live_sessions">Live-Sitzungen</string>
+    <string name="share_none_live">Gerade teilt niemand eine Sitzung.</string>
+    <string name="share_join">Beitreten</string>
+    <string name="share_started_by">%1$s · %2$d schauen zu</string>
+    <string name="share_unnamed">Geteilte Sitzung</string>
+    <string name="share_watching">Zuschauen: %1$s</string>
+    <string name="share_fail_not_connected">Sync-Konto nicht verbunden.</string>
+    <string name="share_fail_no_key">Der Team-Schlüssel ist auf diesem Gerät noch nicht angekommen.</string>
+    <string name="share_fail_network">Das Relay ist nicht erreichbar.</string>
+    <string name="share_fail_rejected">Der Server hat die Freigabe abgelehnt.</string>
+    <string name="share_fail_server">Der Server konnte die Sitzung nicht weiterleiten.</string>
+    <string name="share_control_wants">%1$s möchte tippen</string>
+    <string name="share_control_wants_unnamed">Ein Zuschauer möchte tippen</string>
+    <string name="share_grant">Erlauben</string>
+    <string name="share_deny">Ablehnen</string>
+    <string name="share_read_only">Nur ansehen</string>
+    <string name="share_control_request">Steuerung anfordern</string>
+    <string name="share_control_asked">Angefragt…</string>
+    <string name="share_control_granted">Du kannst tippen</string>
+</resources>

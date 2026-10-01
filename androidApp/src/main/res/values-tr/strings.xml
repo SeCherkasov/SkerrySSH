@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Turkish (values-tr). See values/strings.xml for the full set — keys must stay in sync across
-     values / values-ru / values-zh / values-tr. -->
+     values / values-ru / values-zh / values-tr / values-de. -->
 <resources>
     <string name="app_name">Skerry</string>
     <string name="session_keepalive_channel_name">Oturumu canlı tutma</string>
