@@ -141,6 +141,14 @@ class TestRelevance(unittest.TestCase):
         self.assertTrue(state.is_code(".claude/commands/gate.md"))
         self.assertEqual(policy.areas([".claude/commands/gate.md"]), ["harness"])
 
+    def test_cross_agent_instructions_are_code_the_gate_watches(self):
+        # Codex and other agents execute these files instead of Claude's hook configuration. A
+        # change here can weaken the same process, so it must reopen the harness suite too.
+        for path in ("AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md"):
+            self.assertTrue(state.is_code(path), path)
+            self.assertEqual(policy.areas([path]), ["harness"])
+        self.assertFalse(state.is_code(".agents/ONBOARDING.md"))
+
     def test_the_invisible_byte_list_covers_the_bidi_and_c1_families(self):
         # ALM is a bidi control like LRM; C1 opens CSI/OSC in a UTF-8 xterm; the word-joiner block
         # and the BOM are invisible in review the same way the zero-width space is.
@@ -320,6 +328,9 @@ class TestClassification(SandboxCase):
         # stage it pulls in was pinned, the classification that pulls it in was not.
         self.assertIn("harness", policy.areas(["tools/harness/policy.py"]))
         self.assertIn("harness", policy.areas([".claude/hooks/record-review.py"]))
+        self.assertIn("harness", policy.areas(["AGENTS.md"]))
+        self.assertIn("harness", policy.areas(["CLAUDE.md"]))
+        self.assertIn("harness", policy.areas([".agents/MEMORY.md"]))
 
 
 class TestRequirements(unittest.TestCase):
@@ -918,6 +929,21 @@ class TestChecks(SandboxCase):
         self.box.branch("feat/gate-tweak")
         self.box.write("tools/harness/policy.py", "# a new rule\n")
         self.box.write("tools/harness/selftest.py", "# and the case that proves it\n")
+        task = {"kind": "feature", "areas": ["harness"], "paths": [], "code_paths": []}
+        self.assertEqual([f for f in checks.run(self.cwd, task) if f.rule == "tests-present"], [])
+
+    def test_an_agent_policy_feature_owes_a_harness_test(self):
+        task = {"kind": "feature", "areas": ["harness"], "paths": [], "code_paths": []}
+        for path in state.AGENT_FILES:
+            with self.subTest(path=path):
+                self.box.write(path, "# changed policy\n")
+                found = [f for f in checks.run(self.cwd, task) if f.rule == "tests-present"]
+                self.assertEqual(len(found), 1)
+                os.remove(os.path.join(self.cwd, path))
+
+    def test_an_agent_policy_feature_with_a_harness_test_is_fine(self):
+        self.box.write("AGENTS.md", "# changed policy\n")
+        self.box.write("tools/harness/selftest.py", "# covers the policy\n")
         task = {"kind": "feature", "areas": ["harness"], "paths": [], "code_paths": []}
         self.assertEqual([f for f in checks.run(self.cwd, task) if f.rule == "tests-present"], [])
 
@@ -2085,6 +2111,11 @@ class TestTestResults(SandboxCase):
         self.backdate("shared", "desktopTest", "b.Fresh")
         self.box.write("tools/harness/checks.py", "# a rule changed\n")
         self.assertTrue(self.stage([policy.PY, "-c", ""]))
+
+    def test_agent_policy_is_not_a_gradle_input(self):
+        for path in state.AGENT_FILES:
+            with self.subTest(path=path):
+                self.assertFalse(gate._gradle_input(path))
 
     def test_a_kotlin_edit_does_demand_a_re_run(self):
         self.box.branch("fix/whatever")

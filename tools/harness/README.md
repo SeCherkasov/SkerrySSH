@@ -21,8 +21,9 @@ python3 tools/harness/selftest.py
 ```
 
 A Claude Code hook (`.claude/hooks/guard-git.py`) refuses `git commit`, `git push` and
-`gh pr create` while anything is owed. `SKERRY_GATE_OVERRIDE=1` on the command bypasses that
-deliberately; it does not unprotect `main`.
+`gh pr create` while anything is owed. Other agents follow the same portable contract from
+`AGENTS.md` and call `gate.py status` explicitly before those operations. `SKERRY_GATE_OVERRIDE=1`
+on the command bypasses the debt check deliberately; it does not unprotect `main`.
 
 ## The requirements are a function of the change
 
@@ -58,9 +59,9 @@ stricter: declaring a diff that contains Kotlin as "docs" does nothing.
 
 ## What "verified" is pinned to
 
-Content, not time. Each stage records a digest of every file that can affect a build — Kotlin,
-Gradle scripts, resources, the version catalog — computed from git blob ids so that the identity of
-a file survives being committed.
+Content, not time. Each stage records a digest of every file that can affect a build or the gate
+itself — Kotlin, Gradle scripts, resources, the version catalog, harness code and executable agent
+policy — computed from git blob ids so that the identity of a file survives being committed.
 
 Consequences worth knowing:
 
@@ -69,8 +70,9 @@ Consequences worth knowing:
 - `git commit` does **not** reopen it — the content is unchanged, only HEAD moved;
 - reverting an edit restores the green state it had before;
 - switching branches invalidates it, because the content differs;
-- prose, images, CI files and the harness itself are outside the digest: they cannot change what
-  Gradle produces.
+- ordinary prose, images and CI files are outside the digest; harness code and executable agent
+  policy are inside it. On a mixed product/harness change, editing either reopens every stage that
+  shares the content digest even when Gradle itself cannot see the policy file.
 
 ## Why the runner, and not a recorder
 
@@ -128,7 +130,11 @@ Txt("Skerry")  // harness-allow: i18n-hardcoded
 | `policy.py` | kind, areas, and the requirements that follow |
 | `checks.py` | the deterministic rules |
 | `gate.py` | the CLI and the runner |
-| `selftest.py` | ~70 tests over throwaway git repositories, two seconds, no Gradle |
+| `selftest.py` | 200+ tests over throwaway git repositories, no Gradle |
+
+`AGENTS.md`, `CLAUDE.md` and `.agents/MEMORY.md` are executable agent policy, so editing any of them
+is a harness change and reopens `selftest`. `.agents/ONBOARDING.md` and ordinary documentation
+remain prose.
 
 State lives in `.git/skerry-gate/` — per clone, never committed.
 

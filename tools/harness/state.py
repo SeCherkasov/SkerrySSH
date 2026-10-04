@@ -33,8 +33,10 @@ CODE_SUFFIXES = (
 IGNORED_PREFIXES = (
     "docs/", "licenses/", ".github/", ".idea/", "build/",
 )
-# Instructions the gate executes: the reviewers it launches, and the slash commands
-# that drive the fan-out and the kind declaration. Prose everywhere else stays prose.
+# Instructions the gate executes: the cross-agent contract, the portable memory policy, the
+# reviewers it launches, and the slash commands that drive the fan-out and kind declaration.
+# Prose everywhere else stays prose.
+AGENT_FILES = ("AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md")
 AGENT_PREFIX = (".claude/agents/", ".claude/commands/")
 IGNORED_SUFFIXES = (".md", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".ico", ".ttf", ".otf")
 # Path fragments that mark a source file as a test — used to tell "the fix" from "the test" when
@@ -187,7 +189,7 @@ def is_code(path: str) -> bool:
     """Whether a repo-relative path takes part in a Gradle build, or in the gate that guards it."""
     # Prose everywhere else, but an agent definition is what a reviewer executes: editing one
     # changes what the review gate looks for, and it used to move no digest at all.
-    if path.startswith(AGENT_PREFIX):
+    if path in AGENT_FILES or path.startswith(AGENT_PREFIX):
         return True
     if path.startswith(IGNORED_PREFIXES) or path.endswith(IGNORED_SUFFIXES):
         return False

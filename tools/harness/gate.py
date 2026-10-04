@@ -69,14 +69,14 @@ GRADLE_RED_EVIDENCE = re.compile(r"There were failing tests|tests? completed, \d
 TEST_RESULTS_GLOB = "**/build/test-results/*/*.xml"
 
 
-# The harness's own files are code the gate watches — editing a rule used to leave a stage green
-# that the rule would now fail — but Gradle cannot see them. They reopen the stage; they cannot
-# make its results stale.
+# Harness code and executable agent policy are code the gate watches — editing either can change
+# what is required — but Gradle cannot see them. They reopen the stage; they cannot make its
+# results stale.
 HARNESS_PREFIXES = ("tools/harness/", ".claude/")
 
 
 def _gradle_input(path: str) -> bool:
-    return not path.startswith(HARNESS_PREFIXES)
+    return path not in state.AGENT_FILES and not path.startswith(HARNESS_PREFIXES)
 
 
 def _results_must_be_fresh(gradle_digest: str) -> bool:
