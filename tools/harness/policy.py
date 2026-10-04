@@ -65,7 +65,7 @@ AREA_RULES = (
     # records reviews, the settings that register the hook, and the reviewers' own definitions.
     ("harness", lambda p: p.startswith(("tools/harness/", ".claude/hooks/", ".claude/agents/",
                                        ".claude/commands/"))
-        or p == ".claude/settings.json"),
+        or p in (".claude/settings.json", "AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md")),
 )
 
 # Stage -> the command the runner uses. "checks" is internal (tools/harness/checks.py).

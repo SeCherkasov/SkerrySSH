@@ -53,6 +53,10 @@ server/.env
 .claude/worktrees/
 .claude/*.lock
 
+# Raw assistant history imported from Claude Code. It can contain stale operational context and
+# machine-specific details; the reviewed, portable summary lives in .agents/MEMORY.md.
+.agent-memory/claude/
+
 # Python bytecode from the development harness (tools/harness, .claude/hooks)
 __pycache__/
 *.pyc

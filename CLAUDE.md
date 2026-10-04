@@ -196,7 +196,7 @@ restores the green state it had. Documentation-only changes owe nothing at all.
 The deliberate bypass is `SKERRY_GATE_OVERRIDE=1` on the command, and using it means saying out loud
 why. It does not unprotect `main`.
 
-The harness has its own tests — `python3 tools/harness/selftest.py`, ~70 cases, two seconds, no
+The harness has its own tests — `python3 tools/harness/selftest.py`, 200+ cases, no
 Gradle. Changing a rule means changing them too; the previous version had no tests and both of its
 holes were found in production.
 

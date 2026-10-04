@@ -490,10 +490,11 @@ def _previous_version_code(cwd: str | None, base: str) -> tuple[int | None, str 
 def _tests_present(added: list[tuple[str, int, str]], task: dict) -> list[Finding]:
     if task["kind"] not in ("bug", "feature"):
         return []
-    # `.py` under the harness counts as source for the same reason `.kt` does — it is behaviour
-    # someone has to be able to break. Its test is `selftest.py`, which `state.is_test` knows.
+    # Harness code and executable agent policy count as source for the same reason `.kt` does —
+    # they are behaviour someone has to be able to break. Their test is `selftest.py`, which
+    # `state.is_test` knows.
     src = {p for p, _, _ in added if state.is_code(p) and not state.is_test(p)
-           and (p.endswith(".kt") or p.startswith(("tools/harness/", ".claude/hooks/")))}
+           and (p.endswith(".kt") or "harness" in policy.areas([p]))}
     tests = {p for p, _, _ in added if state.is_test(p)}
     if src and not tests:
         return [Finding("tests-present", BLOCK, sorted(src)[0], 0,
