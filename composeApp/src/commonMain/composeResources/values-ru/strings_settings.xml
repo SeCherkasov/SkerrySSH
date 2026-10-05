@@ -51,7 +51,7 @@
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 ГБ · готово. Данные не покидают вашу машину.</string>
     <string name="settings_ai_badge_private">ЛОКАЛЬНО</string>
     <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">Свой ключ OpenAI, Anthropic или OpenRouter. Оплата — напрямую провайдеру.</string>
+    <string name="settings_ai_provider_byok_desc">Свой ключ OpenAI или OpenRouter. Оплата — напрямую провайдеру.</string>
     <string name="settings_ai_provider_off">Выключен — без AI</string>
     <string name="settings_ai_provider_off_desc">Ассистент выключен, запросы не отправляются.</string>
     <string name="settings_ai_off_note">AI выключен. Для включения выберите провайдера выше.</string>
@@ -245,6 +245,10 @@
     <string name="settings_kb_mouse_shift_drag">Shift+перетаскивание</string>
     <string name="settings_kb_search_output">Поиск по выводу</string>
     <string name="settings_kb_copy_selection">Копировать выделение</string>
+    <string name="settings_kb_select_cursor_word">Выделить слово под курсором</string>
+    <string name="settings_kb_select_cursor_line">Выделить строку под курсором</string>
+    <string name="settings_kb_select_previous_output">Выделить предыдущую строку вывода</string>
+    <string name="settings_kb_open_selected_path">Открыть выделенный путь в Файлах</string>
     <string name="settings_kb_paste">Вставить</string>
     <string name="settings_kb_global">ОБЩИЕ</string>
     <string name="settings_kb_terminal_group">ТЕРМИНАЛ И АВТОДОПОЛНЕНИЕ</string>

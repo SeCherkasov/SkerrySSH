@@ -45,14 +45,14 @@ class Sandbox:
         run_git(self.path, "config", "user.email", "harness@test")
         run_git(self.path, "config", "user.name", "Harness")
         shutil.copytree(HARNESS_DIR, os.path.join(self.path, "tools", "harness"))
-        os.makedirs(os.path.join(self.path, ".claude", "hooks"), exist_ok=True)
+        os.makedirs(os.path.join(self.path, ".agents", "hooks"), exist_ok=True)
         for hook in ("guard-git.py", "record-review.py"):
-            shutil.copy2(os.path.join(REPO_ROOT, ".claude", "hooks", hook),
-                         os.path.join(self.path, ".claude", "hooks", hook))
+            shutil.copy2(os.path.join(REPO_ROOT, ".agents", "hooks", hook),
+                         os.path.join(self.path, ".agents", "hooks", hook))
         # The repo-local reviewers are part of the clone, so the sandbox has to have them too:
         # without them the gate degrades to the plugin agents and tests silently check less.
-        shutil.copytree(os.path.join(REPO_ROOT, ".claude", "agents"),
-                        os.path.join(self.path, ".claude", "agents"))
+        shutil.copytree(os.path.join(REPO_ROOT, ".agents", "reviewers"),
+                        os.path.join(self.path, ".agents", "reviewers"))
         self.write("README.md", "seed\n")
         self.commit("seed")
 
@@ -76,7 +76,7 @@ class Sandbox:
         environment.pop("SKERRY_GATE_OVERRIDE", None)
         environment.update(env or {})
         return subprocess.run(
-            [policy.PY, os.path.join(self.path, ".claude", "hooks", "guard-git.py")],
+            [policy.PY, os.path.join(self.path, ".agents", "hooks", "guard-git.py")],
             input=payload, capture_output=True, text=True, cwd=self.path,
             env=environment, check=False,
         )
@@ -89,7 +89,7 @@ class Sandbox:
 
     def raw_hook(self, payload: dict) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [policy.PY, os.path.join(self.path, ".claude", "hooks", "record-review.py")],
+            [policy.PY, os.path.join(self.path, ".agents", "hooks", "record-review.py")],
             input=json.dumps(payload), capture_output=True, text=True, cwd=self.path, check=False,
         )
 
@@ -125,26 +125,20 @@ class TestRelevance(unittest.TestCase):
     def test_the_harness_counts_as_code_it_gates(self):
         # It used to be ignored, so deleting a rule moved no digest and the stage that had already
         # run against the old rule set stayed green.
-        for path in ("tools/harness/checks.py", ".claude/hooks/guard-git.py"):
+        for path in ("tools/harness/checks.py", ".agents/hooks/guard-git.py"):
             self.assertTrue(state.is_code(path), path)
 
     def test_a_reviewer_definition_is_code_the_gate_watches(self):
         # The agent files are the executable content of the review gate: prose everywhere else,
         # but editing one changes what a reviewer looks for.
-        self.assertTrue(state.is_code(".claude/agents/skerry-security-reviewer.md"))
+        self.assertTrue(state.is_code(".agents/reviewers/skerry-security-reviewer.md"))
         self.assertFalse(state.is_code("docs/design/notes.md"))
-        self.assertEqual(policy.areas([".claude/agents/skerry-reviewer.md"]), ["harness"])
-
-    def test_a_slash_command_is_code_the_gate_watches(self):
-        # `/gate` and `/task` drive the fan-out and the kind declaration: the same argument that
-        # made agent definitions code.
-        self.assertTrue(state.is_code(".claude/commands/gate.md"))
-        self.assertEqual(policy.areas([".claude/commands/gate.md"]), ["harness"])
+        self.assertEqual(policy.areas([".agents/reviewers/skerry-reviewer.md"]), ["harness"])
 
     def test_cross_agent_instructions_are_code_the_gate_watches(self):
-        # Codex and other agents execute these files instead of Claude's hook configuration. A
+        # Codex and other agents execute these files through the same portable policy. A
         # change here can weaken the same process, so it must reopen the harness suite too.
-        for path in ("AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md"):
+        for path in ("AGENTS.md", "docs/development-process.md"):
             self.assertTrue(state.is_code(path), path)
             self.assertEqual(policy.areas([path]), ["harness"])
         self.assertFalse(state.is_code(".agents/ONBOARDING.md"))
@@ -327,10 +321,9 @@ class TestClassification(SandboxCase):
         # Without this the `harness` rule could be deleted and every case above still passed: the
         # stage it pulls in was pinned, the classification that pulls it in was not.
         self.assertIn("harness", policy.areas(["tools/harness/policy.py"]))
-        self.assertIn("harness", policy.areas([".claude/hooks/record-review.py"]))
+        self.assertIn("harness", policy.areas([".agents/hooks/record-review.py"]))
         self.assertIn("harness", policy.areas(["AGENTS.md"]))
-        self.assertIn("harness", policy.areas(["CLAUDE.md"]))
-        self.assertIn("harness", policy.areas([".agents/MEMORY.md"]))
+        self.assertIn("harness", policy.areas(["docs/development-process.md"]))
 
 
 class TestRequirements(unittest.TestCase):
@@ -349,9 +342,9 @@ class TestRequirements(unittest.TestCase):
         self.assertNotIn("selftest", policy.required_stages({"kind": "refactor", "areas": ["ui"]}))
 
     def test_the_hook_wiring_is_part_of_the_harness(self):
-        # `.claude/settings.json` is where the recorder is registered: Gradle cannot see it, and
+        # `.codex/hooks.json` is where the recorder is registered: Gradle cannot see it, and
         # the suite is the only thing that can.
-        self.assertEqual(policy.areas([".claude/settings.json"]), ["harness"])
+        self.assertEqual(policy.areas([".codex/hooks.json"]), ["harness"])
 
     def test_a_harness_only_change_does_not_owe_gradle(self):
         # No Gradle stage can see a line of Python. Charging a five-line hook fix ten minutes of
@@ -479,7 +472,7 @@ class TestGateDebt(SandboxCase):
         # A contributor without the ECC plugin must not face a gate no action of theirs can close.
         self.box.branch("feat/thing")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
-        os.remove(os.path.join(self.cwd, ".claude", "agents", "skerry-kotlin-reviewer.md"))
+        os.remove(os.path.join(self.cwd, ".agents", "reviewers", "skerry-kotlin-reviewer.md"))
         task = policy.classify(self.cwd)
         self.assertNotIn("skerry-kotlin-reviewer", policy.required_reviewers(task, self.cwd))
         self.assertIn("skerry-kotlin-reviewer", policy.skipped_reviewers(task, self.cwd))
@@ -515,7 +508,7 @@ class TestGuardHook(SandboxCase):
         self.assertIn("tests", result.stderr)
 
     def test_override_in_the_command_text_works(self):
-        # The environment a hook sees belongs to Claude Code, not to the command it is guarding,
+        # The environment a hook sees belongs to the host process, not to the command it is guarding,
         # so the documented `SKERRY_GATE_OVERRIDE=1 git push` had no effect at all until PR #115.
         self.box.branch("feat/thing")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
@@ -1785,7 +1778,7 @@ class TestHarnessRed(SandboxCase):
     def test_a_harness_test_that_passes_proves_nothing(self):
         self._suite("self.assertTrue(True)")
         done = self.box.gate("red", "--tests", "*the_bug_is_reproduced*",
-                             "--file", ".claude/hooks/record-review.py")
+                             "--file", ".agents/hooks/record-review.py")
         self.assertEqual(done.returncode, 1)
         self.assertIn("PASSED", done.stdout)
 

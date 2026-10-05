@@ -41,6 +41,91 @@ import kotlin.test.assertTrue
 class TerminalScreenStateTest {
 
     @Test
+    fun `keyboard selection walks output and selects the word before the cursor`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        session.emit("first line\r\n/tmp/report.txt\r\n$ ".encodeToByteArray())
+
+        assertTrue(state.selectCursorWord())
+        assertEquals("$", state.selectedText())
+        assertTrue(state.selectCursorLine())
+        assertEquals("$", state.selectedText())
+        assertTrue(state.selectPreviousOutputLine())
+        assertEquals("/tmp/report.txt", state.selectedText())
+        assertTrue(state.selectPreviousOutputLine())
+        assertEquals("first line", state.selectedText())
+        assertFalse(state.selectPreviousOutputLine())
+        assertEquals("first line", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `cursor selection uses absolute row after scrollback grows`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        session.emit((buildString {
+            repeat(30) { append("row-$it\r\n") }
+            append("\u001b[H\u001b[2Ktarget")
+        }).encodeToByteArray())
+
+        assertTrue(state.historyRows > 0)
+        assertEquals(state.historyRows, state.cursorRow)
+        assertTrue(state.selectCursorWord())
+        assertEquals("target", state.selectedText())
+        assertTrue(state.selectCursorLine())
+        assertEquals("target", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `spoken selection conceals hidden terminal cells`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        session.emit("public \u001b[8msecret\u001b[0m done".encodeToByteArray())
+        state.selectLineAt(TerminalPos(0, 0))
+
+        assertTrue(state.selectedText().orEmpty().contains("secret"))
+        assertFalse(state.selectedSpeechPreview().orEmpty().contains("secret"))
+        assertTrue(state.selectedSpeechPreview().orEmpty().contains("public"))
+        assertEquals("public •••••• done", state.capturePrimarySelection())
+        scope.cancel()
+    }
+
+    @Test
+    fun `hidden cells cannot become an openable path`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        session.emit("/tmp/\u001b[8msecret\u001b[0m".encodeToByteArray())
+        state.selectLineAt(TerminalPos(0, 0))
+
+        assertNull(state.selectedPath())
+        scope.cancel()
+    }
+
+    @Test
+    fun `spoken selection skips leading blank rows and keeps soft wrapped words intact`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        session.emit(("\r\n".repeat(170) + "tail").encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 0))
+        state.extendSelection(TerminalPos(state.cursorRow, state.cursorCol))
+        assertEquals("tail", state.selectedSpeechPreview())
+
+        val wrappedSession = FakeTerminalSession()
+        val wrapped = TerminalScreenState(wrappedSession, scope, nowMillis = eagerPublishClock())
+        wrappedSession.emit(("a".repeat(80) + "tail").encodeToByteArray())
+        wrapped.beginSelection(TerminalPos(0, 0))
+        wrapped.extendSelection(TerminalPos(wrapped.cursorRow, wrapped.cursorCol))
+        assertEquals("a".repeat(80) + "tail", wrapped.selectedSpeechPreview())
+        scope.cancel()
+    }
+
+    @Test
     fun `output accumulates decoded session output`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

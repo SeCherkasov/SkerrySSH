@@ -1,11 +1,10 @@
 ---
 name: skerry-reviewer
 description: Skerry-specific code reviewer. Reviews a branch diff against this project's own rules — commonMain contracts, desktop⇆Android parity, i18n en+ru+zh+tr, design primitives, coroutine cancellation, vault security, the shared-abstraction catalogue. Use before opening a PR, alongside the generic ecc:kotlin-reviewer.
-tools: ["Read", "Grep", "Glob", "Bash"]
 ---
 
 You review Kotlin Multiplatform code for **Skerry** — a cross-platform SSH client (Compose
-Multiplatform UI, Desktop + Android at feature parity). A generic Kotlin reviewer runs in parallel
+Multiplatform UI, Desktop + Android at feature parity). A Kotlin reviewer runs in the same round
 with you and covers idiomatic Kotlin, null safety and Compose performance. **Your job is the
 project-specific rules below** — the ones a generic reviewer has no way to know. Don't spend the
 review on generic style.
@@ -31,7 +30,7 @@ review on generic style.
 
 Use the diff range given in your prompt. If none was given, use `git diff main...HEAD`. Read every
 changed Kotlin file in full, plus the immediate callers of what changed. `docs/coding-guidelines.md`
-is the rule source; `CLAUDE.md` is the process.
+is the rule source; `docs/development-process.md` is the process.
 
 ## Step 2 — review checklist
 
@@ -75,7 +74,7 @@ abstraction that should have been used. Second repetition is a signal, third is 
   zeroed.
 - Server and AI output is untrusted input: check for policy enforcement, confirmation, bidi
   sanitising.
-- Invisible control bytes must be escaped literals (`""`, `Char(0x1F)`), never a raw byte
+- Invisible control bytes must be escaped literals (`"\u001b"`, `Char(0x1F)`), never a raw byte
   inside a string literal.
 
 ### UI (HIGH)

@@ -68,8 +68,10 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import app.skerry.shared.ssh.PtySize
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -97,6 +99,7 @@ import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.ClaimKeyboard
 import app.skerry.ui.design.ImeFunnelField
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.generated.resources.term_keyboard_input
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -115,6 +118,20 @@ import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
 import app.skerry.ui.generated.resources.term_jump_announced
 import app.skerry.ui.generated.resources.term_jump_announced_exit
 import app.skerry.ui.generated.resources.term_jump_none
+import app.skerry.ui.generated.resources.term_select_word_at_cursor
+import app.skerry.ui.generated.resources.term_select_line_at_cursor
+import app.skerry.ui.generated.resources.term_select_last_output_line
+import app.skerry.ui.generated.resources.term_select_previous_output_line
+import app.skerry.ui.generated.resources.term_output_accessibility_label
+import app.skerry.ui.generated.resources.term_copy_selection
+import app.skerry.ui.generated.resources.term_copy_failed
+import app.skerry.ui.generated.resources.term_copy_succeeded
+import app.skerry.ui.generated.resources.term_selected_text
+import app.skerry.ui.generated.resources.term_selected_text_more
+import app.skerry.ui.generated.resources.term_selected_text_end
+import app.skerry.ui.generated.resources.term_read_next_selected_text
+import app.skerry.ui.generated.resources.term_read_selected_text_from_start
+import app.skerry.ui.generated.resources.term_open_path_in_files
 import app.skerry.ui.generated.resources.term_mark_select_next
 import app.skerry.ui.generated.resources.term_mark_select_prev
 import app.skerry.ui.generated.resources.term_sudo_offer
@@ -290,12 +307,46 @@ fun TerminalScreen(
     val jumpNoneText = stringResource(Res.string.term_jump_none)
     val selectPrevLabel = stringResource(Res.string.term_mark_select_prev)
     val selectNextLabel = stringResource(Res.string.term_mark_select_next)
-    var jumpAnnounce by remember(state) { mutableStateOf("") }
+    val selectWordLabel = stringResource(Res.string.term_select_word_at_cursor)
+    val selectLineLabel = stringResource(Res.string.term_select_line_at_cursor)
+    val selectLastOutputLabel = stringResource(Res.string.term_select_last_output_line)
+    val selectPreviousOutputLabel = stringResource(Res.string.term_select_previous_output_line)
+    val readNextSelectionLabel = stringResource(Res.string.term_read_next_selected_text)
+    val readSelectionFromStartLabel = stringResource(Res.string.term_read_selected_text_from_start)
+    val terminalOutputLabel = stringResource(Res.string.term_output_accessibility_label)
+    val copySelectionLabel = stringResource(Res.string.term_copy_selection)
+    val openPathLabel = stringResource(Res.string.term_open_path_in_files)
+    var speechOffset by remember(state, state.selection) { mutableStateOf(0) }
+    var speechPart by remember(state, state.selection) { mutableStateOf(1) }
+    val selectedChunk = remember(state, state.selection, state.screenContentVersion, speechOffset) {
+        state.selectedSpeechChunk(speechOffset)
+    }
+    val nextSpeechOffset = selectedChunk?.nextOffset
+    val selectedPath = remember(state, state.selection, state.screenContentVersion, onOpenPath) {
+        if (onOpenPath == null) null else state.selectedPath()
+    }
+    val selectedTextAnnouncement = selectedChunk?.let { chunk ->
+        val spoken = sanitizeServerText(chunk.text, 160, allowNewlines = true)
+        when {
+            chunk.nextOffset != null -> stringResource(Res.string.term_selected_text_more, speechPart, spoken)
+            speechPart > 1 -> stringResource(Res.string.term_selected_text_end, speechPart, spoken)
+            else -> stringResource(Res.string.term_selected_text, spoken)
+        }
+    }
+    var terminalAnnouncement by remember(state) { mutableStateOf("") }
+    var copyFailureCount by remember(state) { mutableStateOf(0) }
+    var copySuccess by remember(state) { mutableStateOf(false) }
+    val copyFailureAnnouncement = if (copyFailureCount > 0) {
+        stringResource(Res.string.term_copy_failed, copyFailureCount)
+    } else ""
 
     // Bumped every time a selection is actually copied to the clipboard (right click / Ctrl+Shift+C /
     // touch "Copy" menu) — drives the transient "Copied" banner overlay below. Starts at 0 (no banner
     // on first composition); each increment re-triggers the banner's show-then-hide timer.
     var copiedNonce by remember(state) { mutableStateOf(0) }
+    val copySuccessAnnouncement = if (copySuccess) {
+        stringResource(Res.string.term_copy_succeeded, copiedNonce)
+    } else ""
 
     // Ctrl+hover over a link shows the hand cursor (VS Code style). hoverPos is the last cell the
     // pointer was over (null when it left the terminal); linkHover drives the cursor icon and is
@@ -605,9 +656,9 @@ fun TerminalScreen(
 
     // try/catch per clipboard coroutine: the scope from rememberCoroutineScope carries a regular Job (not
     // a Supervisor), so an unhandled exception in one operation would cancel the whole scope and kill
-    // copy/paste for the rest of the session. Rethrow cancellation, swallow the rest (clipboard unavailable).
-    fun copySelection() {
-        val text = state.selectedText() ?: return
+    // copy/paste for the rest of the session. Rethrow cancellation and announce clipboard failures.
+    fun copySelection(): Boolean {
+        val text = state.selectedCopyText() ?: return false
         clipboardScope.launch {
             try {
                 clipboard.write(text)
@@ -615,11 +666,18 @@ fun TerminalScreen(
                 // owns the buffer there is no second one to fall back to, so a refused copy leaves
                 // nothing behind and "Copied" over an unchanged clipboard would be a lie (#282).
                 copiedNonce++
+                copyFailureCount = 0
+                copySuccess = true
+                terminalAnnouncement = ""
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
+                copyFailureCount++
+                copySuccess = false
+                terminalAnnouncement = ""
             }
         }
+        return true
     }
 
     // System CLIPBOARD text; which clipboard that is belongs to [SystemClipboard], shared with the
@@ -706,7 +764,9 @@ fun TerminalScreen(
         val command = state.screen.getOrNull(target.promptRow)
             ?.joinToString("") { it.text }?.trim()?.take(MAX_JUMP_ANNOUNCE_CHARS).orEmpty()
             .ifEmpty { "?" }
-        jumpAnnounce = when (val exit = target.exitCode) {
+        copyFailureCount = 0
+        copySuccess = false
+        terminalAnnouncement = when (val exit = target.exitCode) {
             null -> jumpAnnounceTemplate.replace("%1\$s", command)
             else -> jumpAnnounceExitTemplate.replace("%1\$s", command).replace("%2\$s", exit.toString())
         }
@@ -915,18 +975,53 @@ fun TerminalScreen(
               // surface and the chords need a hardware keyboard, so the terminal node itself
               // carries select-previous/next actions whenever marks are on screen.
               .semantics {
-                  if (state.commandMarks.isNotEmpty() && !state.altScreen) {
-                      // At the end of the jump list the action still speaks — a screen-reader
-                      // user gets "no more commands" instead of silence.
-                      fun jumpOrAnnounceEnd(forward: Boolean): Boolean {
-                          if (jumpToCommand(forward)) return true
-                          jumpAnnounce = jumpNoneText
-                          return false
+                  contentDescription = terminalOutputLabel
+                  if (selectedTextAnnouncement != null) stateDescription = selectedTextAnnouncement
+                  customActions = buildList {
+                      fun selectAndReset(select: () -> Boolean): Boolean {
+                          val selected = select()
+                          if (selected) { speechOffset = 0; speechPart = 1 }
+                          return selected
                       }
-                      customActions = listOf(
-                          CustomAccessibilityAction(selectPrevLabel) { jumpOrAnnounceEnd(forward = false) },
-                          CustomAccessibilityAction(selectNextLabel) { jumpOrAnnounceEnd(forward = true) },
-                      )
+                      add(CustomAccessibilityAction(selectWordLabel) { selectAndReset { state.selectCursorWord() } })
+                      add(CustomAccessibilityAction(selectLineLabel) { selectAndReset { state.selectCursorLine() } })
+                      add(CustomAccessibilityAction(selectLastOutputLabel) { selectAndReset { state.selectLastOutputLine() } })
+                      add(CustomAccessibilityAction(selectPreviousOutputLabel) { selectAndReset { state.selectPreviousOutputLine() } })
+                      if (nextSpeechOffset != null) {
+                          add(CustomAccessibilityAction(readNextSelectionLabel) {
+                              speechOffset = nextSpeechOffset
+                              speechPart++
+                              true
+                          })
+                      }
+                      if (speechOffset > 0) {
+                          add(CustomAccessibilityAction(readSelectionFromStartLabel) {
+                              speechOffset = 0
+                              speechPart = 1
+                              true
+                          })
+                      }
+                      if (state.selection?.isEmpty == false) {
+                          add(CustomAccessibilityAction(copySelectionLabel) { copySelection() })
+                      }
+                      if (onOpenPath != null && selectedPath != null && !closed) {
+                          add(CustomAccessibilityAction(openPathLabel) {
+                              val currentPath = state.selectedPath()
+                              if (currentPath == null) false else { onOpenPath(currentPath); true }
+                          })
+                      }
+                      if (state.commandMarks.isNotEmpty() && !state.altScreen) {
+                          // At the end of the jump list the action still speaks.
+                          fun jumpOrAnnounceEnd(forward: Boolean): Boolean {
+                              if (jumpToCommand(forward)) return true
+                              copyFailureCount = 0
+                              copySuccess = false
+                              terminalAnnouncement = jumpNoneText
+                              return false
+                          }
+                          add(CustomAccessibilityAction(selectPrevLabel) { jumpOrAnnounceEnd(forward = false) })
+                          add(CustomAccessibilityAction(selectNextLabel) { jumpOrAnnounceEnd(forward = true) })
+                      }
                   }
               }
               // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
@@ -939,6 +1034,22 @@ fun TerminalScreen(
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.
                 hoverPos?.let { updateHoverAffordance(it, event.isCtrlPressed) }
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
+                if (event.isCtrlPressed && event.isShiftPressed && !event.isAltPressed) {
+                    when (event.key) {
+                        Key.W -> { state.selectCursorWord(); speechOffset = 0; speechPart = 1; return@onPreviewKeyEvent true }
+                        Key.U -> { state.selectCursorLine(); speechOffset = 0; speechPart = 1; return@onPreviewKeyEvent true }
+                        Key.Y -> { state.selectPreviousOutputLine(); speechOffset = 0; speechPart = 1; return@onPreviewKeyEvent true }
+                        Key.O -> {
+                            if (onOpenPath != null) {
+                                val path = state.selectedPath()
+                                if (path != null) {
+                                    onOpenPath(path)
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
+                    }
+                }
                 if (isImeOwnedPrintable(imeInput, event.isCtrlPressed, event.isAltPressed, event.utf16CodePoint) &&
                     isSoftKeyboardEvent(event)
                 ) {
@@ -1504,7 +1615,7 @@ fun TerminalScreen(
 
       // Transient "Copied" confirmation over the top of the terminal (right-click / Ctrl+Shift+C /
       // touch "Copy"). Same overlay slot and visual language as the DisconnectedBanner in TerminalView.
-      CopiedBanner(copiedNonce, Modifier.align(Alignment.TopCenter))
+      CopiedBanner(copiedNonce, Modifier.align(Alignment.TopCenter), announced = true)
 
       // The saved password offered to a sudo prompt (issue #360). Bottom edge, not the top one the
       // copy flash and the find bar share: the prompt it answers is on one of the last rows, and the
@@ -1519,8 +1630,15 @@ fun TerminalScreen(
       // The sudo prompt outranks the jump announcement — both share the one live region. When it
       // takes the region the stale jump text is dropped, or the region would re-announce a
       // minutes-old jump the moment the offer clears.
-      LaunchedEffect(sudoOffer) { if (sudoOffer) jumpAnnounce = "" }
-      StatusAnnouncer(if (sudoOffer) sudoHint else jumpAnnounce)
+      LaunchedEffect(sudoOffer) {
+          if (sudoOffer) {
+              terminalAnnouncement = ""
+              copyFailureCount = 0
+              copySuccess = false
+          }
+      }
+      StatusAnnouncer(if (sudoOffer) sudoHint else
+          copyFailureAnnouncement.ifEmpty { copySuccessAnnouncement.ifEmpty { terminalAnnouncement } })
       if (sudoOffer) {
           TerminalOverlayBanner(
               icon = "password",

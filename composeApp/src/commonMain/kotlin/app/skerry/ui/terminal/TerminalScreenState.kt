@@ -681,7 +681,9 @@ class TerminalScreenState(
      * The path the selection stands for: a `file://` link's target first - its text is only what the
      * server chose to print - then the selected text itself when it reads as a path.
      */
-    fun selectedPath(): String? = selectedFileLinkPath() ?: filePathFromSelection(selectedText())
+    fun selectedPath(): String? = if (selectionIsSafePathCandidate()) {
+        selectedFileLinkPath() ?: filePathFromSelection(selectedText())
+    } else null
 
     /**
      * Best-effort text of the last command and its output — for "explain this output" when nothing is
@@ -721,7 +723,7 @@ class TerminalScreenState(
      * the saved text, or `null` if there is nothing to select (buffer is then left untouched).
      */
     fun capturePrimarySelection(): String? {
-        val text = selectedText() ?: return null
+        val text = selectedCopyText() ?: return null
         primarySelection = text
         return text
     }
@@ -1739,5 +1741,3 @@ internal fun lastCommandBlock(text: String): String? = lastCommandBlocks(text, 1
 private val SCREEN_SNAPSHOT_POLICY = object : SnapshotMutationPolicy<List<List<TermCell>>> {
     override fun equivalent(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean = a === b
 }
-
-

@@ -76,9 +76,9 @@ data class TerminalSelection(val anchor: TerminalPos, val focus: TerminalPos) {
      * terminals do on copy), and joins rows with `\n`. A row that soft-wraps into the next one
      * ([wrapsToNextRow]) is joined without a break and untrimmed — it is one line the terminal cut,
      * and a long command copied with a break in it would run in halves. Columns past the end of a
-     * row are clamped to its length.
+     * row are clamped to its length. [maskHidden] replaces concealed SGR 8 cells before copy.
      */
-    fun extract(screen: List<List<TermCell>>): String {
+    fun extract(screen: List<List<TermCell>>, maskHidden: Boolean = false): String {
         if (isEmpty) return ""
         val s = start
         val e = end
@@ -90,7 +90,9 @@ data class TerminalSelection(val anchor: TerminalPos, val focus: TerminalPos) {
                 val row = screen[r]
                 val from = (if (r == s.row) s.col else 0).coerceIn(0, row.size)
                 val to = (if (r == e.row) e.col else row.size).coerceIn(from, row.size)
-                val segment = buildString { for (c in from until to) append(row[c].text) }
+                val segment = buildString {
+                    for (c in from until to) append(if (maskHidden && row[c].style.hidden) "•" else row[c].text)
+                }
                 if (r < lastRow && row.wrapsToNextRow()) {
                     append(segment)
                 } else {

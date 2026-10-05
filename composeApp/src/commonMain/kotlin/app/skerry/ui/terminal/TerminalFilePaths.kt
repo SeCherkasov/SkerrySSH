@@ -15,7 +15,7 @@ import app.skerry.shared.terminal.TerminalSelection
  */
 
 /** Longest path we are willing to hand to the file browser — beyond this it isn't output, it's noise. */
-private const val MAX_PATH_LENGTH = 4096
+internal const val MAX_PATH_LENGTH = 4096
 
 /** Characters a path may directly follow: a token boundary, a quote, or an opening bracket. */
 private const val PATH_OPENERS = "\"'`([{"

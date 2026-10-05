@@ -63,9 +63,8 @@ AREA_RULES = (
     # the only thing that can, so a change here owes that suite the way Kotlin owes `tests`.
     # Everything that decides what a change owes, or who reads it: the runner, the hook that
     # records reviews, the settings that register the hook, and the reviewers' own definitions.
-    ("harness", lambda p: p.startswith(("tools/harness/", ".claude/hooks/", ".claude/agents/",
-                                       ".claude/commands/"))
-        or p in (".claude/settings.json", "AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md")),
+    ("harness", lambda p: p.startswith(("tools/harness/", ".agents/hooks/", ".agents/reviewers/"))
+        or p in (".codex/hooks.json", "AGENTS.md", "docs/development-process.md")),
 )
 
 # Stage -> the command the runner uses. "checks" is internal (tools/harness/checks.py).
@@ -167,10 +166,7 @@ def reviewer_delta(st: dict, reviewer: str, cwd: str | None = None) -> list[str]
     return sorted(changed)
 
 
-PLUGIN_GLOBS = (
-    "~/.claude/plugins/cache/*/*/*/agents/{name}.md",
-    "~/.claude/plugins/marketplaces/*/agents/{name}.md",
-)
+PLUGIN_GLOBS = ("~/.codex/plugins/cache/ecc/ecc/*/agents/{name}.md",)
 
 
 def agent_id(reviewer: str) -> str:
@@ -187,7 +183,7 @@ def is_installed(reviewer: str, cwd: str | None = None) -> bool:
     """
     if reviewer.startswith("skerry-"):
         root = state.repo_root(cwd)
-        return bool(root) and os.path.exists(os.path.join(root, ".claude", "agents",
+        return bool(root) and os.path.exists(os.path.join(root, ".agents", "reviewers",
                                                           f"{reviewer}.md"))
     return any(glob.glob(os.path.expanduser(pattern.format(name=reviewer)))
                for pattern in PLUGIN_GLOBS)

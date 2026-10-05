@@ -1,6 +1,6 @@
 # Skerry — coding guidelines
 
-Rules for the code itself. `CLAUDE.md` owns the *process* (TDD loop, build gate, review fan-out,
+Rules for the code itself. `docs/development-process.md` owns the *process* (TDD loop, build gate, review fan-out,
 hand-off); this file owns *what the code must look like once you're writing it*. Read it before
 writing code — every rule here is a class of defect we already paid for in the 2026-07-02
 pre-release review and the 2026-07-03/04 refactor (~115 files, −7646 lines). The goal is to write it
@@ -195,7 +195,7 @@ The most expensive defect class of the refactor. No exceptions to these:
 - **Controller dependencies are injected** (example: `SyncEngine` into `SyncCoordinator`). If a
   class can't be tested without network, disk or UI, its constructor is designed wrong.
 - Concurrent controllers need tests for cancellation and re-entry — exactly what was missing for the
-  bugs in §3. The TDD loop itself is in `CLAUDE.md` → *How we work*.
+  bugs in §3. The TDD loop itself is in `docs/development-process.md` → *How we work*.
 - **Delete dead code in the same commit that orphaned it**: old stores, screens, controllers and
   their tests, unused Gradle dependencies. "Leave it for now" is a future refactor.
 - Dependencies only through the version catalog (`libs.versions.toml`), never raw coordinates.
@@ -210,4 +210,4 @@ The most expensive defect class of the refactor. No exceptions to these:
    forms via shared state?
 6. Secret-bearing files through `atomicWriteUtf8`? Validation before side effects?
 7. Is the new code covered by tests (cancellation and races included), and is the dead code gone?
-8. Build, test and review gates from `CLAUDE.md` → *How we work* all run?
+8. Build, test and review gates from `docs/development-process.md` → *How we work* all run?

@@ -51,7 +51,7 @@
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · bereit. Keine Daten verlassen deinen Rechner.</string>
     <string name="settings_ai_badge_private">PRIVAT</string>
     <string name="settings_ai_provider_byok">Mein API-Schlüssel (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">Dein OpenAI-, Anthropic- oder OpenRouter-Schlüssel. Wird direkt vom Anbieter abgerechnet.</string>
+    <string name="settings_ai_provider_byok_desc">Dein OpenAI- oder OpenRouter-Schlüssel. Wird direkt vom Anbieter abgerechnet.</string>
     <string name="settings_ai_provider_off">Aus — keine KI</string>
     <string name="settings_ai_provider_off_desc">Assistent deaktiviert; es wird nichts gesendet.</string>
     <string name="settings_ai_off_note">KI ist aus. Wähle oben einen Anbieter, um sie zu aktivieren.</string>
@@ -245,6 +245,10 @@
     <string name="settings_kb_mouse_shift_drag">Shift+Ziehen</string>
     <string name="settings_kb_search_output">In Ausgabe suchen</string>
     <string name="settings_kb_copy_selection">Auswahl kopieren</string>
+    <string name="settings_kb_select_cursor_word">Wort am Cursor auswählen</string>
+    <string name="settings_kb_select_cursor_line">Zeile am Cursor auswählen</string>
+    <string name="settings_kb_select_previous_output">Vorherige Ausgabezeile auswählen</string>
+    <string name="settings_kb_open_selected_path">Ausgewählten Pfad in Dateien öffnen</string>
     <string name="settings_kb_paste">Einfügen</string>
     <string name="settings_kb_global">GLOBAL</string>
     <string name="settings_kb_terminal_group">TERMINAL &amp; AUTOVERVOLLSTÄNDIGUNG</string>

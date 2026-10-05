@@ -51,7 +51,7 @@
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · ready. No data leaves your machine.</string>
     <string name="settings_ai_badge_private">PRIVATE</string>
     <string name="settings_ai_provider_byok">My API key (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">Your OpenAI, Anthropic or OpenRouter key. Billed directly by the provider.</string>
+    <string name="settings_ai_provider_byok_desc">Your OpenAI or OpenRouter key. Billed directly by the provider.</string>
     <string name="settings_ai_provider_off">Off — no AI</string>
     <string name="settings_ai_provider_off_desc">Assistant disabled; nothing is sent.</string>
     <string name="settings_ai_off_note">AI is off. Select a provider above to enable.</string>
@@ -245,6 +245,10 @@
     <string name="settings_kb_mouse_shift_drag">Shift+drag</string>
     <string name="settings_kb_search_output">Find in output</string>
     <string name="settings_kb_copy_selection">Copy selection</string>
+    <string name="settings_kb_select_cursor_word">Select word at cursor</string>
+    <string name="settings_kb_select_cursor_line">Select line at cursor</string>
+    <string name="settings_kb_select_previous_output">Select previous output line</string>
+    <string name="settings_kb_open_selected_path">Open selected path in Files</string>
     <string name="settings_kb_paste">Paste</string>
     <string name="settings_kb_global">GLOBAL</string>
     <string name="settings_kb_terminal_group">TERMINAL &amp; AUTOCOMPLETE</string>

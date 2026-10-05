@@ -1,6 +1,6 @@
 """Deterministic project rules, checked by grep instead of by a reviewing model.
 
-Everything here is a rule from `docs/coding-guidelines.md` or `CLAUDE.md` that can be decided
+Everything here is a rule from `docs/coding-guidelines.md` or `docs/development-process.md` that can be decided
 without reading the code for meaning: a missing translation, a raw `Text(`, a hex colour, a hard
 dependency coordinate. Handing those to an LLM reviewer costs a minute and misses some of them;
 a regex costs a second and never gets bored.

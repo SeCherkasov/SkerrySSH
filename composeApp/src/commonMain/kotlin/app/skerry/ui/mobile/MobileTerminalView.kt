@@ -250,6 +250,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             // Opt-in (More → Appearance → Terminal): off, the terminal keeps the
                             // font size from Appearance no matter how wide the output gets.
                             autoFitEnabled = state.terminalAutoFit,
+                            onOpenPath = if (state.openFilePathsInSftp && active.controller.supportsSftp) {
+                                { path ->
+                                    active.controller.requestReveal(path)
+                                    st.terminal.clearSelection()
+                                    state.push(MobileRoute.Files)
+                                }
+                            } else null,
                         )
                         // Composed whether or not the feature is on, and told which it is: the
                         // controls carry the screen-reader announcer for the scale, and a live

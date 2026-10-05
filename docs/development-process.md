@@ -128,11 +128,11 @@ tools/harness/gate.py run        # runs exactly the stages this change owes, in 
 - Editing anything afterwards reopens the gate — the digest moved. That is not pedantry: it is the
   only way "green" can mean the code being committed.
 
-### 4. Review gate — ECC fan-out before the PR
+### 4. Review gate before the PR
 
 Once the branch is green, `tools/harness/gate.py reviewers` prints the set this change needs and
-which of them have not run against the current tree. Launch them **in parallel, in a single
-message**, scoped to `git diff main...HEAD` plus the uncommitted worktree:
+which of them have not run against the current tree. Run them after Gradle exits, one at a time
+when memory is tight, scoped to `git diff main...HEAD` plus the uncommitted worktree:
 
 | Agent | Looks for |
 |---|---|
@@ -142,7 +142,7 @@ message**, scoped to `git diff main...HEAD` plus the uncommitted worktree:
 | `ecc:silent-failure-hunter` | swallowed exceptions, bad fallbacks, errors that never propagate |
 | `ecc:pr-test-analyzer` | whether the tests actually cover the behaviour, not just the lines |
 
-The first three live in `.claude/agents/` — they ship with the clone, so the fan-out does not
+The first three live in `.agents/reviewers/` — they ship with the clone, so the fan-out does not
 depend on a plugin installed on one machine. The generic Kotlin and security reviewers were
 replaced because they review a stack this repo does not have (ViewModels, Room, NavController;
 web vulnerabilities in an SSH client).
@@ -152,7 +152,7 @@ and reports them as *skipped* rather than owed when the plugin is not installed 
 hand-off when that happens. Add by judgement: `ecc:type-design-analyzer` (new domain types),
 `ecc:comment-analyzer` (comment rot), `ecc:database-reviewer` (SQL).
 
-Rules for the fan-out:
+Rules for reviews:
 
 - Reviewers are **read-only**. They report; the fixes are mine, in the working tree.
 - Subagents must never run `git checkout`, switch branches, or stash — they share the worktree.

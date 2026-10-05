@@ -72,7 +72,7 @@ iteration and does not create a gate record.
 | Change the sync contract | `sync-wire/` and both client/server consumers |
 | Add UI copy | all locale resource sets in the same change |
 | Add a test | matching test source set and package |
-| Change the development process | `CLAUDE.md`, `tools/harness/`, and self-tests |
+| Change the development process | `docs/development-process.md`, `tools/harness/`, and self-tests |
 
 ## Non-obvious constraints
 
