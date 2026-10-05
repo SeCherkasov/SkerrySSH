@@ -48,7 +48,7 @@
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · hazır. Hiçbir veri makinenizden çıkmaz.</string>
     <string name="settings_ai_badge_private">GİZLİ</string>
     <string name="settings_ai_provider_byok">Kendi API anahtarım (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">OpenAI, Anthropic veya OpenRouter anahtarınız. Sağlayıcı doğrudan faturalandırır.</string>
+    <string name="settings_ai_provider_byok_desc">OpenAI veya OpenRouter anahtarınız. Sağlayıcı doğrudan faturalandırır.</string>
     <string name="settings_ai_provider_off">Kapalı — AI yok</string>
     <string name="settings_ai_provider_off_desc">Asistan devre dışı; hiçbir şey gönderilmez.</string>
     <string name="settings_ai_off_note">AI kapalı. Etkinleştirmek için yukarıdan bir sağlayıcı seçin.</string>
@@ -241,6 +241,10 @@
     <string name="settings_kb_mouse_shift_drag">Shift+sürükle</string>
     <string name="settings_kb_search_output">Çıktıda bul</string>
     <string name="settings_kb_copy_selection">Seçimi kopyala</string>
+    <string name="settings_kb_select_cursor_word">İmleçteki sözcüğü seç</string>
+    <string name="settings_kb_select_cursor_line">İmleçteki satırı seç</string>
+    <string name="settings_kb_select_previous_output">Önceki çıktı satırını seç</string>
+    <string name="settings_kb_open_selected_path">Seçili yolu Dosyalar'da aç</string>
     <string name="settings_kb_paste">Yapıştır</string>
     <string name="settings_kb_global">GENEL</string>
     <string name="settings_kb_terminal_group">TERMİNAL VE OTOMATİK TAMAMLAMA</string>

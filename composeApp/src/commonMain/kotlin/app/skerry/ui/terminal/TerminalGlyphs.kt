@@ -111,7 +111,7 @@ internal data class HoveredPath(val row: Int, val span: TextLinkSpan)
  * in and hides it after [COPIED_BANNER_MS]; a re-key to 0 mid-show hides it immediately (no stuck pill).
  */
 @Composable
-internal fun CopiedBanner(nonce: Int, modifier: Modifier = Modifier) {
+internal fun CopiedBanner(nonce: Int, modifier: Modifier = Modifier, announced: Boolean = false) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(nonce) {
         if (!shouldShowCopiedFlash(nonce)) {
@@ -129,6 +129,7 @@ internal fun CopiedBanner(nonce: Int, modifier: Modifier = Modifier) {
             accent = Skerry.colors.cyan,
             background = Skerry.colors.surfaceDeep.copy(alpha = 0.8f),
             contentColor = Skerry.colors.cyanBright,
+            announced = announced,
         )
     }
 }

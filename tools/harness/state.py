@@ -34,10 +34,10 @@ IGNORED_PREFIXES = (
     "docs/", "licenses/", ".github/", ".idea/", "build/",
 )
 # Instructions the gate executes: the cross-agent contract, the portable memory policy, the
-# reviewers it launches, and the slash commands that drive the fan-out and kind declaration.
+# reviewers it launches.
 # Prose everywhere else stays prose.
-AGENT_FILES = ("AGENTS.md", "CLAUDE.md", ".agents/MEMORY.md")
-AGENT_PREFIX = (".claude/agents/", ".claude/commands/")
+AGENT_FILES = ("AGENTS.md", "docs/development-process.md")
+AGENT_PREFIX = (".agents/reviewers/",)
 IGNORED_SUFFIXES = (".md", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".ico", ".ttf", ".otf")
 # Path fragments that mark a source file as a test — used to tell "the fix" from "the test" when
 # proving the RED phase of a bug fix.

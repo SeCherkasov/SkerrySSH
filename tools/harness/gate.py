@@ -72,7 +72,7 @@ TEST_RESULTS_GLOB = "**/build/test-results/*/*.xml"
 # Harness code and executable agent policy are code the gate watches — editing either can change
 # what is required — but Gradle cannot see them. They reopen the stage; they cannot make its
 # results stale.
-HARNESS_PREFIXES = ("tools/harness/", ".claude/")
+HARNESS_PREFIXES = ("tools/harness/", ".agents/hooks/", ".agents/reviewers/")
 
 
 def _gradle_input(path: str) -> bool:
@@ -396,7 +396,7 @@ def cmd_red(args: argparse.Namespace) -> int:
 
 def _task_for_file(path: str) -> str:
     normalised = path.replace(os.sep, "/")
-    if normalised.startswith(("tools/harness/", ".claude/hooks/")):
+    if normalised.startswith(("tools/harness/", ".agents/hooks/")):
         return HARNESS_SUITE
     for prefix, task_name in TEST_TASKS:
         if prefix in normalised:

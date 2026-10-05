@@ -265,8 +265,8 @@ class SearchFieldNamingTest {
 
     @Composable
     private fun modelPicker() = ModelPickerMenu(
-        models = listOf("claude-opus-5"),
-        selected = "claude-opus-5",
+        models = listOf("model-example-5"),
+        selected = "model-example-5",
         favorites = emptySet(),
         onToggleFavorite = {},
         onSelect = {},

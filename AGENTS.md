@@ -6,13 +6,11 @@ prefer a verified small change over a broad speculative one.
 ## Read order
 
 1. Read this file.
-2. Read `CLAUDE.md` completely. It is the canonical development process and harness contract.
+2. Read `docs/development-process.md` completely. It is the canonical development process and harness contract.
 3. Before changing code, read `docs/coding-guidelines.md` completely.
-4. Read `.agents/MEMORY.md`, then only the linked historical notes relevant to the task.
 
 Authority, from highest to lowest: the current user request; current code, git history and test
-results; `AGENTS.md`, `CLAUDE.md` and `docs/coding-guidelines.md`; curated memory; raw historical
-memory. Memory records decisions and failure modes, but never proves current status.
+results; `AGENTS.md`, `docs/development-process.md` and `docs/coding-guidelines.md`.
 
 ## Start every task safely
 
@@ -38,7 +36,7 @@ memory. Memory records decisions and failure modes, but never proves current sta
 
 ## Verification and harness
 
-The portable gate is `tools/harness/gate.py`; the Claude Code hooks are only adapters around it.
+The portable gate is `tools/harness/gate.py`; the agent hooks are only adapters around it.
 Other agents do not receive those hooks automatically, so enforce the same contract explicitly.
 
 - Iterate with focused tests as needed.
@@ -54,11 +52,10 @@ Other agents do not receive those hooks automatically, so enforce the same contr
 ## Review compatibility
 
 For code changes, use the reviewer set printed by `tools/harness/gate.py reviewers`. Repository
-reviewer prompts live in `.claude/agents/`; plugin reviewers use the matching installed ECC
+reviewer prompts live in `.agents/reviewers/`; plugin reviewers use the matching installed ECC
 capability. Reviewers are read-only and must not run Gradle or mutate git state.
 
-When the current environment has no Claude hook, save each completed review to a temporary file and
-record it explicitly:
+Save each completed review to a temporary file and record it explicitly:
 
 ```bash
 tools/harness/gate.py review <reviewer-name> --file <report-file>

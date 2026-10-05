@@ -47,16 +47,10 @@ server/.env
 *.db-journal
 .tokensave
 
-# Claude Code: the shared harness (agents, /gate, hooks, settings.json) IS committed; per-machine
-# state is not.
-.claude/settings.local.json
-.claude/worktrees/
-.claude/*.lock
+# Local agent configuration and skills; the portable review prompts live in .agents/reviewers/.
+.codex/
+.agents/skills/
 
-# Raw assistant history imported from Claude Code. It can contain stale operational context and
-# machine-specific details; the reviewed, portable summary lives in .agents/MEMORY.md.
-.agent-memory/claude/
-
-# Python bytecode from the development harness (tools/harness, .claude/hooks)
+# Python bytecode from the development harness
 __pycache__/
 *.pyc

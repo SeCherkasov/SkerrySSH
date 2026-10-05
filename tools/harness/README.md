@@ -1,10 +1,10 @@
 # The development harness
 
-Skerry's contribution loop is written down in `CLAUDE.md`: failing test first, minimal
+Skerry's contribution loop is written down in `docs/development-process.md`: failing test first, minimal
 implementation, build gate, review fan-out, then the PR. This directory is the part of that loop a
 machine can check.
 
-It exists because the distance between "written in CLAUDE.md" and "actually done" was covered only
+It exists because the distance between "written in docs/development-process.md" and "actually done" was covered only
 by discipline, and discipline lost often enough to be worth automating.
 
 ## What it does
@@ -20,7 +20,7 @@ tools/harness/gate.py task bug 133
 python3 tools/harness/selftest.py
 ```
 
-A Claude Code hook (`.claude/hooks/guard-git.py`) refuses `git commit`, `git push` and
+An agent hook (`.agents/hooks/guard-git.py`) refuses `git commit`, `git push` and
 `gh pr create` while anything is owed. Other agents follow the same portable contract from
 `AGENTS.md` and call `gate.py status` explicitly before those operations. `SKERRY_GATE_OVERRIDE=1`
 on the command bypasses the debt check deliberately; it does not unprotect `main`.
@@ -43,7 +43,7 @@ Areas touched by the diff add to it: `ui`/`android` pull in `:androidApp:compile
 
 ## Reviewers
 
-Three of them ship with the clone, in `.claude/agents/`: `skerry-reviewer` (the project's own
+Three of them ship with the clone, in `.agents/reviewers/`: `skerry-reviewer` (the project's own
 rules), `skerry-kotlin-reviewer` (structured concurrency and Compose for a KMP app with no
 ViewModels, Room or Navigation) and `skerry-security-reviewer` (the vault, untrusted protocol
 input, the sync and team boundary). They exist because the generic equivalents review a stack this
@@ -77,7 +77,7 @@ Consequences worth knowing:
 ## Why the runner, and not a recorder
 
 The previous version watched Bash commands go past and inferred a green build from their text. It
-cost about ten unrecorded green runs: `/gate` redirects Gradle's output into a log, the log path
+cost about ten unrecorded green runs: an earlier runner redirected Gradle's output into a log, whose path
 often lived in a shell variable, and a pattern reading the command text could not follow it. It also
 did not recognise `./gradlew build` at all.
 
@@ -132,7 +132,7 @@ Txt("Skerry")  // harness-allow: i18n-hardcoded
 | `gate.py` | the CLI and the runner |
 | `selftest.py` | 200+ tests over throwaway git repositories, no Gradle |
 
-`AGENTS.md`, `CLAUDE.md` and `.agents/MEMORY.md` are executable agent policy, so editing any of them
+`AGENTS.md` and `docs/development-process.md` are executable agent policy, so editing either
 is a harness change and reopens `selftest`. `.agents/ONBOARDING.md` and ordinary documentation
 remain prose.
 

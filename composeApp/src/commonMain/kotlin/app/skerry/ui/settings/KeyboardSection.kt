@@ -40,6 +40,10 @@ import app.skerry.ui.generated.resources.settings_kb_broadcast
 import app.skerry.ui.generated.resources.settings_kb_editor_group
 import app.skerry.ui.generated.resources.settings_kb_command_palette
 import app.skerry.ui.generated.resources.settings_kb_copy_selection
+import app.skerry.ui.generated.resources.settings_kb_select_cursor_word
+import app.skerry.ui.generated.resources.settings_kb_select_cursor_line
+import app.skerry.ui.generated.resources.settings_kb_select_previous_output
+import app.skerry.ui.generated.resources.settings_kb_open_selected_path
 import app.skerry.ui.generated.resources.settings_kb_copy_text
 import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
 import app.skerry.ui.generated.resources.settings_kb_files_filter
@@ -131,6 +135,10 @@ internal fun KeyboardSection() {
         // Both conventions are live, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_select_cursor_word), ctrlShift("W"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_select_cursor_line), ctrlShift("U"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_select_previous_output), ctrlShift("Y"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_open_selected_path), ctrlShift("O"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_paste), "${ctrlShift("V")} / ${shift("Insert")}", live = true),
         // Mouse chord rather than a key, but it lives in the terminal and users look for it here:
         // Ctrl+click opens an OSC 8/plain URL, or a file path in the file panel.

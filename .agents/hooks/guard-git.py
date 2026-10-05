@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse guard on Bash: nothing leaves this worktree ungated.
 
-Two rules from CLAUDE.md -> How we work:
+Two rules from docs/development-process.md -> How we work:
 
   * `main` is protected — committing or pushing while HEAD is on main is blocked outright.
   * A change may only be committed, pushed or turned into a PR once it has met the requirements
@@ -63,8 +63,8 @@ def describe(task: dict, debt: list) -> str:
     lines += [f"  - {item}" for item in debt]
     lines += [
         "",
-        "Close it with `tools/harness/gate.py run` (build stages) and the reviewer fan-out from",
-        "`/gate`; `tools/harness/gate.py status` shows what is left. If the kind is wrong, declare",
+        "Close it with `tools/harness/gate.py run` (build stages) and the required reviews;",
+        "`tools/harness/gate.py status` shows what is left. If the kind is wrong, declare",
         "it: `tools/harness/gate.py task <bug|feature|refactor|docs> [ref]`.",
         "Deliberate bypass: prefix the command with SKERRY_GATE_OVERRIDE=1 and say why to the user.",
     ]

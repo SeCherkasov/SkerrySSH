@@ -18,7 +18,7 @@ class AiModelPickerTest {
     fun `matching is a case-insensitive substring, anywhere in the id`() {
         assertEquals(listOf("gpt-4o", "gpt-4o-mini"), filterAndSortModels(catalog, "GPT-4O", favorites = emptySet()))
         assertEquals(listOf("llama3.1:70b"), filterAndSortModels(catalog, "70b", favorites = emptySet()))
-        assertEquals(emptyList(), filterAndSortModels(catalog, "claude", favorites = emptySet()))
+        assertEquals(emptyList(), filterAndSortModels(catalog, "unlisted", favorites = emptySet()))
     }
 
     @Test
