@@ -279,6 +279,23 @@ class ShellMarksTest {
     }
 
     @Test
+    fun `the next prompt bounds a command finished on the alt screen`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4, maxScrollback = 100)
+        emu.feed(mark('A') + "$ " + mark('B') + "watch -n1 date\r\n" + mark('C'))
+        emu.feed("${esc}[?1049h" + mark('D', ";0") + "${esc}[?1049l")
+        assertNull(emu.shellCommandMarks().single().endRow)
+
+        emu.feed(mark('A') + "$ " + mark('B'))
+
+        val marks = emu.shellCommandMarks()
+        val finished = marks.first()
+        val nextPrompt = marks.last()
+        assertEquals(0, finished.exitCode)
+        assertEquals(nextPrompt.promptRow, finished.endRow)
+        assertEquals(nextPrompt.promptCol, finished.endCol)
+    }
+
+    @Test
     fun `the mark list is capped`() {
         val emu = TerminalEmulator(cols = 20, rows = 4, maxScrollback = 1000)
         repeat(MAX_COMMAND_MARKS + 20) { n ->

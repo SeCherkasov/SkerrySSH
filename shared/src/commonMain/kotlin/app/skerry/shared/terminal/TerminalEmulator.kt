@@ -931,7 +931,11 @@ class TerminalEmulator(
         when (val event = parseShellMark(rest) ?: return) {
             ShellMarkEvent.PromptStart -> {
                 if (altScreen) return
-                openShellMark = null // abandoned at the prompt: what it has is all it gets
+                // A fresh prompt is also the first primary-buffer position after an abandoned
+                // command or one whose D arrived on the alternate screen. Bound that command here
+                // so selecting its output cannot absorb everything printed by later commands.
+                shellMarks.lastOrNull()?.takeIf { it.end == null }?.end = ReflowAnchor(cursorRow, cx)
+                openShellMark = null
                 val mark = MutableShellMark(ReflowAnchor(cursorRow, cx))
                 shellMarks.add(mark)
                 openShellMark = mark

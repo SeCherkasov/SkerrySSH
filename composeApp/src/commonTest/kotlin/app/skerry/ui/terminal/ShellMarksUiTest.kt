@@ -174,6 +174,29 @@ class ShellMarksUiTest {
     }
 
     @Test
+    fun `the next prompt keeps an unfinished command from selecting later output`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            session.emit(
+                (
+                    "$esc]133;A$bel$ $esc]133;B$bel first\r\n$esc]133;C$bel" +
+                        "first output\r\n" +
+                        "$esc]133;A$bel$ $esc]133;B$bel second\r\n$esc]133;C$bel" +
+                        "second output\r\n$esc]133;D;0$bel"
+                    ).encodeToByteArray(),
+            )
+
+            state.selectCommandOutput(state.commandMarks.first())
+
+            assertEquals("first output", state.selectedText())
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `jumps find the nearest command above and below`() = runTest {
         marksSession { state ->
             val first = state.commandMarks[0].promptRow
