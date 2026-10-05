@@ -25,7 +25,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         # The action's default list includes `tools`, which cmdline-tools 20 no longer carries,
         # and sdkmanager fails the step on it.
         with:
@@ -47,7 +47,7 @@ jobs:
           install_sdk_pkg https://dl.google.com/android/repository/build-tools_r37_linux.zip "$ANDROID_HOME/build-tools/37.0.0"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Install test tools
         # ffmpeg: the desktop H.264 decoder is an ffmpeg process, and the flags it drives one with
