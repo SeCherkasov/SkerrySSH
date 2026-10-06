@@ -22,6 +22,7 @@ import app.skerry.server.routes.shareRoutes
 import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.teamRoutes
 import app.skerry.server.routes.teamScopeRoutes
+import app.skerry.server.routes.teamRecordingRoutes
 import app.skerry.server.routes.vaultRoutes
 import app.skerry.server.routes.WebSessionScope
 import app.skerry.server.routes.webFrontendRoutes
@@ -322,6 +323,7 @@ fun Application.configureServer(services: Services) {
             pairingStartRoute(services)
             teamRoutes(services)
             teamScopeRoutes(services)
+            teamRecordingRoutes(services)
             shareRoutes(services)
             syncWebSocket(services)
         }

@@ -37,6 +37,8 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.design.GhostButton
+import app.skerry.ui.generated.resources.lib_team_rec_play
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_actor_you
 import app.skerry.ui.generated.resources.lib_teams_event_accept
@@ -106,6 +108,7 @@ internal fun TeamActivityDialog(
     onDismiss: () -> Unit,
     focusRecordId: String? = null,
     focusRecordLabel: String? = null,
+    onOpenRecording: ((String, String) -> Unit)? = null,
 ) {
     val mono = LocalFonts.current.mono
     var category by remember { mutableStateOf(TeamActivityCategory.ALL) }
@@ -150,7 +153,7 @@ internal fun TeamActivityDialog(
                         color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold,
                         letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                     )
-                    day.rows.forEach { row -> ActivityRow(row, mono) }
+                    day.rows.forEach { row -> ActivityRow(row, mono, onOpenRecording) }
                 }
             }
         }
@@ -191,7 +194,8 @@ private fun ActivityFilterChips(selected: TeamActivityCategory, onSelect: (TeamA
 
 /** One event: icon, what happened (with the record's name), who and where, and the time. */
 @Composable
-internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.font.FontFamily) {
+internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.font.FontFamily,
+    onOpenRecording: ((String, String) -> Unit)? = null) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -212,6 +216,9 @@ internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.fo
                 )
             } ?: Box(Modifier.weight(1f))
             Txt(timeOfDay(row.createdAt), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
+        }
+        if (onOpenRecording != null) row.recordingId?.let { id ->
+            GhostButton(stringResource(Res.string.lib_team_rec_play), onClick = { onOpenRecording(row.scopeId, id) })
         }
         Txt(
             metaLine(row),

@@ -35,6 +35,13 @@ import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
+import app.skerry.shared.team.TeamRecordingClient
+import app.skerry.shared.team.SignedRecordingPolicy
+import app.skerry.shared.team.RecordingUpload
+import app.skerry.shared.team.RecordingIdentity
+import app.skerry.shared.team.RecordingChunkHash
+import app.skerry.shared.team.RemoteRecording
+import app.skerry.shared.team.TeamRecordingCrypto
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
@@ -57,6 +64,11 @@ import app.skerry.sync.wire.TeamScopeGrantsResponse
 import app.skerry.sync.wire.TeamScopesResponse
 import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
+import app.skerry.sync.wire.RecordingPolicyDto
+import app.skerry.sync.wire.RecordingReserveRequest
+import app.skerry.sync.wire.RecordingChunkDto
+import app.skerry.sync.wire.RecordingListResponse
+import app.skerry.sync.wire.RecordingMetadataDto
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
@@ -100,7 +112,7 @@ import java.util.Base64
 class KtorSyncClient(
     private val serverUrl: String,
     private val http: HttpClient = defaultHttpClient(),
-) : SyncClient, TeamClient, WebAccessClient,
+) : SyncClient, TeamClient, TeamRecordingClient, WebAccessClient,
     // Session sharing is its own protocol over the same server and the same HTTP client; delegated
     // rather than inlined, so this file stays about sync and Teams.
     app.skerry.shared.share.SessionShareClient by app.skerry.shared.share.KtorSessionShareClient(serverUrl, http) {
@@ -416,6 +428,7 @@ class KtorSyncClient(
                 recordType = it.recordType,
                 scopeId = it.scopeId,
                 durationSec = it.durationSec,
+                recordingId = it.recordingId,
             )
         }
     }
@@ -532,6 +545,116 @@ class KtorSyncClient(
         val query = (params.toList() + if (isTeamWide) emptyList() else listOf("scope=${scopeId.encodeURLParameter()}"))
         return "/teams/${teamId.encodeURLPathPart()}/records" + if (query.isEmpty()) "" else "?" + query.joinToString("&")
     }
+
+    private fun TeamScopeRef.recordingsUrl(tail: String = ""): String =
+        "/teams/${teamId.encodeURLPathPart()}/recordings$tail" +
+            if (isTeamWide) "" else "?scope=${scopeId.encodeURLParameter()}"
+
+    private fun TeamScopeRef.policyUrl(): String =
+        "/teams/${teamId.encodeURLPathPart()}/recording-policy" +
+            if (isTeamWide) "" else "?scope=${scopeId.encodeURLParameter()}"
+
+    override suspend fun recordingPolicy(session: SyncSession, ref: TeamScopeRef): SignedRecordingPolicy? {
+        val response = get(ref.policyUrl()) { bearerAuth(session.accessToken) }
+        if (response.status == HttpStatusCode.NotFound) return null
+        val dto: RecordingPolicyDto = response.bodyChecked()
+        return SignedRecordingPolicy(dto.revision, dto.keyEpoch, dto.retentionDays,
+            dto.ciphertext.unb64(), dto.signature.unb64())
+    }
+
+    override suspend fun putRecordingPolicy(session: SyncSession, ref: TeamScopeRef, policy: SignedRecordingPolicy) {
+        put(ref.policyUrl()) {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(RecordingPolicyDto(policy.revision, policy.keyEpoch, policy.retentionDays,
+                policy.ciphertext.b64(), policy.signature.b64()))
+        }.expectSuccess()
+    }
+
+    override suspend fun reserveRecording(session: SyncSession, upload: RecordingUpload) {
+        val identity = upload.identity
+        post(identity.ref.recordingsUrl()) {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(RecordingReserveRequest(identity.recordingId, identity.hostId, identity.keyEpoch,
+                upload.wrappedKey.b64(), upload.encryptedManifest.b64(),
+                upload.chunks.map { RecordingChunkDto(it.index, it.length, it.sha256) }, upload.durationSec,
+                upload.wrapEpoch))
+        }.expectSuccess()
+    }
+
+    override suspend fun uploadRecordingChunk(
+        session: SyncSession, ref: TeamScopeRef, recordingId: String, index: Int, ciphertext: ByteArray,
+    ) {
+        require(ciphertext.size <= TeamRecordingCrypto.MAX_CHUNK_CIPHERTEXT)
+        put(ref.recordingsUrl("/${recordingId.encodeURLPathPart()}/chunks/$index")) {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.OctetStream)
+            setBody(ciphertext)
+        }.expectSuccess()
+    }
+
+    override suspend fun completeRecording(session: SyncSession, ref: TeamScopeRef, recordingId: String) {
+        post(ref.recordingsUrl("/${recordingId.encodeURLPathPart()}/complete")) {
+            bearerAuth(session.accessToken)
+        }.expectSuccess()
+    }
+
+    override suspend fun listRecordings(session: SyncSession, ref: TeamScopeRef, offset: Long): List<RemoteRecording> {
+        val suffix = if (ref.isTeamWide) "?offset=$offset" else "?scope=${ref.scopeId.encodeURLParameter()}&offset=$offset"
+        val dto: RecordingListResponse = get("/teams/${ref.teamId.encodeURLPathPart()}/recordings$suffix") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return dto.recordings.map { it.toRemoteRecording() }
+    }
+
+    override suspend fun recording(session: SyncSession, ref: TeamScopeRef, recordingId: String): RemoteRecording? {
+        val response = get(ref.recordingsUrl("/${recordingId.encodeURLPathPart()}")) { bearerAuth(session.accessToken) }
+        if (response.status == HttpStatusCode.NotFound) return null
+        val dto: RecordingMetadataDto = response.bodyChecked()
+        return dto.toRemoteRecording()
+    }
+
+    override suspend fun downloadRecordingChunk(session: SyncSession, ref: TeamScopeRef, recordingId: String, index: Int): ByteArray {
+        val response = get(ref.recordingsUrl("/${recordingId.encodeURLPathPart()}/chunks/$index")) {
+            bearerAuth(session.accessToken)
+        }
+        if (!response.status.isSuccess()) throw response.toException()
+        return response.bodyAsChannel().readAtMost(TeamRecordingCrypto.MAX_CHUNK_CIPHERTEXT)
+            ?: throw SyncException(SyncException.Kind.PROTOCOL, "recording chunk exceeds limit")
+    }
+
+    override suspend fun deleteRecording(session: SyncSession, ref: TeamScopeRef, recordingId: String) {
+        request { http.delete("$serverUrl${ref.recordingsUrl("/${recordingId.encodeURLPathPart()}")}") {
+            bearerAuth(session.accessToken)
+        } }.expectSuccess()
+    }
+
+    override suspend fun deleteRecordings(session: SyncSession, ref: TeamScopeRef, recordingIds: List<String>) {
+        require(recordingIds.size in 1..100)
+        post(ref.recordingsUrl("/delete")) {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(app.skerry.sync.wire.RecordingBulkDeleteRequest(recordingIds))
+        }.expectSuccess()
+    }
+
+    override suspend fun stageRecordingWrap(
+        session: SyncSession, ref: TeamScopeRef, recordingId: String, nextEpoch: Long, wrappedKey: ByteArray,
+    ) {
+        require(wrappedKey.size in 40..256)
+        put(ref.recordingsUrl("/${recordingId.encodeURLPathPart()}/wrap")) {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(app.skerry.sync.wire.RecordingWrapRequest(nextEpoch, wrappedKey.b64()))
+        }.expectSuccess()
+    }
+
+    private fun RecordingMetadataDto.toRemoteRecording(): RemoteRecording = RemoteRecording(
+        RecordingIdentity(TeamScopeRef(teamId, scopeId), recordingId, hostId, actorId, keyEpoch),
+        wrappedKey.unb64(), manifest.unb64(), chunkCount, durationSec, createdAt, expiresAt,
+        wrapEpoch, stagedWrappedKey?.unb64(), stagedWrapEpoch,
+    )
 
     override suspend fun ping(): Boolean = try {
         // Open liveness endpoint (see server Plugins.kt `/healthz`). No bearer token — the ping
@@ -728,4 +851,3 @@ object SyncClientLimits {
     const val MAX_ERROR_BODY_BYTES = 8 * 1024
     const val MAX_ERROR_MESSAGE_CHARS = 300
 }
-

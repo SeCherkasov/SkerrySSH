@@ -131,6 +131,7 @@ fun MobileDesignApp(
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
+                        prepareRecording = { hostId, title -> deps.teams?.recordings?.prepareHostRecording(hostId, title) },
                         // Terminal settings are read at connect time — new sessions pick up the current
                         // scrollback/cursor/clipboard choice, already-open ones are updated live below.
                         terminalPrefs = {
@@ -254,6 +255,9 @@ fun MobileDesignApp(
         LocalTerminalTheme provides effectiveTerminalTheme,
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
+        app.skerry.ui.teams.LocalTeamRecordingPlayback provides { cast ->
+            state.showCast(app.skerry.ui.terminal.CastOpenResult.Loaded(cast, cast.title.orEmpty()))
+        },
         LocalKnownHosts provides deps.knownHosts,
         LocalTrustedCas provides deps.trustedCas,
         // Read-only probe transport for form-side checks (container listing): never adds a host key.

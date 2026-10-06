@@ -4,6 +4,11 @@ import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.terminal.CastEvent
 import app.skerry.shared.terminal.TerminalState
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CompletableDeferred
+import app.skerry.shared.terminal.CastEventSource
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -21,6 +26,115 @@ class CastPlayerTest {
         title = "root@alpha",
         events = listOf(CastEvent(0.5, "a"), CastEvent(1.5, "b"), CastEvent(2.0, "c")),
     )
+
+    @Test
+    fun `segmented source plays and seeks without materializing the cast`() = runTest {
+        val source = object : app.skerry.shared.terminal.CastEventSource {
+            override val size = 3
+            override val duration = 2.0
+            override suspend fun event(index: Int) = cast.events[index]
+            override fun close() = Unit
+        }
+        val streamed = cast.copy(events = emptyList(), source = source)
+        val player = CastPlayer(streamed, backgroundScope)
+        val seen = collect(player)
+        player.play()
+        advanceTimeBy(600)
+        assertEquals(listOf("a"), seen)
+        player.seekTo(1.5)
+        runCurrent()
+        assertTrue(seen.joinToString("").contains("ab"))
+        advanceTimeBy(600)
+        assertEquals("c", seen.last())
+    }
+
+    @Test
+    fun `play during suspended seek preserves uncommitted segmented catch up`() = runTest {
+        interruptedSeek(wasPlaying = false)
+    }
+
+    @Test
+    fun `pause then play during suspended seek preserves uncommitted segmented catch up`() = runTest {
+        interruptedSeek(wasPlaying = true)
+    }
+
+    @Test
+    fun `cancelled seek download failure cannot overwrite newer playback state`() = runTest {
+        val releaseOldDownload = CompletableDeferred<Unit>()
+        var firstRead = true
+        val source = object : CastEventSource {
+            override val size = cast.events.size
+            override val duration = cast.duration
+            override suspend fun event(index: Int): CastEvent {
+                if (firstRead) {
+                    firstRead = false
+                    withContext(NonCancellable) {
+                        releaseOldDownload.await()
+                        error("old segment download failed")
+                    }
+                }
+                return cast.events[index]
+            }
+            override fun close() = Unit
+        }
+        val player = CastPlayer(cast.copy(events = emptyList(), source = source), backgroundScope)
+        val seen = collect(player)
+        player.seekTo(1.6)
+        runCurrent()
+        player.seekTo(1.6)
+        runCurrent()
+        player.play()
+        runCurrent()
+        assertEquals(listOf(RESET + "ab"), seen)
+
+        releaseOldDownload.complete(Unit)
+        runCurrent()
+        assertFalse(player.failed)
+        assertTrue(player.playing)
+        advanceTimeBy(600)
+        runCurrent()
+        assertEquals(listOf(RESET + "ab", "c"), seen)
+    }
+
+    private suspend fun TestScope.interruptedSeek(wasPlaying: Boolean) {
+        val readingLaterSegment = CompletableDeferred<Unit>()
+        val releaseLaterSegment = CompletableDeferred<Unit>()
+        val source = object : CastEventSource {
+            override val size = cast.events.size
+            override val duration = cast.duration
+            override suspend fun event(index: Int): CastEvent {
+                if (index == 2) {
+                    readingLaterSegment.complete(Unit)
+                    releaseLaterSegment.await()
+                }
+                return cast.events[index]
+            }
+            override fun close() = Unit
+        }
+        val player = CastPlayer(cast.copy(events = emptyList(), source = source), backgroundScope)
+        val seen = collect(player)
+        if (wasPlaying) {
+            player.play()
+            advanceTimeBy(600)
+            assertEquals(listOf("a"), seen)
+            seen.clear()
+        }
+        player.seekTo(1.6)
+        runCurrent()
+        assertTrue(readingLaterSegment.isCompleted)
+        assertEquals(emptyList(), seen) // RESET + ab are buffered, not delivered yet.
+
+        if (wasPlaying) player.pause()
+        player.play()
+        runCurrent()
+        releaseLaterSegment.complete(Unit)
+        runCurrent()
+        advanceTimeBy(600)
+        runCurrent()
+
+        assertEquals(listOf(RESET + "ab", "c"), seen)
+        assertTrue(player.finished)
+    }
 
     @Test
     fun `plays events at their recorded times`() = runTest {

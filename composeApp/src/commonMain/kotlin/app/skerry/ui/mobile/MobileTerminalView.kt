@@ -20,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -38,6 +37,7 @@ import app.skerry.ui.terminal.TerminalAutoFitControls
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.autoFitFloor
 import app.skerry.ui.terminal.RecordingOutcome
+import app.skerry.ui.terminal.rememberSessionRecordingAction
 import app.skerry.shared.share.ShareFrame
 import app.skerry.ui.app.LocalSessionShare
 import app.skerry.ui.generated.resources.share_session
@@ -77,12 +77,15 @@ import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
 import app.skerry.ui.app.mobileTabBarUnderRoute
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.shared.team.RecordingMode
+import app.skerry.ui.generated.resources.lib_team_rec_active
+import app.skerry.ui.generated.resources.lib_team_rec_failed
+import app.skerry.ui.generated.resources.lib_team_rec_upload_pending
+import app.skerry.ui.generated.resources.lib_team_rec_upload_failed
+import androidx.compose.runtime.collectAsState
 import app.skerry.ui.session.broadcastTargets
 import kotlinx.coroutines.launch
-import app.skerry.shared.terminal.castFileName
-import app.skerry.shared.terminal.recordingStamp
-import app.skerry.ui.vault.ExportOutcome
-import app.skerry.ui.vault.exportFileGuarded
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
@@ -109,6 +112,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val active = tab?.focusedPane
     // Teams: a saved recording of a shared host is reported to its team (see the record toggle below).
     val teams = LocalTeams.current
+    val recordingUploadPending = teams?.recordings?.recordingUploadsPending?.collectAsState()?.value == true
+    val recordingUploadFailed = teams?.recordings?.recordingUploadError?.collectAsState()?.value == true
     // Stable Disconnect lambda (recreated only on session change): drops the connection and returns to
     // the list — the back arrow leaves the session alive, Disconnect closes it.
     val onDisconnect = remember(tab?.id, sessions) {
@@ -148,7 +153,6 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val shareTeams = shareableTeams()
     // Outcome of the last finished recording, shown as a notice (desktop parity). null = nothing to say.
     var recordingNotice by remember(active?.id) { mutableStateOf<RecordingOutcome?>(null) }
-    val scope = rememberCoroutineScope()
     // Broadcast sheet (desktop ⌘B parity): one command into several sessions. Not keyed on the
     // session — it addresses all of them, and the selection lives on the shell state.
     var broadcastOpen by remember { mutableStateOf(false) }
@@ -156,6 +160,12 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var historyOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    val indicatorTerminal = activeTerminal ?: (active?.controller?.uiState as? ConnectionUiState.Disconnected)?.terminal
+    val toggleRecording = rememberSessionRecordingAction(
+        active, activeTerminal, teams,
+        onSaved = { host, seconds -> teams?.reportSessionRecorded(host, seconds) },
+        onDone = { outcome -> recordingNotice = outcome.takeIf { it.worthReporting } },
+    )
     val canRunSnippet = snippets != null && activeTerminal != null
     // Same rule as the desktop toolbar's popups: the pane id survives a drop (the controller
     // reconnects in place), so a sheet left open would be hidden by its own render guard and then
@@ -200,6 +210,22 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onMonitor = if (activeTerminal != null && active?.controller?.isWatched != true) ({ monitorOpen = true }) else null,
                 onMenu = { menuOpen = true },
             )
+            val recordingLabel = when {
+                indicatorTerminal?.teamRecordingFailed == true -> stringResource(Res.string.lib_team_rec_failed)
+                indicatorTerminal?.recording == true ->
+                    stringResource(Res.string.lib_team_rec_active)
+                else -> ""
+            }
+            StatusAnnouncer(recordingLabel)
+            if (recordingLabel.isNotEmpty()) {
+                Txt(recordingLabel, color = Skerry.colors.sunset, size = 11.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp))
+            }
+            val uploadLabel = if (recordingUploadFailed) stringResource(Res.string.lib_team_rec_upload_failed)
+                else if (recordingUploadPending) stringResource(Res.string.lib_team_rec_upload_pending) else ""
+            StatusAnnouncer(uploadLabel)
+            if (uploadLabel.isNotEmpty()) Txt(uploadLabel, color = Skerry.colors.amber, size = 11.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp))
             MobileSessionStrip(
                 chips = mobileTerminalStrip(sessions?.tabs.orEmpty().map { it.toSessionInfo() }, sessions?.activeId),
                 onSelect = { id -> sessions?.activate(id) },
@@ -435,39 +461,12 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                                 filled = false,
                             )
                         }
-                        // Recording toggle: stopping opens a Save-As for the .cast; nothing is
-                        // written until the user picks a file.
                         val recording = activeTerminal.recording
-                        MobileSheetButton(
+                        if (activeTerminal.teamRecordingMode != RecordingMode.REQUIRED) MobileSheetButton(
                             label = stringResource(if (recording) Res.string.term_record_stop else Res.string.term_record_start),
                             onClick = {
                                 menuOpen = false
-                                // Start/stop go through the terminal's command loop, so both run in
-                                // a coroutine rather than inline in the click.
-                                scope.launch {
-                                    if (!recording) {
-                                        activeTerminal.startRecording(active?.displayTitle ?: active?.subtitle)
-                                    } else {
-                                        val truncated = activeTerminal.recordingTruncated
-                                        val cast = activeTerminal.stopRecording()
-                                        if (cast == null || !cast.contains('\n')) {
-                                            recordingNotice = RecordingOutcome.Empty
-                                        } else {
-                                            val name = castFileName(active?.displayTitle.orEmpty().ifBlank { active?.subtitle.orEmpty() }, recordingStamp())
-                                            val seconds = activeTerminal.recordingSeconds
-                                            val outcome = exportFileGuarded(name, cast)
-                                            // Desktop parity: report a saved recording of a shared
-                                            // host to its team. A cancelled Save-As kept nothing.
-                                            if (outcome == ExportOutcome.Saved) active.hostId?.let { teams?.reportSessionRecorded(it, seconds) }
-                                            recordingNotice = when (outcome) {
-                                                ExportOutcome.Cancelled -> null
-                                                ExportOutcome.Failed -> RecordingOutcome.Failed
-                                                ExportOutcome.Saved ->
-                                                    if (truncated) RecordingOutcome.SavedTruncated else RecordingOutcome.Saved
-                                            }
-                                        }
-                                    }
-                                }
+                                toggleRecording()
                             },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = if (recording) "stop_circle" else "radio_button_checked",

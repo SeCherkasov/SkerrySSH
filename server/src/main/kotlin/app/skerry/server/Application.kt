@@ -87,6 +87,8 @@ private fun Application.scheduleCleanup(services: Services) {
                     .toString()
                 services.teamRecords.purgeTombstones(cutoff)
             }.onFailure { log.warn("team tombstone cleanup failed", it) }
+            runCatching { services.teamRecordings.cleanupExpired(System.currentTimeMillis()) }
+                .onFailure { log.warn("team recording cleanup failed", it) }
         }
     }
 }

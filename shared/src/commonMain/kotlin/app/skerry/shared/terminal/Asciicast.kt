@@ -29,9 +29,12 @@ data class Asciicast(
     val title: String?,
     val events: List<CastEvent>,
     val truncated: Boolean = false,
+    val source: CastEventSource? = null,
 ) {
     /** Length of the recording in seconds (0 when there is nothing to play). */
-    val duration: Double get() = events.lastOrNull()?.at ?: 0.0
+    val duration: Double get() = source?.duration ?: (events.lastOrNull()?.at ?: 0.0)
+    val eventCount: Int get() = source?.size ?: events.size
+    suspend fun event(index: Int): CastEvent = source?.event(index) ?: events[index]
 }
 
 private val json = Json { ignoreUnknownKeys = true; isLenient = false }
@@ -94,3 +97,11 @@ private fun parseEvent(line: String, previous: Double): CastEvent? {
 }
 
 private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
+
+/** A bounded, authenticated source for recordings whose events do not fit in memory. */
+interface CastEventSource {
+    val size: Int
+    val duration: Double
+    suspend fun event(index: Int): CastEvent
+    fun close()
+}

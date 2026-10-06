@@ -30,6 +30,8 @@ import app.skerry.shared.team.TeamScopedSyncClient
 import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
+import app.skerry.shared.team.TeamRecordingOutbox
+import app.skerry.shared.team.RecordingMode
 import app.skerry.shared.team.accountKeyFingerprint
 import app.skerry.shared.team.checkPinned
 import app.skerry.shared.team.fetchPinned
@@ -47,12 +49,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.skerry.shared.terminal.epochMillis
-import app.skerry.shared.host.VaultHostStore
-import app.skerry.shared.runbook.VaultRunbookStore
-import app.skerry.shared.snippet.VaultSnippetStore
 
 /** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
 enum class TeamsFailure {
@@ -216,6 +216,17 @@ class TeamsCoordinator(
     private val onTeamsChanged: () -> Unit = {},
 ) {
 
+    data class PreparedRecording(
+        val mode: RecordingMode,
+        val capture: TeamRecordingOutbox.Capture?,
+        val onFinished: () -> Unit,
+    )
+
+    val recordings: TeamsRecordings by lazy {
+        TeamsRecordings(live, RecordingStores(vault, crypto, teamVaults, keyStore, identityStore, peerStore),
+            spaces, newId, opMutex, scope)
+    }
+
     private val keyStore = TeamKeyStore(vault)
     private val identityStore = TeamIdentityStore(vault, crypto)
     private val peerStore = TeamPeerStore(vault)
@@ -226,13 +237,18 @@ class TeamsCoordinator(
 
     private val spaceFiles = TeamSpaceFiles(teamVaults, teamState, syncMutex)
 
-    private val spaces = TeamSpaces(
+    private val spaces: TeamSpaces = TeamSpaces(
         keyStore = keyStore,
         files = spaceFiles,
         crypto = crypto,
         accountVaultUnlocked = { vault.isUnlocked },
         markError = { markError(it) },
         syncSpace = { syncSpace(it) },
+        stageRecordingWraps = { s, ref, old, next, epoch -> recordings.stageRecordingWraps(s, ref, old, next, epoch) },
+        activateRecordingWraps = { ref, epoch -> recordings.activateSpace(ref, epoch) },
+        adoptRecordingWraps = { ref, old, next, epoch -> recordings.adoptSpaceWrap(ref, old, next, epoch) },
+        afterAdoptRecordingKey = { ref, epoch -> recordings.afterAdoptSpace(ref, epoch) },
+        afterRecordingRotation = { s, ref, epoch -> recordings.afterRecordingRotation(s, ref, epoch) },
     )
 
     /** Which colleagues a lookup refused, and what has already been said about them (#326). */
@@ -436,6 +452,7 @@ class TeamsCoordinator(
             onTeamsChanged()
             maybeRecoverKeys()
         }
+        recordings.retryRecordingUploads()
     }
 
     suspend fun members(teamId: String): List<TeamMember> {
@@ -662,12 +679,7 @@ class TeamsCoordinator(
      * for — or null when the host is ours alone. Read from the key store rather than [teams] so a
      * report works before the first refresh and while offline.
      */
-    private fun spaceHoldingHost(hostId: String): TeamScopeRef? =
-        keyStore.list().keys.asSequence()
-            .flatMap { teamId -> spacesOf(teamId).asSequence() }
-            .firstOrNull { ref ->
-                spaces.vault(ref)?.records()?.any { it.id == hostId && it.type == RecordType.HOST && !it.deleted } == true
-            }
+    private fun spaceHoldingHost(hostId: String): TeamScopeRef? = spaces.holdingHost(hostId)
 
     /** The signed-in account, for marking our own actions in the activity feed. */
     fun selfAccountId(): String? = live()?.session?.accountId
@@ -681,16 +693,7 @@ class TeamsCoordinator(
      * A space we hold no key for contributes nothing, and neither does a record that has since been
      * unshared (its tombstone carries no payload) — the feed falls back to a short id for those.
      */
-    fun sharedRecordNames(teamId: String): Map<String, Map<String, String>> =
-        spacesOf(teamId).mapNotNull { ref ->
-            val vault = spaces.vault(ref) ?: return@mapNotNull null
-            val names = buildMap {
-                VaultHostStore(vault).all().forEach { put(it.id, it.label) }
-                VaultSnippetStore(vault).all().forEach { put(it.id, it.label) }
-                VaultRunbookStore(vault).all().forEach { put(it.id, it.label) }
-            }
-            if (names.isEmpty()) null else ref.scopeId to names
-        }.toMap()
+    fun sharedRecordNames(teamId: String): Map<String, Map<String, String>> = spaces.recordNames(teamId)
 
     /**
      * Invite step (invitee side): open+verify the envelope and return the **verified inviter's**
@@ -1035,7 +1038,7 @@ class TeamsCoordinator(
 
     /** Spaces of a team whose key we hold: the team itself and each granted scope. */
     private fun spacesOf(teamId: String): List<TeamScopeRef> =
-        listOf(TeamScopeRef(teamId)) + keyStore.scopes(teamId).keys.map { TeamScopeRef(teamId, it) }
+        spaces.held(teamId)
 
     private suspend fun forgetTeamLocally(teamId: String) {
         // Read the spaces first: removing the TEAM record takes the nested scope keys with it, and

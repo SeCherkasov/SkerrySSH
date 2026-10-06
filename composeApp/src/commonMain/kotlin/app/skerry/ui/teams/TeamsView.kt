@@ -316,7 +316,9 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
             value = withContext(Dispatchers.Default) { tc.sharedRecordNames(historyTeam.id) }
         }
         val scopeNames = remember(historyTeam.scopes) { historyTeam.scopes.associate { it.id to it.name } }
+        val recordingPlayback = app.skerry.ui.teams.rememberTeamRecordingPlayback(tc, historyTeam.id)
         TeamActivityDialog(
+            onOpenRecording = recordingPlayback.open,
             entries = entries,
             selfAccountId = tc.selfAccountId(),
             recordNames = recordNames,

@@ -35,6 +35,7 @@ import app.skerry.ui.forward.PortForwardController
 import app.skerry.ui.metrics.HostMetricsController
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.TerminalSessionPrefs
+import app.skerry.ui.teams.TeamsCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -157,6 +158,7 @@ class ConnectionController(
     // a settings change affects new sessions while already-open ones keep their emulator. The
     // default (mock/tests) gives standard values.
     private val terminalPrefs: () -> TerminalSessionPrefs = { TerminalSessionPrefs() },
+    private val prepareRecording: suspend (String, String?) -> TeamsCoordinator.PreparedRecording? = { _, _ -> null },
 ) {
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
         private set
@@ -168,6 +170,12 @@ class ConnectionController(
      */
     fun bindSessionId(id: String) {
         sessionId = id
+    }
+
+    private var hostId: String? = null
+
+    fun bindHostId(id: String?) {
+        hostId = id
     }
 
     // Whether the bridge currently believes this session is open. The bridge learns "ended" exactly
@@ -362,7 +370,7 @@ class ConnectionController(
     /**
      * The terminal for a session just opened on [channel]: the emulator's settings snapshotted at
      * connect time (they apply to the new session; an open one keeps its own), this host's command
-     * history under [historyKey] with the hook that persists it, and the sudo offer built from the
+     * history under the host's history key with the hook that persists it, and the sudo offer built from the
      * credential the connection is actually using (see [sudoOfferFor]).
      */
     private fun newTerminal(
@@ -370,9 +378,10 @@ class ConnectionController(
         auth: SshAuth,
         channel: ShellChannel,
         sScope: CoroutineScope,
-        historyKey: String,
+        recording: TeamsCoordinator.PreparedRecording?,
     ): TerminalScreenState {
         val prefs = terminalPrefs()
+        val historyKey = terminalHistoryKey(target.connectionType.name, target.username, target.host, target.port)
         return TerminalScreenState(
             ShellTerminalSession(channel, sScope),
             sScope,
@@ -389,6 +398,9 @@ class ConnectionController(
                 val label = "${target.username}@${target.host}"
                 { snapshot -> scope.launch { store.save(historyKey, snapshot, label) } }
             },
+            teamRecordingMode = recording?.mode ?: app.skerry.shared.team.RecordingMode.OFF,
+            teamCapture = recording?.capture,
+            onTeamRecordingFinished = recording?.onFinished ?: {},
         )
     }
 
@@ -404,7 +416,11 @@ class ConnectionController(
      */
     private suspend fun establishSession(target: SshTarget, auth: SshAuth, generation: Int) {
         var conn: SshConnection? = null
+        var prepared: TeamsCoordinator.PreparedRecording? = null
+        var terminalCreated = false
         try {
+            prepared = hostId?.let { id -> prepareRecording(id, "${target.username}@${target.host}") }
+            coroutineContext.ensureActive()
             val opened = transport.connect(target, auth)
             conn = opened
             coroutineContext.ensureActive()
@@ -416,7 +432,8 @@ class ConnectionController(
             val historyKey = terminalHistoryKey(
                 target.connectionType.name, target.username, target.host, target.port,
             )
-            val terminal = newTerminal(target, auth, channel, sScope, historyKey)
+            val terminal = newTerminal(target, auth, channel, sScope, prepared)
+            terminalCreated = true
             val session = OpenedSession(target, opened, channel, sScope, historyKey, terminal)
             var onConnected: ((TerminalScreenState) -> Unit)? = null
             val published = synchronized(lock) {
@@ -442,6 +459,7 @@ class ConnectionController(
             onConnected?.invoke(terminal)
             watchForSessionLoss(terminal, sScope, generation)
         } catch (e: Exception) {
+            if (!terminalCreated) prepared?.capture?.abort()
             // A throw after the session was published (e.g. from the onConnected action) must not
             // leave a half-established session — keep-alive loop, session scope, open socket —
             // behind an Error state: reuse the disconnect teardown, under the lock that owns those
@@ -706,7 +724,7 @@ class ConnectionController(
     }
 
     /**
-     * Disables auto-reconnect WITHOUT touching the live session: cancels a pending reconnect and
+     * Disables auto-reconnect WITHOUT touching the live session: cancels pending initial and reconnect attempts and
      * clears the saved target/auth. Called on vault lock — the open socket is left alive (project
      * decision), but a new auth handshake after a drop on a locked vault is not allowed
      * (zero-knowledge): without [lastAuth], a drop lands in [ConnectionUiState.Disconnected] with
@@ -715,6 +733,15 @@ class ConnectionController(
     fun clearReconnectCredentials() {
         synchronized(lock) {
             val wasReconnecting = reconnectJob != null
+            if (uiState is ConnectionUiState.Connecting) {
+                // Retire the initial attempt before cancellation: an in-flight recording lookup
+                // or authentication callback must never publish a session after vault lock.
+                sessionGeneration++
+                connectJob?.cancel()
+                connectJob = null
+                uiState = ConnectionUiState.Form
+                notifyKeepAliveEnded()
+            }
             reconnectJob?.cancel()
             reconnectJob = null
             lastAuth = null
@@ -775,13 +802,13 @@ class ConnectionController(
             if (uiState !is ConnectionUiState.Connected) return
             sessionGeneration++
             releaseSessionResources()
-            if (cleanExit) {
+            if (cleanExit || frozen.teamRecordingFailed) {
                 // The user closed the shell themselves (`exit`) — close the session, no reconnect. Drop
                 // the secret (auth may carry a password/key): no point holding it, there won't be a new connect.
                 lastAuth = null
                 lastTarget = null
                 notifyKeepAliveEnded()
-                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = true)
+                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = !frozen.teamRecordingFailed)
                 return
             }
             val target = lastTarget

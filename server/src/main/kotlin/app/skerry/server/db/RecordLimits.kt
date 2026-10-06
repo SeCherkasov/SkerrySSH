@@ -90,6 +90,8 @@ internal const val ACCOUNT_ID_LENGTH = 320
 private const val ACCOUNT_USAGE_SQL =
     "SELECT (SELECT COALESCE(SUM(LENGTH(blob)), 0) FROM records WHERE account_id = ?) + " +
         "(SELECT COALESCE(SUM(LENGTH(tr.blob)), 0) FROM team_records tr JOIN teams t ON t.id = tr.team_id " +
+        "WHERE t.owner_account_id = ?) + " +
+        "(SELECT COALESCE(SUM(r.reserved_bytes), 0) FROM team_recordings r JOIN teams t ON t.id = r.team_id " +
         "WHERE t.owner_account_id = ?)"
 
 /** [enforceQuota] for [accountId]'s whole footprint (see [ACCOUNT_USAGE_SQL]). */
@@ -98,5 +100,5 @@ internal fun JdbcTransaction.enforceAccountQuota(limit: Long, grew: Long, accoun
     limit,
     grew,
     ACCOUNT_USAGE_SQL,
-    listOf(VarCharColumnType(ACCOUNT_ID_LENGTH) to accountId, VarCharColumnType(ACCOUNT_ID_LENGTH) to accountId),
+    List(3) { VarCharColumnType(ACCOUNT_ID_LENGTH) to accountId },
 )

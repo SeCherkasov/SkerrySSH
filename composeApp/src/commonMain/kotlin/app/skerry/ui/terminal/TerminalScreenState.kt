@@ -14,7 +14,6 @@ import app.skerry.shared.terminal.highlight.SessionVocabulary
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
-import app.skerry.shared.terminal.SessionRecorder
 import app.skerry.shared.terminal.ShellCommandMark
 import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.terminal.isPasswordPrompt
@@ -33,6 +32,8 @@ import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
+import app.skerry.shared.team.RecordingMode
+import app.skerry.shared.team.TeamRecordingOutbox
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -95,7 +96,11 @@ class TerminalScreenState(
     // of someone else's session: the owner's terminal already answers, and a second answer would
     // arrive at the host as typed input.
     private val answersQueries: Boolean = true,
+    val teamRecordingMode: RecordingMode = RecordingMode.OFF,
+    private val teamCapture: TeamRecordingOutbox.Capture? = null,
+    private val onTeamRecordingFinished: () -> Unit = {},
 ) {
+    val teamRecordingFailed: Boolean get() = recordingOwner.failed
     // OSC 52 requests to write to the system clipboard. extraBufferCapacity keeps tryEmit from the
     // owner coroutine from dropping when there's no subscriber yet; DROP_OLDEST on burst keeps the
     // latest entry (last-writer-wins), not a stale one.
@@ -218,46 +223,32 @@ class TerminalScreenState(
     var workingDirectory: String? by mutableStateOf<String?>(null)
         private set
 
-    // Session recording (asciinema v2). Touched only by the command loop below, the same coroutine
-    // that owns the emulator: start/stop arrive from the UI thread while PTY output is still
-    // streaming in, and SessionRecorder is not thread-safe. The UI reads the two state flags instead
-    // of the recorder. Held in memory until the user exports it — see [SessionRecorder] on why it is
-    // bounded rather than streamed to disk.
-    private var recorder: SessionRecorder? = null
+    // Both personal and team captures are owned by the ordered emulator command loop.
+    private val recordingOwner = TerminalRecordingOwner(teamRecordingMode, teamCapture, onTeamRecordingFinished)
 
-    /** Whether this session is being recorded. */
-    var recording: Boolean by mutableStateOf(false)
-        private set
-
-    /** Whether the running recording hit its size limit and stopped collecting. */
-    var recordingTruncated: Boolean by mutableStateOf(false)
-        private set
+    val recording: Boolean get() = recordingOwner.recording
+    val recordingTruncated: Boolean get() = recordingOwner.truncated
+    val recordingToTeam: Boolean get() = recordingOwner.recordingToTeam
 
     /**
      * Start recording this session's output. [title] names the recording in the asciicast header
      * (the host label). Recording while already recording keeps the existing take.
      */
-    fun startRecording(title: String?) {
-        if (recording) return
+    fun startRecording(title: String?, capture: TeamRecordingOutbox.Capture? = null, onTeamFinished: () -> Unit = {}) {
+        if (recording || teamRecordingMode == RecordingMode.REQUIRED) {
+            capture?.abort()
+            return
+        }
         val startedAt = epochMillis()
-        val queued = commands.trySend(TerminalCommand.StartRecording(title, startedAt, cols, rows))
+        val queued = commands.trySend(TerminalCommand.StartRecording(title, startedAt, cols, rows,
+            capture, onTeamFinished))
         // The queue is closed once the session's output ends: there is nothing left to record.
-        if (queued.isFailure) return
-        recording = true
-        recordingTruncated = false
-        recordingStartedAtMillis = startedAt
+        if (queued.isFailure) { capture?.abort(); return }
+        recordingOwner.markStarted(startedAt)
     }
 
-    private var recordingStartedAtMillis: Long = 0
-
-    /**
-     * Wall-clock length of the running (or last finished) recording in seconds; 0 when this session
-     * was never recorded. Read right after [stopRecording] for the length to report to a team — the
-     * clock keeps running for a recording that hit its size limit, so a truncated take reads as the
-     * window it covered rather than as the bytes it kept.
-     */
-    val recordingSeconds: Long
-        get() = if (recordingStartedAtMillis == 0L) 0 else (epochMillis() - recordingStartedAtMillis) / 1000
+    /** Wall-clock duration of the current or last personal recording. */
+    val recordingSeconds: Long get() = recordingOwner.seconds
 
     /**
      * Stop recording and return the asciicast, or `null` if nothing was being recorded. The caller
@@ -265,8 +256,7 @@ class TerminalScreenState(
      * recording over, so every chunk queued before the stop is in the file.
      */
     suspend fun stopRecording(): String? {
-        if (!recording) return null
-        recording = false
+        if (!recordingOwner.beginStop()) return null
         val cast = CompletableDeferred<String?>()
         // The queue is closed once the session's output ends; then no owner is left to answer, and
         // the take goes with it rather than hanging the caller.
@@ -464,11 +454,8 @@ class TerminalScreenState(
             } finally {
                 feedPermits.release()
             }
-            is TerminalCommand.StartRecording -> startRecorder(cmd)
-            is TerminalCommand.StopRecording -> {
-                cmd.cast.complete(recorder?.finish())
-                recorder = null
-            }
+            is TerminalCommand.StartRecording -> recordingOwner.start(cmd)
+            is TerminalCommand.StopRecording -> cmd.cast.complete(recordingOwner.stop())
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
             is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
@@ -522,30 +509,11 @@ class TerminalScreenState(
         return (SYNCHRONIZED_OUTPUT_TIMEOUT_MS - (now - holdSince)).coerceAtLeast(0)
     }
 
-    /** Feeds one PTY chunk to the parser, recording it first when a recording is running. */
-    private fun feed(chunk: ByteArray) {
-        recorder?.let {
-            it.record(chunk)
-            if (it.truncated && !recordingTruncated) recordingTruncated = true
-        }
+    /** Persist recording output before the emulator displays it. */
+    private suspend fun feed(chunk: ByteArray) {
+        recordingOwner.record(chunk)
         emulator.feed(chunk)
         feedCount++
-    }
-
-    /**
-     * Starts the recorder on the emulator's own coroutine. Elapsed time comes off a monotonic
-     * source: a wall clock can step backwards (NTP, suspend/resume) and take the event timeline with
-     * it. The epoch stamp is only the header's "when was this recorded".
-     */
-    private fun startRecorder(cmd: TerminalCommand.StartRecording) {
-        val started = TimeSource.Monotonic.markNow()
-        recorder = SessionRecorder(
-            columns = cmd.columns,
-            rows = cmd.rows,
-            startedAtEpochSeconds = cmd.startedAtMillis / 1000,
-            title = cmd.title,
-            now = { started.elapsedNow().inWholeMilliseconds },
-        )
     }
 
     /**
@@ -1381,6 +1349,7 @@ class TerminalScreenState(
     // a NullPointerException inside setValue, which is what happened when a property whose
     // initializer took a moment was added between the two.
     init {
+        require(teamRecordingMode != RecordingMode.REQUIRED || teamCapture != null)
         // Sole collector of PTY output; forwards chunks into the command queue. Closes the queue
         // when output ends (EOF/session close), otherwise the owner loop below would hang forever
         // in `for (cmd in commands)`.
@@ -1431,33 +1400,11 @@ class TerminalScreenState(
                     closeFailure.printStackTrace()
                 }
             } finally {
-                // The session is over (EOF, disconnect, or the pane closing with the scope): drop
-                // the saved password. The connection controller drops its own copy on a clean exit
-                // for the same reason, and a String cannot be zeroed — the least this can do is not
-                // outlive the connection it belongs to.
-                sudo?.revoke()
-                // The scope is a SupervisorJob: this coroutine dying (parser exception) does NOT
-                // take the session collector with it. Close the queue so the collector's next send
-                // fails fast instead of feeding a channel nobody drains, and return the permits of
-                // the chunks being discarded so it cannot wedge on acquire meanwhile.
                 commands.close()
-                // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
-                // take over here rather than leave the exporting caller awaiting forever.
-                while (true) {
-                    val left = commands.tryReceive().getOrNull() ?: break
-                    // Exhaustive on purpose (no else): a future variant carrying a completion or a
-                    // resource token must force a decision here, or its awaiter hangs at teardown.
-                    when (left) {
-                        is TerminalCommand.StopRecording -> left.cast.complete(recorder?.finish())
-                        is TerminalCommand.Feed -> feedPermits.release()
-                        is TerminalCommand.StartRecording,
-                        is TerminalCommand.SetCursorDefault,
-                        is TerminalCommand.SetMaxScrollback,
-                        is TerminalCommand.SetClipboardWriteEnabled,
-                        is TerminalCommand.SetColors,
-                        is TerminalCommand.ExpectStep,
-                        is TerminalCommand.Resize -> Unit
-                    }
+                try {
+                    recordingOwner.finish(commands) { feedPermits.release() }
+                } finally {
+                    sudo?.revoke()
                 }
             }
         }
@@ -1650,7 +1597,7 @@ private class EmulatorOwnerLoop(
 }
 
 /** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
-private sealed interface TerminalCommand {
+internal sealed interface TerminalCommand {
     /** Raw PTY output chunk to feed to the parser. */
     class Feed(val chunk: ByteArray) : TerminalCommand
 
@@ -1660,6 +1607,8 @@ private sealed interface TerminalCommand {
         val startedAtMillis: Long,
         val columns: Int,
         val rows: Int,
+        val teamCapture: TeamRecordingOutbox.Capture?,
+        val onTeamFinished: () -> Unit,
     ) : TerminalCommand
 
     /** End recording; [cast] receives the asciicast (or `null` if nothing was being recorded). */

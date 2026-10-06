@@ -12,7 +12,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 
 /** Outcome of [TeamRepository.rekey]: success, a lost monotonicity race / stale epoch, or a gone team. */
-enum class RekeyOutcome { OK, EPOCH_CONFLICT, NO_TEAM }
+enum class RekeyOutcome { OK, EPOCH_CONFLICT, RECORDING_WRAP_REQUIRED, NO_TEAM }
 
 /**
  * Teams and their members. The server only tracks membership, roles, and sealed invite
@@ -155,6 +155,11 @@ class TeamRepository(private val db: Database) {
      */
     suspend fun rekey(teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>): RekeyOutcome =
         dbTransaction(db) {
+            val team = lockRecordingTeam(teamId) ?: return@dbTransaction RekeyOutcome.NO_TEAM
+            if (team[Teams.keyEpoch] != newEpoch - 1) return@dbTransaction RekeyOutcome.EPOCH_CONFLICT
+            if (!recordingWrapsStaged(teamId, "", newEpoch, System.currentTimeMillis())) {
+                return@dbTransaction RekeyOutcome.RECORDING_WRAP_REQUIRED
+            }
             val bumped = Teams.update({
                 (Teams.id eq teamId) and (Teams.keyEpoch eq newEpoch - 1)
             }) { it[keyEpoch] = newEpoch } > 0
@@ -243,7 +248,11 @@ class TeamRepository(private val db: Database) {
  * same id next would otherwise read this team's log as their own. Returns whether the team existed.
  * Call inside a transaction.
  */
-internal fun deleteTeamRows(teamId: String): Boolean {
+internal fun org.jetbrains.exposed.v1.jdbc.JdbcTransaction.deleteTeamRows(teamId: String): Boolean {
+    lockRecordingTeam(teamId) ?: return false
+    TeamRecordingChunks.deleteWhere { TeamRecordingChunks.teamId eq teamId }
+    TeamRecordings.deleteWhere { TeamRecordings.teamId eq teamId }
+    TeamRecordingPolicies.deleteWhere { TeamRecordingPolicies.teamId eq teamId }
     TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
     TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
     TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }

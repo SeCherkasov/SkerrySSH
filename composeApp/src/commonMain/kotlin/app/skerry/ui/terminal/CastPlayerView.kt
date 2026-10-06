@@ -31,6 +31,9 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.ui.generated.resources.lib_team_rec_error
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_player_empty
@@ -102,13 +105,13 @@ internal fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(cast.title ?: stringResource(Res.string.term_player_title), color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(cast.title?.let { untrustedLabel(it) } ?: stringResource(Res.string.term_player_title), color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold)
             if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = Skerry.colors.amber, size = 11.sp)
         }
         if (onClose != null) IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = onClose)
     }
     Box(Modifier.weight(1f).fillMaxWidth().background(Skerry.colors.terminalBg)) {
-        if (cast.events.isEmpty()) {
+        if (cast.eventCount == 0) {
             Txt(
                 stringResource(Res.string.term_player_empty),
                 color = Skerry.colors.faint,
@@ -126,6 +129,9 @@ internal fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() 
             )
         }
     }
+    val error = if (playback.player.failed) stringResource(Res.string.lib_team_rec_error) else ""
+    StatusAnnouncer(error)
+    if (error.isNotEmpty()) Txt(error, color = Skerry.colors.sunset, size = 12.sp)
     TransportBar(playback.player)
 }
 

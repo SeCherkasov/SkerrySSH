@@ -381,7 +381,9 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             value = withContext(Dispatchers.Default) { tc.sharedRecordNames(historyTeam.id) }
         }
         val scopeNames = remember(historyTeam.scopes) { historyTeam.scopes.associate { it.id to it.name } }
+        val recordingPlayback = app.skerry.ui.teams.rememberTeamRecordingPlayback(tc, historyTeam.id)
         TeamActivityDialog(
+            onOpenRecording = recordingPlayback.open,
             entries = entries,
             selfAccountId = tc.selfAccountId(),
             recordNames = recordNames,
@@ -659,6 +661,10 @@ private fun MobileTeamDetail(
         onUnshare = onUnshare,
         onShowRecordHistory = onShowRecordHistory,
     )
+
+    if (team.hasKey && (scopeId.isEmpty() || activeScope?.hasKey == true)) {
+        app.skerry.ui.teams.TeamRecordingSection(tc, team, scopeId, tick)
+    }
 
     // The same three summary cards as the desktop screen, stacked; the lists they lead to on the
     // desktop are already on this screen, so the counts here are plain facts.

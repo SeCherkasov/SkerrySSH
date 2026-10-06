@@ -138,8 +138,12 @@ class TeamRecordRepository(
 
         enforceQuota(
             StorageQuota.SPACE, maxScopeBytes, grew,
-            "SELECT COALESCE(SUM(LENGTH(blob)), 0) FROM team_records WHERE team_id = ? AND scope_id = ?",
-            listOf(VarCharColumnType(SPACE_ID_LENGTH) to teamId, VarCharColumnType(SPACE_ID_LENGTH) to scopeId),
+            "SELECT (SELECT COALESCE(SUM(LENGTH(blob)), 0) FROM team_records WHERE team_id = ? AND scope_id = ?) + " +
+                "(SELECT COALESCE(SUM(reserved_bytes), 0) FROM team_recordings WHERE team_id = ? AND scope_id = ?)",
+            listOf(
+                VarCharColumnType(SPACE_ID_LENGTH) to teamId, VarCharColumnType(SPACE_ID_LENGTH) to scopeId,
+                VarCharColumnType(SPACE_ID_LENGTH) to teamId, VarCharColumnType(SPACE_ID_LENGTH) to scopeId,
+            ),
         )
         val owner = team[Teams.ownerAccountId]
         // The team row locks only this team: pushes into several teams of one owner, or a vault push

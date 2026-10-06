@@ -126,6 +126,7 @@ internal fun TeamScreen(
     }
     val grants = scopeGrants(tc, team, tick, canManage)
     val feed = teamFeed(tc, team, tick, canAudit)
+    val recordingPlayback = rememberTeamRecordingPlayback(tc, team.id)
 
     TeamHeader(
         team = team,
@@ -187,8 +188,11 @@ internal fun TeamScreen(
                 onOpen = onOpenShared,
                 modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
             )
+            if (team.hasKey && (scopeId.isEmpty() || team.scopes.firstOrNull { it.id == scopeId }?.hasKey == true)) {
+                TeamRecordingSection(tc, team, scopeId, tick)
+            }
         }
-        if (canAudit) TeamActivityPanel(feed, onOpenFull = onShowHistory)
+        if (canAudit) TeamActivityPanel(feed, onOpenFull = onShowHistory, onOpenRecording = recordingPlayback.open)
     }
 }
 

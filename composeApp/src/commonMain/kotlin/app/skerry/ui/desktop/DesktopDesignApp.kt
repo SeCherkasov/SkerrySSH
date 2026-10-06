@@ -263,6 +263,7 @@ fun DesktopDesignApp(
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
+                        prepareRecording = { hostId, title -> teams?.recordings?.prepareHostRecording(hostId, title) },
                         // Read terminal settings at connect time — new sessions pick up the current
                         // scrollback/cursor choice, already-open ones keep their emulator's.
                         terminalPrefs = {

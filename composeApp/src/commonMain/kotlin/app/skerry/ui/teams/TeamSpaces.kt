@@ -1,5 +1,10 @@
 package app.skerry.ui.teams
 
+import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.runbook.VaultRunbookStore
+import app.skerry.shared.snippet.VaultSnippetStore
+
+import kotlinx.coroutines.CancellationException
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.team.AccountIdentity
@@ -12,6 +17,7 @@ import app.skerry.shared.team.TeamScopeRef
 import app.skerry.shared.team.TeamScopeSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.vault.DataKey
+import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 
@@ -60,6 +66,11 @@ internal class TeamSpaces(
     private val accountVaultUnlocked: () -> Boolean,
     private val markError: (TeamsFailure) -> Unit,
     private val syncSpace: suspend (TeamScopeRef) -> Unit,
+    private val stageRecordingWraps: suspend (SyncSession, TeamScopeRef, DataKey, DataKey, Int) -> Unit = { _, _, _, _, _ -> },
+    private val activateRecordingWraps: suspend (TeamScopeRef, Int) -> Unit = { _, _ -> },
+    private val adoptRecordingWraps: suspend (TeamScopeRef, DataKey, DataKey, Int) -> Unit = { _, _, _, _ -> },
+    private val afterAdoptRecordingKey: suspend (TeamScopeRef, Int) -> Unit = { _, _ -> },
+    private val afterRecordingRotation: suspend (SyncSession, TeamScopeRef, Int) -> Unit = { _, _, _ -> },
 ) {
 
     private val inviteCodec = TeamInviteCodec(crypto)
@@ -67,6 +78,26 @@ internal class TeamSpaces(
     // --- keys ---
 
     /** The space's key, or null if we don't hold it (never granted, or the local record lost it). */
+    /** Team-wide space and scope keys held in the encrypted account vault. */
+    fun held(teamId: String): List<TeamScopeRef> =
+        listOf(TeamScopeRef(teamId)) + keyStore.scopes(teamId).keys.map { TeamScopeRef(teamId, it) }
+
+    fun holdingHost(hostId: String): TeamScopeRef? =
+        keyStore.list().keys.asSequence().flatMap { held(it).asSequence() }.firstOrNull { ref ->
+            vault(ref)?.records()?.any { it.id == hostId && it.type == RecordType.HOST && !it.deleted } == true
+        }
+
+    fun recordNames(teamId: String): Map<String, Map<String, String>> =
+        held(teamId).mapNotNull { ref ->
+            val vault = vault(ref) ?: return@mapNotNull null
+            val names = buildMap {
+                VaultHostStore(vault).all().forEach { put(it.id, it.label) }
+                VaultSnippetStore(vault).all().forEach { put(it.id, it.label) }
+                VaultRunbookStore(vault).all().forEach { put(it.id, it.label) }
+            }
+            if (names.isEmpty()) null else ref.scopeId to names
+        }.toMap()
+
     fun key(ref: TeamScopeRef): DataKey? =
         if (ref.isTeamWide) keyStore.get(ref.teamId)?.dataKey()
         else keyStore.scope(ref.teamId, ref.scopeId)?.dataKey()
@@ -98,9 +129,14 @@ internal class TeamSpaces(
      * is under a superseded key and is re-pulled.
      */
     suspend fun adoptKey(ref: TeamScopeRef, newKey: DataKey, epoch: Int, ownRotation: Boolean) {
-        val unfinished = if (ownRotation) key(ref)?.let { openUnder(ref, it) } else null
-        storeKey(ref, newKey, epoch)
-        if (unfinished != null) unfinished.rekeyRecords(newKey) else files.reset(ref)
+        val oldKey = key(ref)
+        try {
+            val unfinished = if (ownRotation) oldKey?.let { openUnder(ref, it) } else null
+            if (oldKey != null) adoptRecordingWraps(ref, oldKey, newKey, epoch)
+            storeKey(ref, newKey, epoch)
+            if (unfinished != null) unfinished.rekeyRecords(newKey) else files.reset(ref)
+            afterAdoptRecordingKey(ref, epoch)
+        } finally { oldKey?.zeroize() }
     }
 
     // --- vaults ---
@@ -291,6 +327,15 @@ internal class TeamSpaces(
             val newKey = crypto.newDataKey()
             val resealed = resealTo(s, c, target, newKey, newEpoch)
             try {
+                stageRecordingWraps(s, ref, currentKey, newKey, newEpoch)
+            } catch (e: CancellationException) {
+                newKey.zeroize()
+                throw e
+            } catch (e: Exception) {
+                newKey.zeroize()
+                throw e
+            }
+            try {
                 target.commit(s, c, newEpoch.toLong(), resealed.envelopes)
             } catch (e: SyncException) {
                 newKey.zeroize() // rotation didn't commit — don't leave the unused key dangling
@@ -304,6 +349,8 @@ internal class TeamSpaces(
             // ownership of newKey.
             storeKey(ref, newKey, newEpoch)
             vault.rekeyRecords(newKey)
+            activateRecordingWraps(ref, newEpoch)
+            afterRecordingRotation(s, ref, newEpoch)
             syncSpace(ref)
             return if (resealed.skippedUnconfirmed) TeamsFailure.PeerKeyUnconfirmed else null
         }

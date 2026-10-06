@@ -240,6 +240,10 @@ fun Route.teamRoutes(services: Services) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse("stale epoch (concurrent rotation); refetch and retry"))
                 return@post
             }
+            RekeyOutcome.RECORDING_WRAP_REQUIRED -> {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse("recording wraps must be staged before rotation"))
+                return@post
+            }
             RekeyOutcome.OK -> Unit
         }
         services.activity.record(principal.accountId, "team.rekey", "epoch ${req.newEpoch}", teamId = teamId)
@@ -356,6 +360,7 @@ fun Route.teamRoutes(services: Services) {
                 recordType = it.recordType,
                 scopeId = it.scopeId,
                 durationSec = it.durationSec,
+                recordingId = it.recordingId,
             )
         }
         call.respond(TeamActivityResponse(entries, services.activity.countForTeam(teamId)))
@@ -502,7 +507,7 @@ internal suspend fun ApplicationCall.requireActiveMember(
  * `?scope=` on the record endpoints: empty/absent means the team-wide space. Validated here so a
  * malformed id is a 400 before any lookup.
  */
-private suspend fun ApplicationCall.scopeParam(): String? {
+internal suspend fun ApplicationCall.scopeParam(): String? {
     val raw = request.queryParameters["scope"] ?: return ""
     if (raw.isEmpty()) return ""
     return validScopeId(raw)
@@ -514,7 +519,7 @@ private suspend fun ApplicationCall.scopeParam(): String? {
  * existence of a scope is itself information about how the team is organised. Team-wide records
  * (empty [scopeId]) are open to every active member, as before.
  */
-private suspend fun ApplicationCall.requireScopeAccess(
+internal suspend fun ApplicationCall.requireScopeAccess(
     services: Services,
     teamId: String,
     scopeId: String,

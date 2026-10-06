@@ -125,6 +125,7 @@ data class TeamActivityDto(
     val recordType: String? = null,
     val scopeId: String? = null,
     val durationSec: Long? = null,
+    val recordingId: String? = null,
 )
 
 @Serializable

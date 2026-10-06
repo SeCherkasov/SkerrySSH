@@ -213,7 +213,7 @@ class AdminRepository(private val db: Database) {
         val newOwners = mutableMapOf<String, String>()
         val notify = mutableSetOf<String>()
 
-        Teams.selectAll().where { Teams.ownerAccountId eq accountId }.map { it[Teams.id] }.forEach { teamId ->
+        Teams.selectAll().where { Teams.ownerAccountId eq accountId }.map { it[Teams.id] }.sorted().forEach { teamId ->
             // Collected before the rows go away: after the transaction there is no query left that
             // could tell who was in a deleted team, or who now owns a transferred one.
             notify += TeamMembers.selectAll()

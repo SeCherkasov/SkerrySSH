@@ -316,7 +316,8 @@ class SyncCoordinator(
     fun currentTeamLink(): TeamLink? {
         val live = liveRef ?: return null
         val team = live.client as? TeamClient ?: return null
-        return TeamLink(live.session, team, live.link.cursorKey)
+        return TeamLink(live.session, team, live.link.cursorKey,
+            live.client as? app.skerry.shared.team.TeamRecordingClient)
     }
 
     /** The session-sharing relay of the live session, paired the same way as [currentTeamLink]. */

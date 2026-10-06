@@ -44,6 +44,7 @@ internal fun TeamActivityPanel(
     feed: List<TeamActivityDay>,
     onOpenFull: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenRecording: ((String, String) -> Unit)? = null,
 ) {
     val mono = LocalFonts.current.mono
     // "Today"/"Yesterday" need a reference point; read once per composition, not per row.
@@ -76,7 +77,7 @@ internal fun TeamActivityPanel(
                         color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold,
                         letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                     )
-                    day.rows.forEach { row -> ActivityRow(row, mono) }
+                    day.rows.forEach { row -> ActivityRow(row, mono, onOpenRecording) }
                 }
             }
         }

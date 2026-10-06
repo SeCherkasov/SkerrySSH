@@ -57,6 +57,7 @@ class TeamActivityEntry(
     val scopeId: String? = null,
     /** Length of a reported session recording, in seconds. */
     val durationSec: Long? = null,
+    val recordingId: String? = null,
 )
 
 /** What a member reports about a session on a shared record (see [TeamClient.reportSessionEvent]). */

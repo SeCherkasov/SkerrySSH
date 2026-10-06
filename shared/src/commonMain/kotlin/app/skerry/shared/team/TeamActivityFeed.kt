@@ -70,6 +70,8 @@ class TeamActivityRow(
     val scopeName: String? = null,
     val detail: String = "",
     val durationSec: Long? = null,
+    val recordingId: String? = null,
+    val scopeId: String = "",
 ) {
     val clientReported: Boolean get() = kind.clientReported
 }
@@ -158,5 +160,7 @@ private fun TeamActivityEntry.toRow(
         scopeName = scope.takeIf { it.isNotEmpty() }?.let { resolveScopeName(it) ?: it },
         detail = detail,
         durationSec = durationSec,
+        recordingId = recordingId,
+        scopeId = scope,
     )
 }

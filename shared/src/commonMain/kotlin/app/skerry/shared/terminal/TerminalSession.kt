@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Session lifecycle. */
@@ -65,6 +69,7 @@ interface TerminalSession {
  * EOF (shell did `exit`) gives `cleanExit=true` — see [ShellChannel.endedWithEof]. Cancelling
  * [scope] externally stops the session along with collection.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShellTerminalSession(
     private val channel: ShellChannel,
     scope: CoroutineScope,
@@ -73,8 +78,11 @@ class ShellTerminalSession(
     private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
     override val state: StateFlow<TerminalState> = _state.asStateFlow()
 
-    private val _output = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
-    override val output: Flow<ByteArray> = _output.asSharedFlow()
+    // Rendezvous plus an ordered end marker: EOF cannot overtake buffered PTY output.
+    private val _output = MutableSharedFlow<ByteArray?>()
+    override val output: Flow<ByteArray> = _output.transformWhile { bytes ->
+        if (bytes == null) false else { emit(bytes); true }
+    }
 
     // Forward the channel's echo status (Telnet reports password entry / line-mode; SSH is always false).
     override val echoSuppressed: Boolean get() = channel.echoSuppressed
@@ -96,6 +104,7 @@ class ShellTerminalSession(
             } finally {
                 // Clean channel EOF (server closed the shell itself, `exit`) gives cleanExit=true:
                 // the caller does not reconnect. Transport drop/cancellation leave endedWithEof=false.
+                withContext(NonCancellable) { _output.emit(null) }
                 _state.value = TerminalState.Closed(cleanExit = channel.endedWithEof)
             }
         }

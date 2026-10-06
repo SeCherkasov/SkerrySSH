@@ -30,6 +30,10 @@ class TeamVaults(
     private val now: () -> String,
 ) {
 
+    /** Ciphertext-only retry queue under the same private-files policy as the team vaults. */
+    fun recordingOutbox(): TeamRecordingOutbox =
+        TeamRecordingOutbox(dir / "recordings", fileSystem, harden, crypto)
+
     /**
      * The vault open for a space, together with the key it was opened under. The key is part of the
      * entry and not just of the lookup: a space is re-keyed while its vault is still open (a screen

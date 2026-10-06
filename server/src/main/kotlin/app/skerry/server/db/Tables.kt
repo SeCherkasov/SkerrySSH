@@ -105,6 +105,8 @@ object ActivityLog : Table("activity_log") {
     val scopeId = varchar("scope_id", 64).nullable()
     /** Reported session length in seconds (client-reported session events only). */
     val durationSec = long("duration_sec").nullable()
+    /** READY recording linked to a client-asserted session event. */
+    val recordingId = varchar("recording_id", 64).nullable()
     val createdAt = long("created_at")
 
     override val primaryKey = PrimaryKey(seq)
@@ -206,6 +208,54 @@ object TeamRecords : Table("team_records") {
         // and discarded in process: the cost of one scope's pull grows with the whole team's churn.
         index("idx_team_records_scope_delta", false, teamId, scopeId, teamSeq)
     }
+}
+
+/** Owner-signed encrypted recording requirement, one revision per team share space. */
+object TeamRecordingPolicies : Table("team_recording_policies") {
+    val teamId = varchar("team_id", 64).references(Teams.id)
+    val scopeId = varchar("scope_id", 64)
+    val revision = long("revision")
+    val keyEpoch = long("key_epoch")
+    val retentionDays = integer("retention_days")
+    val ciphertext = blob("ciphertext")
+    val signature = blob("signature")
+    val updatedAt = long("updated_at")
+    override val primaryKey = PrimaryKey(teamId, scopeId)
+}
+
+/** Immutable encrypted manifest and a bounded reservation, including incomplete uploads. */
+object TeamRecordings : Table("team_recordings") {
+    val teamId = varchar("team_id", 64).references(Teams.id)
+    val scopeId = varchar("scope_id", 64)
+    val recordingId = varchar("recording_id", 64)
+    val hostId = varchar("host_id", 64)
+    val actorId = varchar("actor_id", 320)
+    val keyEpoch = long("key_epoch")
+    val wrappedKey = blob("wrapped_key")
+    val wrapEpoch = long("wrap_epoch")
+    val stagedWrapEpoch = long("staged_wrap_epoch").nullable()
+    val stagedWrappedKey = blob("staged_wrapped_key").nullable()
+    val manifest = blob("manifest")
+    val chunkCount = integer("chunk_count")
+    val reservedBytes = long("reserved_bytes")
+    val durationSec = long("duration_sec")
+    val retentionDays = integer("retention_days")
+    val createdAt = long("created_at")
+    val expiresAt = long("expires_at")
+    val ready = bool("ready").default(false)
+    override val primaryKey = PrimaryKey(teamId, recordingId)
+    init { index("idx_team_recordings_scope", false, teamId, scopeId, ready, createdAt) }
+}
+
+/** Ciphertext chunks are immutable once accepted; the expected hash comes from reservation. */
+object TeamRecordingChunks : Table("team_recording_chunks") {
+    val teamId = varchar("team_id", 64)
+    val recordingId = varchar("recording_id", 64)
+    val index = integer("chunk_index")
+    val expectedLength = integer("expected_length")
+    val expectedSha256 = varchar("expected_sha256", 64)
+    val ciphertext = blob("ciphertext").nullable()
+    override val primaryKey = PrimaryKey(teamId, recordingId, index)
 }
 
 /**

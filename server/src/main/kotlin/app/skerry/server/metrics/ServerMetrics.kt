@@ -204,6 +204,9 @@ class ServerMetrics(
         inventoryGauge("skerry.records", "Vault records", tags = Tags.of("state", "tombstone")) { it.tombstones }
         inventoryGauge("skerry.team.records", "Team records", tags = Tags.of("state", "live")) { it.liveTeamRecords }
         inventoryGauge("skerry.team.records", "Team records", tags = Tags.of("state", "tombstone")) { it.teamTombstones }
+        inventoryGauge("skerry.team.recordings", "Stored team recordings") { it.recordingRows }
+        inventoryGauge("skerry.team.recording.storage.bytes", "Team recording ciphertext", "bytes") { it.recordingStorageBytes }
+        inventoryGauge("skerry.team.recording.reserved.bytes", "Team recording quota reservation", "bytes") { it.recordingReservedBytes }
         inventoryGauge("skerry.storage.bytes", "Ciphertext stored", "bytes", Tags.of("scope", "account")) { it.storageBytes }
         inventoryGauge("skerry.storage.bytes", "Ciphertext stored", "bytes", Tags.of("scope", "team")) { it.teamStorageBytes }
         inventoryGauge("skerry.db.file.bytes", "Database size on disk (includes indexes and free pages)", "bytes") { it.databaseBytes }
@@ -272,6 +275,9 @@ data class InventorySnapshot(
     val liveTeamRecords: Long,
     val teamTombstones: Long,
     val teamStorageBytes: Long,
+    val recordingRows: Long,
+    val recordingStorageBytes: Long,
+    val recordingReservedBytes: Long,
     val pendingPairings: Long,
     val expiredPairings: Long,
     val teams: Long,

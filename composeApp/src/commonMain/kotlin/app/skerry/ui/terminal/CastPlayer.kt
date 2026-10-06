@@ -11,6 +11,9 @@ import app.skerry.shared.terminal.TerminalState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +51,7 @@ fun formatCastTime(seconds: Double): String {
  *
  * Seeking replays rather than rewinds: terminal output is a stream of state changes, so the only
  * way to know the screen at second N is to feed everything up to it. A seek therefore emits a RIS
- * and every event before the target as one write, then playback continues from there.
+ * and events before the target in bounded batches, then playback continues from there.
  */
 @Stable
 class CastPlayer(val cast: Asciicast, private val scope: CoroutineScope) : TerminalSession {
@@ -60,6 +63,9 @@ class CastPlayer(val cast: Asciicast, private val scope: CoroutineScope) : Termi
     override val state: StateFlow<TerminalState> = _state.asStateFlow()
 
     private var job: Job? = null
+    private var seeking = false
+    var failed: Boolean by mutableStateOf(false)
+        private set
 
     /** Index of the next event to emit. */
     private var next = 0
@@ -86,28 +92,41 @@ class CastPlayer(val cast: Asciicast, private val scope: CoroutineScope) : Termi
 
     fun play() {
         if (playing) return
-        if (finished) { seekTo(0.0); return }
+        if (finished) { playing = true; seekTo(0.0); return }
         playing = true
+        if (seeking) return
         job?.cancel()
+        failed = false
         job = scope.launch {
-            while (next < cast.events.size) {
-                val event = cast.events[next]
+            try {
+            while (next < cast.eventCount) {
+                val event = cast.event(next)
                 val waitMillis = ((event.at - position) * 1000 / speed).roundToLong()
                 if (waitMillis > 0) delay(waitMillis)
+                coroutineContext.ensureActive()
+                emit(event.data)
                 position = event.at
                 next++
-                emit(event.data)
             }
             position = duration
             finished = true
             playing = false
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                coroutineContext.ensureActive()
+                failed = true
+                playing = false
+            }
         }
     }
 
     fun pause() {
+        playing = false
+        // A seek must reconstruct the terminal before playback can resume. Pausing changes its
+        // continuation, while preserving the buffered reset and events awaiting a remote segment.
+        if (seeking) return
         job?.cancel()
         job = null
-        playing = false
     }
 
     fun toggle() = if (playing) pause() else play()
@@ -124,23 +143,52 @@ class CastPlayer(val cast: Asciicast, private val scope: CoroutineScope) : Termi
     fun seekTo(seconds: Double) {
         val target = seconds.coerceIn(0.0, duration)
         val wasPlaying = playing
-        pause()
-        val catchUp = StringBuilder(RESET)
+        job?.cancel()
+        seeking = true
         next = 0
-        while (next < cast.events.size && cast.events[next].at <= target) {
-            catchUp.append(cast.events[next].data)
-            next++
-        }
         position = target
         finished = false
-        scope.launch { emit(catchUp.toString()) }
-        if (wasPlaying) play()
+        playing = wasPlaying
+        failed = false
+        job = scope.launch {
+            try {
+            val catchUp = StringBuilder(RESET)
+            var cursor = 0
+            while (cursor < cast.eventCount) {
+                val event = cast.event(cursor)
+                coroutineContext.ensureActive()
+                if (event.at > target) break
+                catchUp.append(event.data)
+                cursor++
+                if (catchUp.length >= 64 * 1024) {
+                    emit(catchUp.toString())
+                    next = cursor
+                    catchUp.clear()
+                }
+            }
+            if (catchUp.isNotEmpty()) {
+                emit(catchUp.toString())
+                next = cursor
+            }
+            seeking = false
+            job = null
+            val resume = playing
+            playing = false
+            if (resume) play()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                coroutineContext.ensureActive()
+                failed = true
+                seeking = false
+                playing = false
+            }
+        }
     }
 
     /** Back to the beginning, screen cleared, playing again — the button says "replay". */
     fun restart() {
+        playing = true
         seekTo(0.0)
-        play()
     }
 
     private suspend fun emit(data: String) {
@@ -150,5 +198,5 @@ class CastPlayer(val cast: Asciicast, private val scope: CoroutineScope) : Termi
     // A recording is watched, not driven: nothing is sent anywhere and there is no channel to close.
     override suspend fun send(data: ByteArray) = Unit
     override suspend fun resize(size: PtySize) = Unit
-    override suspend fun close() { pause() }
+    override suspend fun close() { seeking = false; pause() }
 }

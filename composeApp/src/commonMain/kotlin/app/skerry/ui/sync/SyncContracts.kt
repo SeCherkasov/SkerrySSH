@@ -142,6 +142,7 @@ data class TeamLink(
      * two servers share it — issue #242, one store over.
      */
     val linkKey: String,
+    val recordings: app.skerry.shared.team.TeamRecordingClient? = null,
 )
 
 /** The same pairing for the session-sharing relay — see [TeamLink]. */

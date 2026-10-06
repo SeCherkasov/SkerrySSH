@@ -113,7 +113,7 @@ class SessionRecorder(
  * because Kotlin/Common has no locale-independent decimal formatting, and a comma separator from a
  * platform default would produce an unparseable cast.
  */
-private fun secondsLiteral(millis: Long): String {
+internal fun secondsLiteral(millis: Long): String {
     val whole = millis / 1000
     val fraction = (millis % 1000).toInt()
     return when {
@@ -125,7 +125,7 @@ private fun secondsLiteral(millis: Long): String {
 }
 
 /** UTF-8 byte length of [s], counted without allocating an encoded copy. */
-private fun utf8Length(s: String): Int {
+internal fun utf8Length(s: String): Int {
     var n = 0
     for (ch in s) {
         val c = ch.code
@@ -145,7 +145,7 @@ private fun utf8Length(s: String): Int {
  * sequence is held back; malformed bytes in the middle are left to the decoder's replacement
  * handling, exactly as the terminal emulator treats them.
  */
-private fun completeUtf8Length(data: ByteArray): Int {
+internal fun completeUtf8Length(data: ByteArray): Int {
     // A sequence is at most 4 bytes, so the boundary is within the last 3.
     var i = data.size - 1
     val floor = maxOf(0, data.size - 3)

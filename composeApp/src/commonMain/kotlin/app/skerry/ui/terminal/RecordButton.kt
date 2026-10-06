@@ -1,87 +1,69 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
-import app.skerry.shared.terminal.castFileName
-import app.skerry.shared.terminal.recordingStamp
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.skerry.shared.team.RecordingMode
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.lib_team_rec_active
+import app.skerry.ui.generated.resources.lib_team_rec_failed
+import app.skerry.ui.generated.resources.lib_team_rec_upload_pending
+import app.skerry.ui.generated.resources.lib_team_rec_upload_failed
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_record
 import app.skerry.ui.generated.resources.shell_tip_record_stop
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.session.Session
+import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.vault.ExportOutcome
-import app.skerry.ui.vault.exportFileGuarded
-import kotlinx.coroutines.launch
 import app.skerry.ui.theme.Skerry
 
-/**
- * Session record toggle: starts an asciinema recording of the live terminal, and on the second
- * click stops it and offers a Save-As for the `.cast` file. Lit red while recording.
- *
- * Nothing is written until the user picks a file: a recording holds whatever the server printed, so
- * it must not land on disk as a side effect of clicking a toolbar button.
- *
- * [request] is the hotkey channel (⌘R / Ctrl+Shift+R): the shell can't toggle recording itself,
- * because start/stop lives on the terminal state this button holds.
- */
+/** Local export or explicit optional team capture, using the same flow as mobile. */
 @Composable
 fun RecordSessionButton(
     session: Session?,
     request: ToolbarRequest? = null,
-    /**
-     * A recording of a catalog host was saved: `(hostId, wall-clock seconds)`. Reported to the team
-     * that host is shared with, if any (see [app.skerry.ui.teams.TeamsCoordinator.reportSessionRecorded]).
-     */
     onSaved: (String, Long) -> Unit = { _, _ -> },
     onDone: (RecordingOutcome) -> Unit,
 ) {
-    val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-    val scope = rememberCoroutineScope()
+    val terminal = when (val state = session?.controller?.uiState) {
+        is ConnectionUiState.Connected -> state.terminal
+        is ConnectionUiState.Disconnected -> state.terminal
+        else -> null
+    }
+    val teams = LocalTeams.current
+    val uploadPending = teams?.recordings?.recordingUploadsPending?.collectAsState()?.value == true
+    val uploadFailed = teams?.recordings?.recordingUploadError?.collectAsState()?.value == true
+    val uploadLabel = if (uploadFailed) stringResource(Res.string.lib_team_rec_upload_failed)
+        else if (uploadPending) stringResource(Res.string.lib_team_rec_upload_pending) else ""
+    val required = terminal?.teamRecordingMode == RecordingMode.REQUIRED
     val recording = terminal?.recording == true
-    // Start/stop go through the terminal's command loop (it owns the recorder), so the whole toggle
-    // runs in a coroutine rather than inline in the click.
-    val toggle = {
-            scope.launch {
-                val live = terminal ?: return@launch
-                if (!live.recording) {
-                    live.startRecording(session.displayTitle.ifBlank { session.subtitle })
-                    return@launch
-                }
-                val truncated = live.recordingTruncated
-                val cast = live.stopRecording()
-                if (cast == null || live.recordingWasEmpty(cast)) {
-                    onDone(RecordingOutcome.Empty)
-                    return@launch
-                }
-                val name = castFileName(session.displayTitle.ifBlank { session.subtitle }, recordingStamp())
-                val seconds = live.recordingSeconds
-                val outcome = exportFileGuarded(name, cast)
-                // Only an actually exported recording is reported: a cancelled Save-As wrote nothing,
-                // and announcing a recording nobody kept would be a plain falsehood in the feed.
-                if (outcome == ExportOutcome.Saved) session.hostId?.let { onSaved(it, seconds) }
-                onDone(
-                    when (outcome) {
-                        ExportOutcome.Cancelled -> RecordingOutcome.Cancelled
-                        ExportOutcome.Failed -> RecordingOutcome.Failed
-                        ExportOutcome.Saved -> if (truncated) RecordingOutcome.SavedTruncated else RecordingOutcome.Saved
-                    },
-                )
-            }
-            Unit
-        }
-    // The hotkey does exactly what a click does.
+    val recordingLabel = when {
+        terminal?.teamRecordingFailed == true -> stringResource(Res.string.lib_team_rec_failed)
+        recording -> stringResource(Res.string.lib_team_rec_active)
+        else -> ""
+    }
+    StatusAnnouncer(recordingLabel)
+    StatusAnnouncer(uploadLabel)
+    val toggle = rememberSessionRecordingAction(session, terminal, teams, onSaved, onDone)
     OnToolbarRequest(request) { toggle() }
-    IconBtn(
-        name = if (recording) "stop_circle" else "radio_button_checked",
-        tint = if (recording) Skerry.colors.sunset else Skerry.colors.dim,
-        onClick = toggle,
-        // Nothing to record on a pane that is not connected: the toggle used to run and return on
-        // its own first line, so the press took the focus and left no trace.
-        enabled = toolbarActionEnabled(ToolbarAction.Record, session),
-        tooltip = stringResource(if (recording) Res.string.shell_tip_record_stop else Res.string.shell_tip_record),
-    )
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        IconBtn(
+            name = if (recording && !required) "stop_circle" else "radio_button_checked",
+            tint = if (recording) Skerry.colors.sunset else Skerry.colors.dim,
+            onClick = toggle,
+            enabled = !required && toolbarActionEnabled(ToolbarAction.Record, session),
+            tooltip = if (required) recordingLabel else stringResource(
+                if (recording) Res.string.shell_tip_record_stop else Res.string.shell_tip_record),
+        )
+        if (recordingLabel.isNotEmpty()) Txt(recordingLabel, color = Skerry.colors.sunset, size = 11.sp)
+        if (uploadLabel.isNotEmpty()) Txt(uploadLabel, color = Skerry.colors.amber, size = 11.sp)
+    }
 }
 
 /** Outcome of stopping a recording, so the caller can show the right notice. */
@@ -92,9 +74,5 @@ enum class RecordingOutcome {
     Failed,
     Cancelled;
 
-    /** A cancelled Save-As is the user's own choice — nothing to tell them about it. */
     val worthReporting: Boolean get() = this != Cancelled
 }
-
-/** A cast with only a header line means the session printed nothing while recording. */
-private fun TerminalScreenState.recordingWasEmpty(cast: String): Boolean = !cast.contains('\n')

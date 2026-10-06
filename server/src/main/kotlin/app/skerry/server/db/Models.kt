@@ -130,4 +130,5 @@ data class ActivityRow(
     val recordType: String? = null,
     val scopeId: String? = null,
     val durationSec: Long? = null,
+    val recordingId: String? = null,
 )

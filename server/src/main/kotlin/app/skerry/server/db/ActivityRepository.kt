@@ -21,6 +21,7 @@ data class ActivityEvent(
     val recordType: String? = null,
     val scopeId: String? = null,
     val durationSec: Long? = null,
+    val recordingId: String? = null,
 )
 
 /**
@@ -182,6 +183,12 @@ class ActivityRepository(
         ActivityLog.selectAll().count()
     }
 
+    /** Caller keeps its data mutation and this bounded activity write in one transaction. */
+    internal fun appendInCurrentTransaction(event: ActivityEvent, now: Long) {
+        insert(event, now)
+        prune(event.teamId, event.accountId)
+    }
+
     private fun insert(event: ActivityEvent, now: Long) {
         ActivityLog.insert {
             it[accountId] = event.accountId
@@ -193,6 +200,7 @@ class ActivityRepository(
             it[recordType] = event.recordType
             it[scopeId] = event.scopeId
             it[durationSec] = event.durationSec
+            it[recordingId] = event.recordingId
             it[createdAt] = now
         }
     }
@@ -262,6 +270,7 @@ class ActivityRepository(
         recordType = this[ActivityLog.recordType],
         scopeId = this[ActivityLog.scopeId],
         durationSec = this[ActivityLog.durationSec],
+        recordingId = this[ActivityLog.recordingId],
     )
 
     companion object {

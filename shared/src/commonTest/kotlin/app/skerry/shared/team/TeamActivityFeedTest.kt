@@ -10,6 +10,16 @@ import kotlin.test.assertTrue
 /** Turning the server's audit metadata into rows a member can read. */
 class TeamActivityFeedTest {
 
+    @Test
+    fun recordingPlaybackKeepsScopeAndIdWithoutResolvingTheScopeName() {
+        val row = buildTeamActivityFeed(listOf(TeamActivityEntry(
+            actorAccountId = "member", event = "team.session_record", detail = "", createdAt = 1,
+            scopeId = "prod", recordingId = "recording",
+        )), selfAccountId = null).single().rows.single()
+        assertEquals("recording", row.recordingId)
+        assertEquals("prod", row.scopeId)
+    }
+
     private val day = 86_400_000L
     private val self = "me@x.io"
 

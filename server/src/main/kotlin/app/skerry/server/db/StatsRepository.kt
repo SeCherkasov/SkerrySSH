@@ -53,37 +53,34 @@ class StatsRepository(private val db: Database) {
         databaseUrl: String,
         now: Long = System.currentTimeMillis(),
     ): InventorySnapshot = dbTransaction(db) {
-        fun row(sql: String, columns: List<String>): List<Long> =
-            exec(sql) { rs -> if (rs.next()) columns.map { rs.getLong(it) } else columns.map { 0L } }
-                ?: columns.map { 0L }
-
-        val devices = row(
+        val devices = inventoryRow(
             """SELECT COUNT(*) AS total,
                       SUM(CASE WHEN revoked THEN 0 ELSE 1 END) AS active
                FROM devices""",
             listOf("total", "active"),
         )
-        val records = row(
+        val records = inventoryRow(
             """SELECT COUNT(*) AS total,
                       SUM(CASE WHEN deleted THEN 1 ELSE 0 END) AS tombstones,
                       COALESCE(SUM(LENGTH(blob)), 0) AS bytes
                FROM records""",
             listOf("total", "tombstones", "bytes"),
         )
-        val teamRecords = row(
+        val teamRecords = inventoryRow(
             """SELECT COUNT(*) AS total,
                       SUM(CASE WHEN deleted THEN 1 ELSE 0 END) AS tombstones,
                       COALESCE(SUM(LENGTH(blob)), 0) AS bytes
                FROM team_records""",
             listOf("total", "tombstones", "bytes"),
         )
-        val pairing = row(
+        val recording = recordingInventory()
+        val pairing = inventoryRow(
             """SELECT COUNT(*) AS total,
                       SUM(CASE WHEN expires_at < $now THEN 1 ELSE 0 END) AS expired
                FROM pairing""",
             listOf("total", "expired"),
         )
-        val members = row(
+        val members = inventoryRow(
             """SELECT COUNT(*) AS total,
                       SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active
                FROM team_members""",
@@ -99,7 +96,10 @@ class StatsRepository(private val db: Database) {
             storageBytes = records[2],
             liveTeamRecords = teamRecords[0] - teamRecords[1],
             teamTombstones = teamRecords[1],
-            teamStorageBytes = teamRecords[2],
+            teamStorageBytes = teamRecords[2] + recording.storedBytes,
+            recordingRows = recording.rows,
+            recordingStorageBytes = recording.storedBytes,
+            recordingReservedBytes = recording.reservedBytes,
             pendingPairings = pairing[0] - pairing[1],
             expiredPairings = pairing[1],
             teams = Teams.selectAll().count(),
@@ -108,6 +108,27 @@ class StatsRepository(private val db: Database) {
             activityRows = ActivityLog.selectAll().count(),
             databaseBytes = databaseSizeBytes(databaseUrl),
         )
+    }
+
+    private fun JdbcTransaction.inventoryRow(sql: String, columns: List<String>): List<Long> =
+        exec(sql) { rs -> if (rs.next()) columns.map { rs.getLong(it) } else columns.map { 0L } }
+            ?: columns.map { 0L }
+
+    private data class RecordingInventory(val rows: Long, val storedBytes: Long, val reservedBytes: Long)
+
+    private fun JdbcTransaction.recordingInventory(): RecordingInventory {
+        val recordingRows = inventoryRow(
+            """SELECT COUNT(*) AS total, COALESCE(SUM(reserved_bytes), 0) AS reserved,
+                      COALESCE(SUM(LENGTH(manifest) + LENGTH(wrapped_key) +
+                          COALESCE(LENGTH(staged_wrapped_key), 0) + ${TeamRecordingRepository.RECEIPT_BYTES}), 0) AS metadata
+               FROM team_recordings""",
+            listOf("total", "reserved", "metadata"),
+        )
+        val chunkBytes = inventoryRow(
+            "SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) AS bytes FROM team_recording_chunks",
+            listOf("bytes"),
+        )[0]
+        return RecordingInventory(recordingRows[0], recordingRows[2] + chunkBytes, recordingRows[1])
     }
 
     /**

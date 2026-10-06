@@ -49,5 +49,6 @@ class CastPlayback(
         if (stopped) return
         stopped = true
         scope.cancel()
+        cast.source?.close()
     }
 }

@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.upsert
@@ -80,9 +81,21 @@ class TeamScopeRepository(private val db: Database) {
      * capped at one connection.
      */
     suspend fun deleteReturningGrantees(teamId: String, scopeId: String): List<String>? = dbTransaction(db) {
+        lockRecordingTeam(teamId) ?: return@dbTransaction null
+        lockRecordingScope(teamId, scopeId) ?: return@dbTransaction null
         val grantees = TeamScopeGrants.selectAll()
             .where { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
             .map { it[TeamScopeGrants.accountId] }
+        val recordings = TeamRecordings.select(TeamRecordings.recordingId).where {
+            (TeamRecordings.teamId eq teamId) and (TeamRecordings.scopeId eq scopeId)
+        }.map { it[TeamRecordings.recordingId] }
+        recordings.forEach { recordingId -> TeamRecordingChunks.deleteWhere {
+            (TeamRecordingChunks.teamId eq teamId) and (TeamRecordingChunks.recordingId eq recordingId)
+        } }
+        TeamRecordings.deleteWhere { (TeamRecordings.teamId eq teamId) and (TeamRecordings.scopeId eq scopeId) }
+        TeamRecordingPolicies.deleteWhere {
+            (TeamRecordingPolicies.teamId eq teamId) and (TeamRecordingPolicies.scopeId eq scopeId)
+        }
         TeamRecords.deleteWhere { (TeamRecords.teamId eq teamId) and (TeamRecords.scopeId eq scopeId) }
         TeamScopeGrants.deleteWhere { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
         val removed = TeamScopes.deleteWhere {
@@ -166,6 +179,12 @@ class TeamScopeRepository(private val db: Database) {
      */
     suspend fun rekey(teamId: String, scopeId: String, newEpoch: Long, envelopes: Map<String, ByteArray>): RekeyOutcome =
         dbTransaction(db) {
+            lockRecordingTeam(teamId) ?: return@dbTransaction RekeyOutcome.NO_TEAM
+            val space = lockRecordingScope(teamId, scopeId) ?: return@dbTransaction RekeyOutcome.NO_TEAM
+            if (space[TeamScopes.keyEpoch] != newEpoch - 1) return@dbTransaction RekeyOutcome.EPOCH_CONFLICT
+            if (!recordingWrapsStaged(teamId, scopeId, newEpoch, System.currentTimeMillis())) {
+                return@dbTransaction RekeyOutcome.RECORDING_WRAP_REQUIRED
+            }
             val bumped = TeamScopes.update({
                 (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) and
                     (TeamScopes.keyEpoch eq newEpoch - 1)

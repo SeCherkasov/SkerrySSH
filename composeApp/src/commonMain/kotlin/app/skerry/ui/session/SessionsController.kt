@@ -343,6 +343,7 @@ class SessionsController(
         val controller = controllerFactory()
         val tab = openTab(Session(newId(), hostId, title, subtitle, controller))
         controller.bindSessionId(tab.id)
+        controller.bindHostId(hostId)
         reportHostSession(hostId)
         controller.connect(target, auth, onConnected)
         return tab.id
@@ -377,6 +378,7 @@ class SessionsController(
             pane.bind(hostId, title, subtitle)
             reportHostSession(hostId)
             pane.controller.bindSessionId(blank.id)
+            pane.controller.bindHostId(hostId)
             pane.controller.connect(target, auth, onConnected)
             return blank.id
         }
@@ -543,6 +545,7 @@ class SessionsController(
         if (existing.isBlank) {
             existing.bind(hostId, title, subtitle)
             existing.controller.bindSessionId(existing.id)
+            existing.controller.bindHostId(hostId)
             tab.setFocusedPane(existing.id)
             existing.controller.connect(target, auth)
             return
@@ -554,6 +557,7 @@ class SessionsController(
         existing.teardown()
         val replacement = Session(newId(), hostId, title, subtitle, controllerFactory())
         replacement.controller.bindSessionId(replacement.id)
+        replacement.controller.bindHostId(hostId)
         tab.setPanes(tab.panes.map { if (it.id == paneId) replacement else it })
         tab.setLayout(tab.layout.replace(paneId, replacement.id))
         tab.setFocusedPane(replacement.id)

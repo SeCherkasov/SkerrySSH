@@ -66,6 +66,7 @@ kotlin {
             implementation(libs.mlkit.barcode.scanning)
         }
         commonTest.dependencies {
+            implementation(libs.okio.fakefilesystem)
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }

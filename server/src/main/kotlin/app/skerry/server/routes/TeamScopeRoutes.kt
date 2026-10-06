@@ -170,6 +170,10 @@ fun Route.teamScopeRoutes(services: Services) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse("stale epoch (concurrent rotation); refetch and retry"))
                 return@post
             }
+            RekeyOutcome.RECORDING_WRAP_REQUIRED -> {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse("recording wraps must be staged before rotation"))
+                return@post
+            }
             RekeyOutcome.OK -> Unit
         }
         services.activity.record(principal.accountId, "team.scope_rekey", "$scopeId · epoch ${req.newEpoch}", teamId = teamId)

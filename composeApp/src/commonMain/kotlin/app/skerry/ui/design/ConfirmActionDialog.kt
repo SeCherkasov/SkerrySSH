@@ -63,7 +63,7 @@ fun ConfirmActionDialog(
                     .padding(26.dp),
             ) {
                 Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-                Txt(message, color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp))
+                Txt(message, color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = modalBody().padding(top = 10.dp))
                 Row(
                     Modifier.fillMaxWidth().padding(top = 18.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),

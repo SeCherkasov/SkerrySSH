@@ -11,6 +11,7 @@ import app.skerry.server.db.PairingRepository
 import app.skerry.server.db.RecordRepository
 import app.skerry.server.db.StatsRepository
 import app.skerry.server.db.TeamRecordRepository
+import app.skerry.server.db.TeamRecordingRepository
 import app.skerry.server.db.TeamRepository
 import app.skerry.server.db.TeamScopeRepository
 import app.skerry.server.metrics.DbProbe
@@ -51,9 +52,11 @@ class Services(
     val teamRecords = TeamRecordRepository(database, lockTeamRow = config.isPostgres, maxScopeBytes = config.maxScopeBytes,
         maxAccountBytes = config.maxAccountBytes,
     )
+    val activity = ActivityRepository(database)
+    val teamRecordings = TeamRecordingRepository(database, lockRows = config.isPostgres,
+        maxScopeBytes = config.maxScopeBytes, maxAccountBytes = config.maxAccountBytes, activity = activity)
     val teamScopes = TeamScopeRepository(database)
     val stats = StatsRepository(database)
-    val activity = ActivityRepository(database)
     val admin = AdminRepository(database)
     val srp = SrpService()
     val tokens = TokenService(config)

@@ -4,10 +4,12 @@ import app.skerry.shared.ssh.KeyboardInteractiveChallenge
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.ui.terminal.TerminalSessionPrefs
+import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.FakeShellChannel
 import app.skerry.ui.connection.FakeSshConnection
 import app.skerry.ui.connection.FakeSshTransport
+import app.skerry.ui.connection.ScriptedTransport
 import app.skerry.ui.session.SessionsController
 import app.skerry.shared.ssh.KeyboardInteractivePrompt
 import app.skerry.shared.trust.HostTrustKind
@@ -22,10 +24,14 @@ import app.skerry.ui.runbook.runbook
 import app.skerry.ui.runbook.startNow
 import app.skerry.ui.runbook.step
 import app.skerry.ui.trust.HostTrustPromptController
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -60,6 +66,44 @@ private fun challenge() = KeyboardInteractiveChallenge(
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LockTeardownTest {
+
+    @Test
+    fun `vault lock retires initial connection while recording preparation is suspended`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val preparationEntered = CompletableDeferred<Unit>()
+        val releasePreparation = CompletableDeferred<Unit>()
+        val transport = ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel()))))
+        val sessions = SessionsController(newId = { "pending-shared" }, controllerFactory = {
+            ConnectionController(transport, scope,
+                newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                maxReconnectAttempts = 0,
+                prepareRecording = { _, _ ->
+                    preparationEntered.complete(Unit)
+                    releasePreparation.await()
+                    null // The preparation may lose its shared-host view when the vault locks.
+                })
+        })
+        try {
+            sessions.open(hostId = "shared-host", title = "shared", subtitle = "u@shared:22",
+                target = SshTarget(host = "shared", username = "u"), auth = SshAuth.Password("secret"))
+            runCurrent()
+            preparationEntered.await()
+            val initialAttempt = scope.coroutineContext[Job]!!.children.first()
+            assertEquals(0, transport.connectCalls)
+
+            tearDownForLock(tunnels = null, sessions = sessions, sync = null, snippets = null)
+            releasePreparation.complete(Unit)
+            initialAttempt.join()
+            runCurrent()
+
+            assertEquals(ConnectionUiState.Form, sessions.active!!.focusedPane.controller.uiState)
+            assertEquals(0, transport.connectCalls, "initial handshake authenticated after vault lock")
+            assertNull(sessions.active!!.focusedPane.liveTerminal, "a terminal appeared behind the locked vault")
+        } finally {
+            sessions.disconnectAll()
+            scope.cancel()
+        }
+    }
 
     @Test
     fun `a cleanup that throws does not cancel the ones after it`() = runTest {

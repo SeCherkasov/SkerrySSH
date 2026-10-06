@@ -33,6 +33,8 @@ data class TeamKeyEntry(
      * scope key shares the TEAM record's fate — including its recovery path.
      */
     val scopes: Map<String, TeamScopeKeyEntry> = emptyMap(),
+    /** Highest owner-signed recording policy observed for each space, retained across server rollback. */
+    val recordingPolicies: Map<String, CachedRecordingPolicy> = emptyMap(),
 ) {
     fun dataKey(): DataKey? = decodeDataKey(teamKey)
 }
@@ -97,6 +99,49 @@ class TeamKeyStore(private val vault: Vault) {
     fun remove(teamId: String) {
         vault.transaction { codec.remove(teamId) }
     }
+
+    fun recordingPolicy(ref: TeamScopeRef, linkKey: String = ""): CachedRecordingPolicy? =
+        get(ref.teamId)?.recordingPolicies?.get(policyKey(ref, linkKey))
+
+    fun rememberRecordingPolicy(ref: TeamScopeRef, policy: CachedRecordingPolicy, linkKey: String = "") {
+        vault.transaction {
+            val current = codec.get(ref.teamId) ?: error("team key missing")
+            val key = policyKey(ref, linkKey)
+            val previous = current.recordingPolicies[key]
+            require(previous == null || previous.authority == policy.authority) { "recording authority approval required" }
+            require(previous == null || policyFollows(policy, previous)) {
+                "recording policy rollback or equivocation"
+            }
+            codec.put(ref.teamId, current.copy(
+                recordingPolicies = current.recordingPolicies + (key to policy),
+            ))
+        }
+    }
+
+    /** Compare the captured decision with the encrypted cache before changing its signer. */
+    fun approveRecordingAuthority(
+        ref: TeamScopeRef, expected: CachedRecordingPolicy?, policy: CachedRecordingPolicy, linkKey: String,
+    ) {
+        vault.transaction {
+            val current = codec.get(ref.teamId) ?: error("team key missing")
+            val key = policyKey(ref, linkKey)
+            check(current.recordingPolicies[key] == expected) { "recording authority decision changed" }
+            require(policy.authority != null)
+            require(expected == null || policy.revision > expected.revision ||
+                policy.copy(authority = expected.authority, mode = expected.mode) == expected) {
+                "recording policy rollback or equivocation"
+            }
+            codec.put(ref.teamId, current.copy(recordingPolicies = current.recordingPolicies + (key to policy)))
+        }
+    }
+
+    private fun policyFollows(policy: CachedRecordingPolicy, previous: CachedRecordingPolicy): Boolean {
+        if (policy.revision > previous.revision) return true
+        if (policy == previous) return true
+        return previous.mode == null && policy.copy(mode = null) == previous
+    }
+
+    private fun policyKey(ref: TeamScopeRef, linkKey: String) = "$linkKey\u0000${ref.scopeId}"
 
     // --- scopes (nested in the team's own record, see [TeamKeyEntry.scopes]) ---
 

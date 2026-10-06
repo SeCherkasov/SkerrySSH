@@ -1,5 +1,7 @@
 package app.skerry.shared.team
 
+import kotlinx.serialization.Serializable
+
 /**
  * Identity of a keyed share space inside a team: the team itself ([scopeId] empty — every active
  * member reads it) or one of its scopes (only members holding a grant read it).
@@ -9,6 +11,7 @@ package app.skerry.shared.team
  * by this reference instead of duplicated. `scopeId` is client-generated and constrained to the same
  * charset as a teamId, because both end up in a file name.
  */
+@Serializable
 data class TeamScopeRef(val teamId: String, val scopeId: String = "") {
 
     val isTeamWide: Boolean get() = scopeId.isEmpty()
