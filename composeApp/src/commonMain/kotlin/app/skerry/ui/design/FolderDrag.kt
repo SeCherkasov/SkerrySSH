@@ -146,10 +146,18 @@ class FolderDragState {
         )
     }
 
-    fun currentDrop(folders: List<DragFolder>): FolderDrop? = itemDropTarget(folderBounds(folders), pointerY)
+    /** Optional full-logical-index geometry for virtualized callers. Eager lists keep their anchors. */
+    var itemDropProvider: ((Float, String?) -> FolderDrop?)? = null
+    var folderDropProvider: ((Float, String?) -> Int)? = null
+
+    fun currentDrop(folders: List<DragFolder>): FolderDrop? {
+        val provider = itemDropProvider
+        return if (provider != null) provider(pointerY, draggingItemId) else itemDropTarget(folderBounds(folders), pointerY)
+    }
 
     /** Header centers of the other folders (excluding the dragged one), in list order. */
     fun currentFolderDropIndex(folders: List<DragFolder>): Int {
+        folderDropProvider?.let { return it(pointerY, draggingFolderName) }
         val centers = folders
             .filter { it.name != draggingFolderName }
             .mapNotNull { folderHeader[it.name]?.let { b -> (b.top + b.bottom) / 2f } }

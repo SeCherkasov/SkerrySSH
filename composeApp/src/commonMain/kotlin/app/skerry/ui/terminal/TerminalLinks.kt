@@ -83,7 +83,7 @@ private const val WRAP_BLOCK_ROWS = 9
  * [startClipped]/[endClipped] mean the block ended mid-line: the text beyond that edge is not in the
  * join, so a match touching it may be a fragment of a longer one.
  */
-private class WrapChain(val rows: IntRange, val startClipped: Boolean, val endClipped: Boolean)
+internal data class WrapChain(val rows: IntRange, val startClipped: Boolean, val endClipped: Boolean)
 
 private fun wrapChain(screen: List<List<TermCell>>, r: Int, lineStart: Int): WrapChain {
     val first = lineStart + (r - lineStart) / WRAP_BLOCK_ROWS * WRAP_BLOCK_ROWS
@@ -108,6 +108,8 @@ private fun lineStartOf(screen: List<List<TermCell>>, r: Int): Int {
 // hit-testing also routes through linkSpansByRow and must not count). Single-threaded: written
 // from composition or the sequential test JVM; revisit before enabling parallel test execution.
 internal var linkScanPasses = 0
+// Actual logical blocks scanned, including the cheap no-scheme path. Sequential tests only.
+internal var linkChainScans = 0
 
 /**
  * URL spans per grid row for rows [window] of [screen], in column coordinates. A row that auto-wrap
@@ -124,7 +126,12 @@ internal var linkScanPasses = 0
  * longer than [WRAP_BLOCK_ROWS] rows that also costs the rare URL that merely starts or ends flush
  * with a block edge without crossing it.
  */
-internal fun linkSpansByRow(screen: List<List<TermCell>>, window: IntRange): Map<Int, List<TextLinkSpan>> {
+internal fun linkSpansByRow(
+    screen: List<List<TermCell>>,
+    window: IntRange,
+    cache: LinkScanCache? = null,
+): Map<Int, List<TextLinkSpan>> {
+    cache?.beginScan()
     var out: MutableMap<Int, List<TextLinkSpan>>? = null
     var r = window.first.coerceAtLeast(0)
     val last = window.last.coerceAtMost(screen.lastIndex)
@@ -134,12 +141,17 @@ internal fun linkSpansByRow(screen: List<List<TermCell>>, window: IntRange): Map
     while (r <= last) {
         if (lineStart < 0) lineStart = lineStartOf(screen, r)
         val chain = wrapChain(screen, r, lineStart)
-        for ((row, spans) in chainLinkSpans(screen, chain, r..minOf(chain.rows.last, last))) {
+        val wanted = r..minOf(chain.rows.last, last)
+        val found = cache?.spans(screen, chain) { chainLinkSpans(screen, chain, chain.rows) }
+            ?: chainLinkSpans(screen, chain, wanted)
+        for (row in wanted) {
+            val spans = found[row] ?: continue
             (out ?: HashMap<Int, List<TextLinkSpan>>().also { out = it })[row] = spans
         }
         if (!chain.endClipped) lineStart = -1
         r = chain.rows.last + 1
     }
+    cache?.finishScan()
     return out ?: emptyMap()
 }
 
@@ -149,6 +161,7 @@ private fun chainLinkSpans(
     chain: WrapChain,
     wanted: IntRange,
 ): Map<Int, List<TextLinkSpan>> {
+    linkChainScans++
     if (!hasSchemeMarker(screen, chain.rows)) return emptyMap()
     val flat = rowsText(screen, chain.rows) ?: return emptyMap()
     val found = detectPlainTextLinks(flat.text).filterNot { span ->

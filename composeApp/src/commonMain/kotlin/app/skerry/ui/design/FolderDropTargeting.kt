@@ -29,10 +29,9 @@ data class FolderDrop(val group: String?, val index: Int)
  * clamps to that edge. Index within it is the count of the folder's rows whose center is above
  * the pointer. `null` if there are no folders.
  *
- * `null` means the drop is dropped: the row snaps back and nothing is written. That is only ever
- * reached with no folder measured at all, which holds because every caller lays its folders out in
- * a plain scrollable `Column` — a lazy list would leave the off-screen ones unmeasured and turn a
- * drop over them into a silent no-op.
+ * `null` cancels the drop when no folder has measured geometry. Eager callers supply every folder's
+ * anchors; virtualized callers use [FolderDragState.itemDropProvider] to resolve full logical indexes
+ * from the visible layout instead of counting this incomplete set of measured rows.
  */
 fun itemDropTarget(folders: List<FolderBounds>, pointerY: Float): FolderDrop? {
     if (folders.isEmpty()) return null

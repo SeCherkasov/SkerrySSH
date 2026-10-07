@@ -15,22 +15,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -42,13 +39,10 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalHostClickConnectMode
-import app.skerry.ui.design.folderLinePlacement
 import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.HLine
@@ -62,28 +56,14 @@ import app.skerry.ui.design.NO_PRESS
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
 import app.skerry.ui.design.SidebarSearchField
-import app.skerry.ui.design.SidebarSectionTitle
-import app.skerry.ui.design.Sym
-import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_search_placeholder
-import app.skerry.ui.generated.resources.rd_section
-import app.skerry.ui.generated.resources.shell_group_new_title
-import app.skerry.ui.generated.resources.term_hosts_section
 import app.skerry.ui.generated.resources.term_new_connection
-import app.skerry.ui.generated.resources.term_no_hosts_match
 import app.skerry.ui.generated.resources.term_search_hosts_placeholder
 import app.skerry.ui.host.ALL_HOSTS_CHIP
-import app.skerry.ui.host.HOST_GROUPS
 import app.skerry.ui.design.FolderDragState
-import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
-import app.skerry.ui.host.color
-import app.skerry.ui.host.filterHosts
-import app.skerry.ui.host.asDragFolders
-import app.skerry.ui.host.groupHostsByFolder
-import app.skerry.ui.host.sidebarFolders
 import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.hostTagChips
 import app.skerry.ui.host.icon
@@ -279,120 +259,8 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
             }
         }
         HLine()
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                SidebarSectionTitle(
-                    stringResource(
-                        when (section) {
-                            HostSection.Terminal -> Res.string.term_hosts_section
-                            HostSection.RemoteDesktops -> Res.string.rd_section
-                        },
-                    ),
-                )
-                // Create a new (initially empty) group in the live catalog; decorative on the mock path.
-                // The folder is remembered for this section's sidebar (see [CustomGroup]).
-                if (liveHosts != null) {
-                    IconBtn(
-                        "create_new_folder",
-                        onClick = { state.openCreateGroup(section) },
-                        box = 20,
-                        icon = 14.sp,
-                        tint = Skerry.colors.faint,
-                        tooltip = stringResource(Res.string.shell_group_new_title),
-                        modifier = Modifier.testTag(UiTags.NEW_GROUP),
-                    )
-                } else {
-                    Sym("create_new_folder", size = 14.sp, color = Skerry.colors.faint)
-                }
-            }
-            // Live catalog from HostManagerController when provided (behind the vault gate), otherwise
-            // mock data (offscreen render/preview path). Folders are grouped and narrowed by the active tag.
-            if (liveHosts != null) {
-                val query = state.hostSearchQuery
-                val folders = remember(sectionHosts, liveHosts.hosts, effectiveChip, query, state.customGroups, section) {
-                    val filtered = filterHosts(sectionHosts, effectiveChip, query)
-                    // Empty user groups are shown as folders with no hosts, but only outside a filter
-                    // (search/tag narrow by host, and an empty folder has nothing to match) and only
-                    // in the sidebar they were created in — [sidebarFolders] also drops the ones that
-                    // meanwhile got hosts, wherever those hosts landed.
-                    if (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP) {
-                        groupHostsByFolder(filtered)
-                    } else {
-                        sidebarFolders(filtered, liveHosts.hosts, state.customGroupsIn(section))
-                    }
-                }
-                // An empty remote-desktop catalog says so, instead of leaving a blank column above
-                // the "New connection" button (the terminal section always has the local shell path).
-                if (folders.isEmpty() && section == HostSection.RemoteDesktops &&
-                    query.isBlank() && effectiveChip == ALL_HOSTS_CHIP
-                ) {
-                    EmptyCatalogNote()
-                }
-                // Search/tag narrowing found nothing: show a hint instead of silent emptiness (unlike an
-                // empty catalog, where the RECENT section/New connection button still appear below).
-                if (folders.isEmpty() && (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP)) {
-                    Txt(
-                        stringResource(Res.string.term_no_hosts_match),
-                        color = Skerry.colors.faint, size = 12.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
-                    )
-                }
-                // Fresh folder list for drag targets (the gesture is keyed to the row/folder key).
-                val dragFolders = rememberUpdatedState(remember(folders) { folders.asDragFolders() })
-                val folderLine = dragState.folderLinePlacement(folders.map { it.name })
-                folders.forEach { folder ->
-                    key(folder.name) {
-                        if (folder.name == folderLine.before) DropLine()
-                        LiveHostFolder(folder, state, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { dragFolders.value }
-                    }
-                }
-                if (folderLine.atEnd) DropLine()
-                // Shared team hosts: per-team sections below the personal catalog, shown only outside
-                // search/filter since those narrow the personal catalog.
-                if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {
-                    TeamHostsSection(liveHosts.hosts, state, section, mono)
-                }
-            } else {
-                HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, section, mono) }
-            }
-            // Live catalog: RECENT section from actual connection history ([DesktopDesignState.recentHostIds]),
-            // resolved against current profiles; deleted/unknown ids are simply hidden, empty means no section.
-            // Mock/preview (no live catalog): a static row.
-            if (liveHosts != null) {
-                // The section can be hidden entirely (Settings -> Appearance -> Interface) and size-limited.
-                // Memoized by (recent order, catalog contents, limit), like the `folders` above, so the
-                // resolve doesn't rerun on every sidebar recomposition (drag/chip switch/tab switch).
-                // Narrowed to this section: history is per catalog too, so the desktops list doesn't
-                // offer to reconnect a shell. The limit applies after narrowing, so a section with
-                // few recents still fills its quota.
-                val recent = remember(state.recentHostIds, liveHosts.hosts, state.settings.recentLimit, section) {
-                    state.recentHostIds.mapNotNull { liveHosts.find(it) }
-                        .inSection(section)
-                        .take(state.settings.recentLimit)
-                }
-                if (state.settings.showRecent && recent.isNotEmpty()) {
-                    // Divider belongs to the section: hidden together with it when RECENT is off/empty.
-                    HLine(modifier = Modifier.padding(top = 8.dp))
-                    RecentSectionHeader()
-                    recent.forEach { host -> key(host.id) { RecentHostRow(host, mono) } }
-                }
-            } else {
-                HLine(modifier = Modifier.padding(top = 8.dp))
-                RecentSectionHeader()
-                Row(
-                    Modifier.padding(start = 16.dp).padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Sym("history", size = 14.sp, color = Skerry.colors.faint)
-                    Txt("user@vps.example.com", color = Skerry.colors.dim, size = 11.5.sp, font = mono)
-                }
-            }
-        }
+        HostsSidebarCatalog(state, section, sectionHosts, effectiveChip, liveHosts, mono, dragState,
+            selectedHostId, { selectedHostId = it }, Modifier.weight(1f))
         HLine()
         val importScope = rememberCoroutineScope()
         Box(Modifier.height(SIDEBAR_FOOTER_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {

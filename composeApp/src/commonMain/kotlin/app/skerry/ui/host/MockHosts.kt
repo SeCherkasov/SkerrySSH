@@ -32,6 +32,9 @@ data class MockHost(
 )
 data class HostGroup(val name: String, val hosts: List<MockHost>)
 
+/** Demo connection address for the preview's recent-history row. */
+const val MOCK_RECENT_CONNECTION = "user@vps.example.com"
+
 val HOST_GROUPS = listOf(
     HostGroup(
         "Production",
