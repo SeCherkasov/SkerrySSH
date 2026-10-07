@@ -1,0 +1,29 @@
+# Profiles use model IDs exposed by this Codex host. Escalation is a deliberate choice.
+[limits]
+max_parallel = 2
+minimum_available_gib = 8
+
+[profiles.explorer]
+model = "gpt-6-luna"
+reasoning_effort = "low"
+purpose = "Answer a narrow codebase question; read-only."
+
+[profiles.worker]
+model = "gpt-6.1-sol"
+reasoning_effort = "medium"
+purpose = "Implement one bounded change with explicit file ownership."
+
+[profiles.skerry-reviewer]
+model = "gpt-6.1-sol"
+reasoning_effort = "medium"
+purpose = "Review project contracts, coverage and harness behavior."
+
+[profiles.skerry-kotlin-reviewer]
+model = "gpt-6.1-sol"
+reasoning_effort = "medium"
+purpose = "Review Kotlin, Compose and structured concurrency."
+
+[profiles.skerry-security-reviewer]
+model = "gpt-6.1-sol"
+reasoning_effort = "high"
+purpose = "Review untrusted protocols, credentials and server trust boundaries."

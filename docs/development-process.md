@@ -1,240 +1,130 @@
-# Skerry
+# Development process
 
-Open-source, cross-platform SSH client with a single core. Kotlin Multiplatform, Compose
-Multiplatform UI, one codebase across Desktop (Linux, Windows, macOS) and Android at feature parity.
-**iOS/iPadOS is deferred** — don't re-add its targets or `iosMain`.
+Skerry shares a Kotlin Multiplatform core and Compose UI across desktop and Android. iOS is deferred.
+The five modules are `shared`, `composeApp`, `androidApp`, `server` and `sync-wire`.
+Architecture, coroutine, security and UI rules live in [coding-guidelines.md](coding-guidelines.md).
+Agent-specific startup and delegation rules live in [AGENTS.md](../AGENTS.md).
 
-## Commands
+## Environment
 
-Requires **JDK 21** (`foojay-resolver` fetches one if needed) and an Android SDK for every client
-build — `:androidApp` is always in the settings graph, so `ANDROID_HOME` (or `sdk.dir` in
-`local.properties`) is needed even for a desktop-only build.
+Use Python 3.11+ and JDK 21. Client builds require an Android SDK even for desktop work; set
+`ANDROID_HOME` or `sdk.dir` in `local.properties`. Server compilation/tests use `-PserverOnly`;
+the shared desktop integration suite boots the server and needs the client settings graph/SDK.
+Compose JVM tests need a display; use `xvfb-run --auto-servernum` on headless Linux.
 
-```bash
-./gradlew :composeApp:run                                   # desktop
-./gradlew :composeApp:packageDistributionForCurrentOS       # .deb / .rpm / .msi / .dmg
-ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
-./gradlew test allTests                                     # JUnit 5; `test` alone skips shared/composeApp
-./gradlew :androidApp:compileDebugKotlin                    # Android side of a UI change
-./gradlew build                                             # full gate, lint included
-./gradlew detektAll                                         # static analysis; detektBaseline to re-baseline
-./gradlew koverHtmlReport                                   # coverage report
-docker compose up -d --build                                # sync server; set SKERRY_JWT_SECRET
-./gradlew :server:run -PserverOnly                          # server-only build, no Android SDK
+Tests use kotlin.test with JUnit 5 and hand-written fakes. No Kotest/MockK. Static analysis is detekt;
+Android lint runs in build. Keep existing baselines; do not re-baseline your new findings.
+
+```sh
+python3 tools/harness/gate.py doctor
+python3 tools/harness/gate.py plan
+python3 tools/harness/gate.py install-hooks
+./gradlew :composeApp:run
+./gradlew :androidApp:installDebug
+./gradlew :server:run -PserverOnly
 ```
 
-Test stack is `kotlin("test")` on the **JUnit 5** backend. There is no Kotest, no MockK, and no
-detekt/ktlint in this repo — don't introduce them because a generic Kotlin skill suggests them.
-Fakes are hand-written; the lint gate is Android lint inside `./gradlew build`.
+## Change loop
 
-## Repository layout
+1. Inspect the worktree, read the relevant contracts and abstraction catalogue, choose a typed branch.
+   The branch infers docs/refactor/feature/bug; `gate.py task` can make the kind stricter.
+2. Add tests before implementation. For bugs, run `gate.py red --file <test> --tests '<pattern>'`;
+   inspect the assertion to confirm the failure is the intended bug. Compile errors, empty filters
+   and passing tests are not RED. Keep the recorded test unchanged through GREEN.
+3. Implement the smallest complete change, preserving commonMain contracts and desktop/Android parity.
+4. Iterate with `gate.py run --mode fast`: deterministic rules, harness self-tests when relevant,
+   and affected JVM suites. It does not satisfy the final build/review gate.
+5. Run `gate.py run`: add affected module builds (including Android for shared/client changes)
+   and detekt. The runner executes serially, with two Gradle workers and no persistent daemons.
+6. Run the selected read-only reviewers using the profiles and launch snapshots from the harness.
+   Resolve each finding with evidence. Recheck only the stages whose inputs changed.
+7. `gate.py verify` must report complete final evidence before a requested commit, push or PR.
+   Commit/push/PR creation still requires the user's authorization. No extra permission prompt is
+   introduced by a green gate. State any platform/service behavior not tested live.
 
-```
-shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, share/, terminal/, ai/ (+ai/local),
-              # telnet/, serial/, mosh/, rdp/, vnc/, graphics/, audio/, tunnel/, container/,
-              # snippet/, runbook/, host/, tag/, files/, guard/, trust/, update/
-              # commonMain + jvmSharedMain (shared JVM for desktop+Android) + desktopMain + androidMain
-composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
-androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
-server/       # self-hosted sync server (Ktor, AGPL-3.0)
-sync-wire/    # wire contract shared by client and server (needed by server-only builds)
-docs/         # HTML prototypes (source of truth for UX) and design documents
-```
+## Plans and evidence
 
-## How we work
+The planner understands module dependencies: `sync-wire` affects server and clients, `shared`
+feeds Compose and Android, Compose feeds Android. Root build inputs and unknown executable inputs
+select all modules. A Python/policy/reviewer/CI-only change selects checks and selftest, not Gradle.
+Product assets and native libraries count as inputs. docs-only prose needs no build or review.
+Server edits also run the shared desktop integration suite, without demanding Android builds.
 
-Every change follows the same loop, but **what the loop demands depends on what the change is**.
-Ask the harness rather than guessing:
+Each stage owns its input snapshot and exact command. Editing agent instructions does not invalidate
+product test/build evidence. Editing a dependency invalidates its consumers. Restoring identical
+inputs restores an earlier receipt; committing identical content preserves it. Checks also depend
+on the diff base and change kind. Failed or interrupted checks never become green.
 
-```bash
-tools/harness/gate.py status     # kind, areas, and everything still owed
-tools/harness/gate.py task bug 133   # when the auto-detected kind is wrong
-```
+For tests the runner clears only that leaf task's XML directory, executes the explicit task with
+`--rerun`, then checks that task's JUnit XML. Missing, malformed, failing or entirely skipped results
+are refused. `sync-wire` currently has no test sources; its builds and consumer tests cover integration,
+not a direct suite. Direct Gradle commands remain useful iterations but produce no receipts.
 
-| Kind | How it is detected | What it owes |
-|---|---|---|
-| `docs` | no code in the diff | nothing — commit freely |
-| `refactor` | `refactor/` `chore/` `perf/` branch | checks · tests · build · detekt · reviewers |
-| `feature` | `feat/` branch, or an unnamed branch with code | the same, plus a test touched |
-| `bug` | `fix/` `bug/` `hotfix/` branch, or declared | the same, plus a test recorded failing **before** the fix |
+Evidence is private and worktree-local in `.git/skerry-harness-v2/`. State updates are atomic and
+locked. A separate user-wide build lock prevents two managed runs in different worktrees/clones.
+Manual Gradle calls are outside that lock. Process cleanup affects only the runner's own process
+group and inherited launch marker; Linux cleanup also follows marked detached children. No global
+Kotlin-daemon kill. Other hosts remain unverified live. Old `.git/skerry-gate` receipts are historical and never imported
+as verification. Corrupt/unsupported v2 state is an explicit error, not an empty green state.
 
-Areas add to that: UI or Android in the diff pulls in `:androidApp:compileDebugKotlin` and
-`ecc:a11y-architect`; server pulls in `ecc:java-reviewer`; terminal pulls in
-`ecc:performance-optimizer`. A declaration can make the gate stricter, never looser — a diff with
-Kotlin in it is never treated as docs.
+CI runs the same planner with `--build-only` (the full tree on main, the change on PRs); its successful exit means the planned build stages
+passed. It does not claim local RED/review evidence. Fetch full Git history so the diff base exists.
 
-### 0. Orient before writing code
+## Reviews and agent profiles
 
-- **Read `docs/coding-guidelines.md`** — it encodes bugs we already paid for. Division of labour:
-  this file owns the *process*, `coding-guidelines.md` owns *what the code must look like*
-  (abstraction catalogue, decomposition, coroutine and security patterns, self-review checklist).
-  A rule belongs in exactly one of the two.
-- **Search for an existing abstraction before creating one** (guidelines §1). Second repetition is a
-  signal, third makes extraction mandatory.
-- For a non-trivial feature, map the ground first with `ecc:code-explorer` (how the existing
-  subsystem works) and/or `ecc:code-architect` (where the new pieces belong). Skip for small fixes.
-- Work happens on a feature branch. `main` is protected — every change lands through a PR.
+`tools/harness/agents.toml` is the dispatch source of truth. Narrow exploration uses a lighter model
+with low reasoning; bounded implementation and project/Kotlin review use a workhorse with medium
+reasoning; security review uses high reasoning. No profile defaults to maximum reasoning.
+`gate.py agent-plan` prints model IDs, effort, purpose and the memory-aware concurrency limit.
+An unsupported model must be reported and explicitly remapped; never silently inherit the parent.
 
-### 1. RED — the failing test comes first
+Always supply minimal task context (`fork_turns="none"`), relevant contracts, owned files and the
+review token. Independent light agents may run within the reported limit; builds and reviews run
+in separate phases. Read-only reviewers must not run Gradle or mutate Git/source state.
 
-- Write the test before the implementation, in `commonMain` test sources unless the behaviour is
-  genuinely platform-specific.
-- Run it and **confirm it fails for the intended reason**, not on a compile error or a typo.
-- For a bug fix the test must reproduce the bug, and the harness wants that on record:
+Every code change gets `skerry-reviewer` (project rules, coverage and correctness); Kotlin changes
+add `skerry-kotlin-reviewer`; protocol/vault/server/trust changes add `skerry-security-reviewer`.
+Additional specialist reviews are a judgment call, not a plugin-installation-dependent requirement.
+Prompts ship in `.agents/reviewers`; local Codex configs are generated from them with `sync-agents`.
 
-  ```bash
-  tools/harness/gate.py red --tests '*ReconcileDebt*' --file shared/src/commonTest/kotlin/.../ReconcileDebtStoreTest.kt
-  ```
+ECC guidance is selected by `gate.py skill-plan` and included in `plan`, `agent-plan`, `reviewers`
+and `review-start` dispatches. Read each selected skill before relevant work and pass its source
+reference and the capability instruction to subagents. Project contracts outrank generic examples:
+use kotlin.test/JUnit 5 and hand-written fakes, commonMain contracts and this project's Compose
+primitives; do not introduce Kotest/MockK, Android ViewModels, Room or NavController from a skill.
 
-  It refuses to record a test that passes, and refuses a pattern that matched nothing. If the fix
-  is already written, revert it, record RED, restore it — otherwise the bug fix cannot be committed.
-- For controllers touching coroutines, cover cancellation and re-entry — that's the bug class
-  guidelines §3 exists for.
-- `ecc:tdd-guide` and the `ecc:kotlin-testing` skill are the reference for test shape; ignore their
-  Kotest/MockK examples and use `kotlin.test` (see above).
+Paths suggest Kotlin/testing, Compose/accessibility, Ktor, security, SQL/migrations and harness
+skills. Terminal/graphics changes suggest a performance specialist. Paths cannot reliably infer
+coroutine behavior, architectural work, build failures or coverage gaps: add `--focus coroutines`,
+`--focus architecture`, `--focus build`, `--focus errors` or `--focus coverage` as appropriate.
+Repeat focus flags on each planning/review-start command; they are task hints, not persisted state.
+For a non-trivial feature, consider code-explorer/code-architect before implementation; a build
+failure can use kotlin-build-resolver for narrow read-only diagnosis, with builds kept in the parent.
 
-### 2. GREEN — minimal implementation, then refactor
+These specialist prompts are recommendations, not mandatory fan-out. Use their printed model/effort
+and execution-role fallback if the native ECC role is not callable. Read the source prompt first,
+apply the narrow task and parent constraints, verify every finding, then fix or explain rejection.
+Required project reviews and their receipts remain independent of plugin installation.
 
-- Contracts and domain types in `commonMain`; platform libraries behind `expect`/`actual` or an
-  interface. UI sees common contracts only.
-- Desktop⇆Android parity: a feature isn't done until it works on both.
-- Delete the code the change orphaned, in the same commit.
+Source discovery uses `--ecc-root`, then `ECC_PLUGIN_ROOT`, then a single cached ECC version under
+`CODEX_HOME` (default `~/.codex`). Multiple cached versions require explicit selection or the session's
+available-skills catalogue. `available` means the source file can be located, not that a native role
+is enabled or a skill has already been read. `missing`/`unresolved` is explicit; report the guidance
+gap and follow project contracts. Never fabricate a skill name, install a plugin implicitly or count
+unavailable guidance as applied.
 
-### 3. Build gate
+Start a review before launching the agent; the token pins its scope and base. A report without a
+launch token, with a mismatched reviewer, or after scope drift is refused. Findings remain open until
+explicitly fixed/rejected with a concrete explanation. A second report never erases earlier findings.
+Each subsequent pass reads the delta and necessary callers. After two completed rounds, further
+changes remain unreviewed and block delivery; a third round is the user's decision.
 
-```bash
-tools/harness/gate.py run        # runs exactly the stages this change owes, in order
-```
+Review schema and CLI examples are in [the harness README](../tools/harness/README.md).
 
-- **Only the runner marks a stage green.** It executes the stage, reads the exit code, and pins the
-  result to a digest of the tree it ran against. For `tests` the exit code is not enough — it also
-  reads `**/build/test-results/*/*.xml` back and refuses a green when a suite failed, a file does
-  not parse, or every result predates the run (a full run that executed nothing also exits 0). A Gradle run made by hand is not recorded — not
-  because hand runs are forbidden (iterate freely), but because nothing outside the runner can prove
-  which code an exit code belonged to.
-- Stages are `checks` (the deterministic project rules), `tests`, `build` (lint on), `detekt`, and
-  `android` when the diff touches UI. Logs land in `.git/skerry-gate/<stage>.log`.
-- detekt fails on **new** findings only; the existing ones sit in `gradle/detekt-baseline-*.xml`.
-  Re-baselining (`./gradlew detektBaseline`) to silence your own finding is not allowed — fix it,
-  or say out loud why it stays.
-- After a filtered run (`--tests`), Gradle calls the aggregate task up to date and the next full run
-  "passes" in half a second having run nothing. The runner deletes the `build/test-results/<task>/`
-  directories before the next run when that has happened, and again after any run whose results
-  refused the green — a task whose output is gone is out of date on its own account, while
-  `cleanAllTests` does not fix it and `--rerun` reaches only the task it follows.
-- If the build breaks in a way that isn't obviously yours, hand it to `ecc:kotlin-build-resolver`
-  (minimal diffs, no architectural edits) instead of reshaping the design around the error.
-- New test added? Re-run it with the fix reverted to prove it actually catches the regression.
-- Editing anything afterwards reopens the gate — the digest moved. That is not pedantry: it is the
-  only way "green" can mean the code being committed.
+## Product conventions
 
-### 4. Review gate before the PR
-
-Once the branch is green, `tools/harness/gate.py reviewers` prints the set this change needs and
-which of them have not run against the current tree. Run them after Gradle exits, one at a time
-when memory is tight, scoped to `git diff main...HEAD` plus the uncommitted worktree:
-
-| Agent | Looks for |
-|---|---|
-| `skerry-reviewer` | this project's own rules — parity, primitives, vault, the abstraction catalogue |
-| `skerry-kotlin-reviewer` | structured concurrency, Compose recomposition, Kotlin idioms — for *this* stack |
-| `skerry-security-reviewer` | the vault, untrusted protocol input, the sync/team boundary |
-| `ecc:silent-failure-hunter` | swallowed exceptions, bad fallbacks, errors that never propagate |
-| `ecc:pr-test-analyzer` | whether the tests actually cover the behaviour, not just the lines |
-
-The first three live in `.agents/reviewers/` — they ship with the clone, so the fan-out does not
-depend on a plugin installed on one machine. The generic Kotlin and security reviewers were
-replaced because they review a stack this repo does not have (ViewModels, Room, NavController;
-web vulnerabilities in an SSH client).
-
-The harness adds `ecc:a11y-architect`, `ecc:java-reviewer` or `ecc:performance-optimizer` by area,
-and reports them as *skipped* rather than owed when the plugin is not installed — say so in the
-hand-off when that happens. Add by judgement: `ecc:type-design-analyzer` (new domain types),
-`ecc:comment-analyzer` (comment rot), `ecc:database-reviewer` (SQL).
-
-Rules for reviews:
-
-- Reviewers are **read-only**. They report; the fixes are mine, in the working tree.
-- Subagents must never run `git checkout`, switch branches, or stash — they share the worktree.
-- Every finding gets one of two outcomes: fixed, or explicitly rejected to the user with the reason.
-  Silent dismissal is not an option.
-- A fix that changes behaviour goes back through step 1 (test first).
-- Reviewers are fallible: verify each finding against the actual code before acting on it.
-- **Two rounds per branch, and the third one is the user's call.** Collect every finding, apply
-  every fix, then run one more pass — not a pass per finding. After the second round the gate stops
-  demanding reviewers and prints what went unread instead; launching a third fan-out needs the user
-  to ask for it. Fixing what a reviewer found is what moves the files it read, so inside its own
-  scope the loop does not converge on its own: it ran eleven times on one branch and cost hours.
-- A reviewer that has already seen this branch gets **only what moved since** its last pass.
-  `gate.py reviewers` prints that delta per reviewer; hand it those files, not `main...HEAD` again.
-- Findings are kept in `.git/skerry-gate/reviews/<agent>.md` as each reviewer finishes, so what is
-  still owed survives a context compaction. Read them back rather than re-running the fan-out to
-  rediscover what a reviewer already said.
-
-A reviewer with nothing in its scope is not owed at all, and each reviewer is owed again only
-when **its own scope** moves — the vault reviewer is not
-reopened by a Compose layout fix, and the server reviewer is not reopened by either. `skerry-reviewer`
-and `ecc:pr-test-analyzer` stay whole-change on purpose: parity, i18n and coverage are properties of
-the change, not of one directory. The scopes live in `REVIEWER_SCOPES` in `tools/harness/policy.py`, and the two-round cap in
-`REVIEW_ROUNDS` beside them. The harness's own `.py` files are outside the security reviewer's
-scope: they still owe `selftest`, the deterministic checks and the whole-change passes, but a
-gate fix does not reopen the vault review.
-
-`/ecc:kotlin-review`, `/ecc:code-review` and `/ecc:review-pr` are the command shortcuts for the same
-agents when a single-angle pass is enough.
-
-**The whole loop is enforced, not advisory.** `git commit`, `git push` and `gh pr create` are
-refused until this change has met the requirements for what it is — see the table at the top of this
-section. The guard and the runner read the same policy module, so what is demanded and what is
-reported can never disagree; `tools/harness/gate.py status` always says exactly what is left.
-
-What "verified" is pinned to is **content**, not time: every stage records a digest of the files
-that can affect a build. So an edit made by `sed`, by a patch, or by an editor outside the session
-reopens the gate just as an `Edit` call does, `git commit` does not reopen it, and reverting a change
-restores the green state it had. Documentation-only changes owe nothing at all.
-
-The deliberate bypass is `SKERRY_GATE_OVERRIDE=1` on the command, and using it means saying out loud
-why. It does not unprotect `main`.
-
-The harness has its own tests — `python3 tools/harness/selftest.py`, 200+ cases, no
-Gradle. Changing a rule means changing them too; the previous version had no tests and both of its
-holes were found in production.
-
-### 5. Hand-off
-
-- Commit messages in English. Commit and push **only when asked**.
-- PR description in English: what the feature does, no development history, no "why we tried X".
-- Tell the user how to verify the result with their own eyes — screen, scenario, keystrokes.
-- State plainly what was *not* verified (live device, live server, other OS).
-
-## Conventions
-
-Code-level rules — reusable abstractions, file size, coroutines, security, design tokens, i18n —
-live in `docs/coding-guidelines.md` and are not repeated here. What's left is project-wide:
-
-- **UI 1:1 from the prototype** in `docs/design/Skerry Tablet.html` (`Skerry Logo.html` is the
-  brand-mark source). Don't invent chrome; design tokens come from its `:root` block, mirrored in
-  the Compose theme.
-- A new keyboard shortcut ships with its row in Settings → Keyboard in the same commit.
-- UI copy is technical and short; no reassuring second sentence.
-- **Reporting to the user follows the same register as UI copy.** This is systems software, not a
-  blog: fact, number, conclusion. A table or a short list beats paragraphs. Don't restate what was
-  just done at length, don't enumerate options you won't take, don't ask about the obvious. Spell
-  something out only when it hides a real gotcha or a decision that changes the work.
-- Code comments in English, and only for the non-obvious *why*.
-
-## Tooling
-
-The ECC plugin (`ecc@ecc`) supplies the agents above plus skills worth loading in context:
-`kotlin-testing`, `kotlin-coroutines-flows`, `compose-multiplatform-patterns`, `kotlin-patterns`,
-`tdd-workflow`, `security-review`, `git-workflow`. Contributors without the plugin can read this
-section as a checklist — the requirements (tests first, review before merge) are the point; the
-agents are just how we execute them here.
-
-## Warnings
-
-- **ProGuard/minification is disabled on purpose** for the desktop release — it broke the crypto
-  stack (JNA/libsodium, okio, BouncyCastle's signed jar). See the comment in
-  `composeApp/build.gradle.kts` before re-enabling.
-- CI runs `xvfb-run --auto-servernum ./gradlew test allTests`; UI tests need the virtual display.
-- Licenses: GPL-3.0 for the clients, AGPL-3.0 for `server/`.
+- UI follows `docs/design/Skerry Tablet.html`; `Skerry Logo.html` defines the brand mark.
+- Keyboard shortcuts ship their Settings → Keyboard row in the same change.
+- Desktop minification stays disabled: it breaks JNA/libsodium, okio and signed crypto jars.
+- Client license: GPL-3.0; server: AGPL-3.0.
+- User-facing text is short and technical; code comments and delivery descriptions are in English.

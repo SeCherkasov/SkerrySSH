@@ -1,578 +1,188 @@
 #!/usr/bin/env python3
-"""The gate runner — the only thing that can mark a stage green.
-
-The previous recorder inferred a green build from the *text* of a Bash command and the tool's
-reply. Two costs came out of that: a log redirected into a shell variable was unreadable, so real
-green runs went unrecorded (about ten of them), and `./gradlew build` was not recognised at all
-because the pattern only knew `allTests` and `detektAll`.
-
-Here the runner executes the stage itself, reads its exit code, and pins the result to a digest of
-the tree it ran against. Nothing is inferred. A run whose tree changed underneath it is discarded
-rather than recorded against the wrong code.
-
-    tools/harness/gate.py status              what this change is, and what it still owes
-    tools/harness/gate.py run [stage ...]     run what is owed (or the named stages)
-    tools/harness/gate.py red --tests P       prove a test fails before the fix exists
-    tools/harness/gate.py task bug [ref]      override the auto-detected kind
-    tools/harness/gate.py checks              the deterministic rules alone
-    tools/harness/gate.py reviewers           which reviewers this change needs
-    tools/harness/gate.py review NAME         record a reviewer's findings once its report arrives
-"""
-
+"""Skerry harness v2: plan, execute and explain evidence for the current change."""
 from __future__ import annotations
-
 import argparse
-import glob
-import os
-import re
-import shutil
-import subprocess
+import contextlib
+import io
+import json
 import sys
-import time
-import xml.etree.ElementTree as ElementTree
+from pathlib import Path
 
-if __package__ in (None, ""):  # invoked as a script, not as a module
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from harness import checks, policy, state
-else:
-    from . import checks, policy, state
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from harness import agents, capabilities, checks, environment, evidence, policy, reviews, runner, state
 
-# Test source root -> the Gradle task that runs it. `jvm("desktop")` names the JVM target
-# "desktop", so the KMP modules test through :<module>:desktopTest.
-TEST_TASKS = (
-    ("shared/src/commonTest", ":shared:desktopTest"),
-    ("shared/src/desktopTest", ":shared:desktopTest"),
-    ("shared/src/jvmSharedTest", ":shared:desktopTest"),
-    ("composeApp/src/commonTest", ":composeApp:desktopTest"),
-    ("composeApp/src/desktopTest", ":composeApp:desktopTest"),
-    ("server/src/test", ":server:test"),
-    ("androidApp/src/test", ":androidApp:testDebugUnitTest"),
-)
 
+def debt(mode="final", cwd=None):
+    owed = [s.name for s in policy.plan(mode, cwd) if not evidence.current(s, cwd)]
+    if mode == "final":
+        owed += runner.red_debt(cwd) + reviews.debt(cwd)
+    return owed
 
-# The harness's own suite is not a Gradle task, and a `fix/` branch that touches only the gate
-# still owes a RED record.
-HARNESS_SUITE = "selftest"
-# A test name or a glob of one. Anything else — an option, a shell fragment — is handed to the
-# suite as an argument, and its own usage error would exit non-zero and read as a failing test.
-TEST_PATTERN = re.compile(r"^[A-Za-z0-9_.*]+$")
-# What a run that actually reached a test looks like: unittest prints both lines, in this order.
-HARNESS_RED_EVIDENCE = re.compile(r"^Ran [1-9]\d* tests?\b.*^FAILED \(", re.S | re.M)
-# Gradle prints this only from a test task that ran and had failures. A compile error, a
-# missing dependency or a bad task name fails the build without it.
-GRADLE_RED_EVIDENCE = re.compile(r"There were failing tests|tests? completed, \d+ failed")
 
+def result(summary, data=None, owed=None, artifacts=None):
+    return {"status": "owed" if owed else "ok", "summary": summary,
+            "next_actions": owed or [], "artifacts": artifacts or [], "data": data or {}}
 
-# Where a Gradle test task writes its JUnit XML: <module>/build/test-results/<task>/TEST-*.xml.
-# Every module of this build is top level today; the walk is recursive anyway, because a nested
-# one whose results the guard could not see would fail open — green off the other modules' XML.
-TEST_RESULTS_GLOB = "**/build/test-results/*/*.xml"
 
-
-# Harness code and executable agent policy are code the gate watches — editing either can change
-# what is required — but Gradle cannot see them. They reopen the stage; they cannot make its
-# results stale.
-HARNESS_PREFIXES = ("tools/harness/", ".agents/hooks/", ".agents/reviewers/")
-
-
-def _gradle_input(path: str) -> bool:
-    return path not in state.AGENT_FILES and not path.startswith(HARNESS_PREFIXES)
-
-
-def _results_must_be_fresh(gradle_digest: str) -> bool:
-    """Whether this run has to have executed something for its green to mean anything.
-
-    It does, unless the last green `tests` record was pinned to the same build-visible content:
-    then the results on disk are the ones that green was made of, and demanding a re-run would
-    spend the whole suite reproving byte-identical Kotlin.
-    """
-    previous = state.load().get("stages", {}).get("tests", {})
-    return not (previous.get("ok") and previous.get("gradle_digest") == gradle_digest)
-
-
-def _clear_test_results(root: str) -> list[str]:
-    """Remove the result directories a refused verdict read, so the next run has to write its own.
-
-    `--rerun` is a *task* option: it binds to the task it follows, so on `test allTests` it reaches
-    the aggregate and not the leaf tasks that write the XML — and being out of date does not
-    propagate to a task's dependencies. A test task whose output directory is gone is out of date
-    on its own account. It is also the only cure for a directory no live task owns any more — a
-    renamed target, a variant the build stopped producing — whose stale XML would otherwise be
-    read as this run's evidence forever.
-    """
-    inside = os.path.join(os.path.realpath(root), "")
-    removed: list[str] = []
-    for path in glob.glob(os.path.join(root, TEST_RESULTS_GLOB), recursive=True):
-        directory = os.path.dirname(os.path.realpath(path))
-        if directory in removed or not directory.startswith(inside):
-            continue
-        if os.path.join("build", "test-results") not in directory:
-            continue
-        shutil.rmtree(directory, ignore_errors=True)
-        removed.append(directory)
-    return removed
-
-
-def _suite_failed(element: ElementTree.Element) -> bool:
-    """A suite is clean only when it says so in digits — anything else is read as a failure.
-
-    Absent, empty or non-numeric counts are not evidence of a green suite, and a guard that reads
-    them as zero would hand back the verdict the exit code already gave for free.
-    """
-    for attribute in ("failures", "errors"):
-        raw = (element.get(attribute) or "").strip()
-        if not raw.isdigit() or int(raw):
-            return True
-    return False
-
-
-def test_results_verdict(root: str, since: float = 0.0) -> tuple[bool, str]:
-    """What the test tasks actually wrote, read back from disk.
-
-    `./gradlew test allTests` exits 0 for a leaf test task the build cache restored or left up to
-    date, so on its own the exit code says nothing about the code being gated: during #353 the
-    runner recorded `tests ok` while the results on disk still held eight failures (#364). The
-    guard is on the *results*, in two halves:
-
-    * content — every suite on disk has to report zero failures and zero errors, and the counts
-      have to be there to read. A cache hit on identical bytecode is legitimate, so what is
-      checked is what the results say, never the cache outcome;
-    * evidence — at least one result file has to be newer than `since`, the moment the stage
-      started. That is the other half of the same hole: a full run that executes nothing at all
-      exits 0 in half a second, and yesterday's green results are not about today's code.
-
-    Only *one* file has to be fresh, not all of them. Gradle skips a module whose inputs did not
-    move, and that module's earlier results stay true of this content — demanding a rerun of every
-    module would refuse a green that is honest.
-    """
-    paths = sorted(glob.glob(os.path.join(root, TEST_RESULTS_GLOB), recursive=True))
-    suites = tests = 0
-    fresh = False
-    failed: list[str] = []
-    broken: list[str] = []
-    for path in paths:
-        name = os.path.relpath(path, root)
-        try:
-            fresh = fresh or os.path.getmtime(path) >= since - MTIME_SLACK
-            for _, element in ElementTree.iterparse(path, events=("start",)):
-                if element.tag != "testsuite":
-                    continue
-                suites += 1
-                count = (element.get("tests") or "0").strip()
-                tests += int(count) if count.isdigit() else 0
-                if _suite_failed(element):
-                    failed.append(element.get("name") or name)
-        except (ElementTree.ParseError, OSError, ValueError) as exc:
-            # Named in full: nothing reruns a half-written file back into shape, and a task
-            # directory the build no longer owns is cleared by deleting it or by `clean`.
-            broken.append(f"{name} ({type(exc).__name__})")
-    detail = f"{suites} suite(s), {tests} tests"
-    if broken:
-        return False, f"{detail}; unreadable, delete or clean: {_first(broken)}"
-    if not suites:
-        # No file at all, or a file a dying test JVM left with nothing in it. Either way the run
-        # produced no evidence, and an exit code on its own is what #364 is about.
-        return False, "no test results on disk — nothing ran"
-    if failed:
-        return False, f"{detail}; failing: {_first(sorted(failed))}"
-    if not fresh:
-        return False, f"{detail}, all older than this run — nothing ran"
-    return True, detail
-
-
-# The stage's own start time against a file's mtime, with room for a coarse clock. A stale result
-# is hours old; nothing this side of a second changes a verdict.
-MTIME_SLACK = 1.0
-
-
-def _first(names: list[str], limit: int = 5) -> str:
-    head = ", ".join(names[:limit])
-    return head if len(names) <= limit else f"{head} and {len(names) - limit} more"
-
-
-def _env() -> dict:
-    env = dict(os.environ)
-    env.setdefault("ANDROID_HOME", os.path.expanduser("~/Android/Sdk"))
-    return env
-
-
-def _run_logged(args: list[str], stage: str, root: str) -> tuple[int, str]:
-    """Run a stage command, tee its output to .git/skerry-gate/<stage>.log, return (code, log)."""
-    log = state.log_path(stage) or os.path.join(root, f".gradle-{stage}.log")
-    os.makedirs(os.path.dirname(log), exist_ok=True)
-    # Whatever a failing test printed is nobody else's business on a shared machine, and the logs
-    # sit beside a 0600 state file and 0600 findings.
-    os.chmod(os.path.dirname(log), 0o700)
-    with open(log, "w", encoding="utf-8") as fh:
-        try:
-            proc = subprocess.run(args, cwd=root, env=_env(), stdout=fh,
-                                  stderr=subprocess.STDOUT, timeout=3600)
-            code = proc.returncode
-        except (OSError, subprocess.SubprocessError) as exc:
-            fh.write(f"\nharness: {type(exc).__name__}: {exc}\n")
-            code = 127
-    return code, log
-
-
-def tail(path: str, lines: int = 40) -> str:
-    try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            return "".join(fh.readlines()[-lines:])
-    except OSError:
-        return ""
-
-
-def run_stage(stage: str, root: str) -> bool:
-    before = state.tree_digest("all")
-    started = time.time()
-    unproven = False
-
-    if stage == "checks":
-        findings = checks.run()
-        blocking = [f for f in findings if f.severity == checks.BLOCK]
-        for finding in findings:
-            print(finding)
-        ok = not blocking
-        detail = f"{len(blocking)} blocking, {len(findings) - len(blocking)} warnings"
-    else:
-        command = list(policy.STAGE_COMMANDS[stage])
-        # A test task that ran with --tests leaves the aggregate task looking up-to-date, so the
-        # next full run reports success in half a second without executing anything. `cleanAllTests`
-        # does not break that, and `--rerun` only reaches the task it follows, so the leaf tasks are
-        # made out of date the one way that always works: their output is removed.
-        cleared = False
-        if stage == "tests" and state.load().get("test_cache_dirty"):
-            command.append("--rerun")
-            for directory in _clear_test_results(root):
-                print(f"harness: cleared {os.path.relpath(directory, root)}")
-                cleared = True
-        print(f"harness: {' '.join(command)}")
-        code, log = _run_logged(command, stage, root)
-        ok = code == 0
-        detail = f"exit {code}, log {log}"
-        if not ok:
-            print(tail(log))
-        elif stage == "tests":
-            # An exit code is not a test run. Read what the tasks left on disk before pinning a
-            # green to this tree.
-            gradle_digest = state.digest_of(state.scoped_entries(_gradle_input))
-            ok, verdict = test_results_verdict(
-                root, started if _results_must_be_fresh(gradle_digest) else 0.0)
-            detail = f"{detail}, {verdict}"
-            unproven = not ok
-            if not ok:
-                print("harness: the run exited 0, but the results on disk do not back it — "
-                      f"{verdict}. A test task restored from the build cache or left up to date "
-                      "gates nothing; the next run of this stage clears the results it read and "
-                      "makes the tasks produce their own.")
-            if not ok and cleared:
-                # The outputs were removed before this run and came back the same, so what is
-                # being replayed is the cache entry itself — the state #364 was found in.
-                print("harness: these results were cleared before this run and came back the "
-                      "same. Gradle is replaying a cache entry for this bytecode: re-run with "
-                      "--rerun-tasks, or purge ~/.gradle/caches/build-cache-1.")
-
-    after = state.tree_digest("all")
-    elapsed = int(time.time() - started)
-    if after != before:
-        print(f"harness: {stage} discarded — the tree changed while it ran ({elapsed}s). "
-              "Re-run it against a settled worktree.")
-        return False
-
-    extra = {"detail": detail, "seconds": elapsed}
-    if stage == "tests":
-        extra["gradle_digest"] = state.digest_of(state.scoped_entries(_gradle_input))
-    state.record_stage(stage, ok, extra=extra)
-    if stage == "tests":
-        # A refused verdict has to leave the retry a way out: rerunning the identical command
-        # against the same up-to-date tasks would print the identical refusal. A run that failed
-        # on its own exit code needs no such push — it did execute.
-        st = state.load()
-        st["test_cache_dirty"] = unproven
-        state.save(st)
-    print(f"harness: {stage} {'ok' if ok else 'FAILED'} ({elapsed}s) — {detail}")
-    return ok
-
-
-def cmd_run(args: argparse.Namespace) -> int:
-    root = state.repo_root()
-    task, debt = policy.gate_debt()
-    if args.stages:
-        stages = args.stages
-    else:
-        stages = [item.split(" — ")[0] for item in debt]
-        stages = [s for s in stages if s in policy.STAGE_COMMANDS or s == "checks"]
-        if not stages and not debt:
-            print(f"harness: nothing owed — {task['kind']} on {task['branch']} is fully gated.")
-            return 0
-    print(f"harness: {task['kind']} ({task['source']}), areas: "
-          f"{', '.join(task['areas']) or 'none'}")
-
-    failed = []
-    for stage in stages:
-        if not run_stage(stage, root):
-            failed.append(stage)
-            if not args.keep_going:
-                break
-    if not args.keep_daemons:
-        _stop_daemons(root)
-
-    _, debt = policy.gate_debt()
-    print()
-    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
-    return 1 if failed else 0
-
-
-def _stop_daemons(root: str) -> None:
-    """Gradle and Kotlin daemons together will hang this machine; the gate is the end of a run."""
-    subprocess.run(["./gradlew", "--stop"], cwd=root, env=_env(),
-                   capture_output=True, timeout=120, check=False)
-    subprocess.run(["pkill", "-f", "KotlinCompileDaemon"], capture_output=True, check=False)
-
-
-def proves_a_failing_test(task_name: str, body: str) -> bool:
-    """Whether the run actually reached a test and that test failed.
-
-    A non-zero exit is not a failing test: an import error, a syntax error, a usage error in the
-    runner or a compile error in the module all exit non-zero, and each of those would record a
-    RED phase no test ever ran. Fixing the typo then moves the sources and the gate reports the
-    bug as reproduced.
-    """
-    pattern = HARNESS_RED_EVIDENCE if task_name == HARNESS_SUITE else GRADLE_RED_EVIDENCE
-    return bool(pattern.search(body))
-
-
-def cmd_red(args: argparse.Namespace) -> int:
-    root = state.repo_root()
-    task_name = args.task or _task_for_file(args.file or "")
-    if not task_name:
-        print("harness: which task runs this test? Pass --task (e.g. :shared:desktopTest, or "
-              f"{HARNESS_SUITE} for the harness's own suite) or --file with the test's path.")
-        return 2
-
-    if task_name == HARNESS_SUITE:
-        # Gradle cannot run a Python test. Without this branch a bug fix to the gate itself could
-        # not record the failure it fixes — the one change where that matters most.
-        if not TEST_PATTERN.match(args.tests):
-            print("harness: --tests takes a test name or a glob of one, not an option — "
-                  f"`{args.tests}` would be handed to the suite as an argument.")
-            return 2
-        command = [policy.PY, "tools/harness/selftest.py", "-k", args.tests.strip("*")]
-        empty = "Ran 0 tests"
-    else:
-        command = ["./gradlew", task_name, "--tests", args.tests, "--rerun"]
-        empty = "No tests found for given includes"
-        st = state.load()
-        st["test_cache_dirty"] = True  # a filtered run leaves the aggregate task looking up to date
-        state.save(st)
-
-    print(f"harness: {' '.join(command)}")
-    code, log = _run_logged(command, "red", root)
-    body = tail(log, 200)
-
-    if empty in body:
-        print(f"harness: the pattern matched no test — nothing was proven.\n{tail(log, 15)}")
-        return 2
-    if code == 0:
-        print("harness: the test PASSED. A test that is green before the fix proves nothing about "
-              "the bug — make it reproduce the failure first.")
-        return 1
-    if not proves_a_failing_test(task_name, body):
-        print(f"harness: the run did not report a failing test — nothing was proven.\n"
-              f"{tail(log, 15)}")
-        return 2
-
-    record = {
-        "task": task_name, "pattern": args.tests, "at": time.time(),
-        "branch": state.current_branch(), "src_digest": state.tree_digest("src"),
-    }
-    st = state.load()
-    st.setdefault("red", []).append(record)
-    state.save(st)
-    print(f"harness: RED recorded — {task_name} --tests {args.tests} failed against the current "
-          "sources. Now make it pass; the gate will check the sources actually changed.")
-    return 0
-
-
-def _task_for_file(path: str) -> str:
-    normalised = path.replace(os.sep, "/")
-    if normalised.startswith(("tools/harness/", ".agents/hooks/")):
-        return HARNESS_SUITE
-    for prefix, task_name in TEST_TASKS:
-        if prefix in normalised:
-            return task_name
-    return ""
-
-
-def cmd_task(args: argparse.Namespace) -> int:
-    if args.kind not in policy.KINDS:
-        print(f"harness: kind must be one of {', '.join(policy.KINDS)}")
-        return 2
-    st = state.load()
-    st["task"] = {"kind": args.kind, "ref": args.ref or "",
-                  "branch": state.current_branch(), "at": time.time()}
-    state.save(st)
-    return cmd_status(args)
-
-
-# Why a report was turned away, in the words the operator needs to act on it.
-REVIEW_REFUSALS = {
-    "no findings": "that text carries no findings — it reads as a launch acknowledgement",
-    "recycled": "that is the report already on disk, not a new pass",
-    "not saved": "the record could not be written",
-}
-
-
-def cmd_review(args: argparse.Namespace) -> int:
-    """Record a reviewer's findings once its report is actually in hand.
-
-    The PostToolUse hook can only record a fan-out that hands its findings back inline. A
-    backgrounded reviewer returns a launch acknowledgement instead and reports minutes later — so
-    without this command the gate would close on the launch, and "reviewed" would mean "started".
-    """
-    reviewer = args.agent.split(":")[-1]
-    if reviewer not in policy.known_reviewers():
-        print(f"harness: {args.agent} is not one of this repository's reviewers")
-        return 2
-    try:
-        if args.file in (None, "-"):
-            text = sys.stdin.read()
-        else:
-            with open(args.file, encoding="utf-8") as fh:
-                text = fh.read()
-    except (OSError, UnicodeDecodeError) as exc:
-        print(f"harness: cannot read the report — {exc}")
-        return 2
-    stored = state.review_report_path(reviewer)
-    if args.file not in (None, "-") and stored and os.path.exists(stored) \
-            and os.path.realpath(args.file) == os.path.realpath(stored):
-        # `gate.py reviewers` prints this path right under MISSING. Once the reviewer's scope moves
-        # it is owed again and its own stored round is no longer a replay — nothing in the text can
-        # tell that file apart from a report the reviewer just wrote, but where it came from can.
-        print("harness: that is the file the previous round was written to, not a new pass — "
-              f"re-run {policy.agent_id(reviewer)} and record what it says.")
-        return 2
-    drift = policy.review_drift(reviewer)
-    # The verdict itself comes from `record_review`, the same one the hook gets: the CLI used to
-    # refuse on drift before the report was ever looked at, so the retry a refusal advertises was
-    # refused too and the reviewer could not be recorded at all without a fresh launch.
-    reason = policy.record_review(reviewer, text)
-    if reason == "moved":
-        print(f"harness: {reviewer} read a tree that has since moved — not recorded. Re-run it on:")
-        for path in drift:
-            print(f"  {path}")
-        return 2
-    if reason:
-        print(f"harness: nothing recorded — {REVIEW_REFUSALS.get(reason, reason)}")
-        return 2
-    print(f"harness: {reviewer} recorded against the current tree")
-    return 0
-
-
-def cmd_checks(_: argparse.Namespace) -> int:
-    return checks.main([])
-
-
-def cmd_reviewers(_: argparse.Namespace) -> int:
+def view(mode="final"):
     task = policy.classify()
-    st = state.load()
-    missing = policy.missing_reviewers(st, task)
-    base = state.merge_base()
-    print(f"range: {base[:12]}...HEAD (worktree included)")
-    for reviewer in policy.required_reviewers(task):
-        mark = "MISSING" if reviewer in missing else "ok"
-        print(f"  {mark:>11}  {policy.agent_id(reviewer)}")
-        if reviewer not in missing:
-            continue
-        delta = policy.reviewer_delta(st, reviewer)
-        if delta:
-            # A reviewer that has already seen this branch only needs what moved since. Handing it
-            # the whole diff again is what made a second round cost as much as the first.
-            print(f"{'':>13}re-run on the delta only — {len(delta)} file(s) changed since its "
-                  "last pass:")
-            for path in delta[:12]:
-                print(f"{'':>15}{path}")
-            if len(delta) > 12:
-                print(f"{'':>15}... and {len(delta) - 12} more")
-            report = state.review_report_path(reviewer)
-            if report and os.path.exists(report):
-                print(f"{'':>13}its previous findings: {os.path.relpath(report)}")
-    for reviewer in policy.skipped_reviewers(task):
-        print(f"  {'not installed':>11}  {policy.agent_id(reviewer)}")
-    skipped = policy.skipped_reviewers(task)
-    if skipped:
-        print(f"\n{len(skipped)} reviewer(s) unavailable here — the gate does not demand them, so "
-              "say in the hand-off that this angle went unreviewed.")
-    return 0
+    owed = debt(mode)
+    return result(f"{mode}: {task['kind']} on {task['branch']} — " +
+                  (f"{len(owed)} requirement(s) owed" if owed else "verified"), task, owed,
+                  [str(evidence.directory())])
 
 
-def _status_text(task: dict, debt: list[str], missed: list[tuple[str, list[str]]] | None = None
-                 ) -> str:
-    lines = [
-        f"task:    {task['kind']}  ({task['source']})",
-        f"branch:  {task['branch']}",
-        f"areas:   {', '.join(task['areas']) or 'none'}",
-        f"files:   {len(task['code_paths'])} code, {len(task['paths'])} total",
-    ]
-    if not debt:
-        lines.append("gate:    clear — commit and PR are unblocked.")
+def dispatch(args):
+    if args.command in ("status", "verify"):
+        return view(args.mode), bool(debt(args.mode))
+    if args.command == "plan":
+        stages = [{"name": s.name, "command": list(s.command), "current": evidence.current(s),
+                   "modules": list(s.modules)} for s in policy.plan(args.mode)]
+        return result(f"{args.mode} plan", {"task": policy.classify(), "stages": stages,
+                                             "agents": agents.plan(focus=args.focus, ecc_root=args.ecc_root)}), 0
+    if args.command == "skill-plan":
+        return result("ECC guidance selected by scope and explicit task focus",
+                      capabilities.plan(focus=args.focus, ecc_root=args.ecc_root)), 0
+    if args.command in ("reviewers", "agent-plan"):
+        data = agents.plan(focus=args.focus, ecc_root=args.ecc_root)
+        data["delta"] = {name: reviews.delta(name) for name in policy.reviewers()}
+        return result("explicit agent dispatch profiles", data, reviews.debt()), 0
+    if args.command == "doctor":
+        items = environment.doctor()
+        errors = [i["name"] + ": " + i["detail"] for i in items if i["status"] == "error"]
+        output = result("environment diagnostics", items, errors)
+        if not errors and any(i["status"] == "warning" for i in items):
+            output["status"] = "warning"
+        return output, bool(errors)
+    if args.command == "run":
+        stages = policy.plan(args.mode)
+        if args.stages:
+            unknown = set(args.stages) - {s.name for s in stages}
+            if unknown:
+                raise ValueError("stage not in this plan: " + ", ".join(sorted(unknown)))
+            stages = [s for s in stages if s.name in args.stages]
+        pending_gradle = any(s.command and s.command[0] == "./gradlew" and not evidence.current(s) for s in stages)
+        if pending_gradle:
+            errors = [i for i in environment.doctor() if i["status"] == "error"]
+            if errors:
+                raise ValueError("prerequisite failed: " + "; ".join(i["name"] + ": " + i["detail"] for i in errors))
+        ok = runner.run(stages)
+        output = view(args.mode)
+        if args.build_only:
+            output["summary"] = "planned build stages " + ("passed" if ok else "failed") + "; final review/RED gate is separate"
+            output["status"] = "partial" if ok and output["next_actions"] else output["status"]
+        return output, 1 if not ok or (output["next_actions"] and not args.build_only) else 0
+    if args.command == "checks":
+        task = policy.classify()
+        findings = checks.run(task=task, base=args.base or "")
+        blocking = [str(f) for f in findings if f.severity == checks.BLOCK]
+        return result("deterministic checks", [str(f) for f in findings], blocking), bool(blocking)
+    if args.command == "task":
+        current = policy.classify()
+        if policy.KINDS.index(args.kind) < policy.KINDS.index(current["kind"]):
+            raise ValueError("a declaration may only make the inferred kind stricter")
+        evidence.update(lambda data: data.setdefault("tasks", {}).update(
+            {current["branch"]: {"kind": args.kind, "ref": args.ref or ""}}))
+        return view(), 0
+    if args.command == "red":
+        runner.red(args.file, args.tests)
+        return result("RED recorded; implement the fix and keep the regression unchanged"), 0
+    if args.command == "review-start":
+        pending = reviews.start(args.reviewer, extra_reason=args.extra_round_reason)
+        pending["dispatch"] = agents.profile(args.reviewer, focus=args.focus, ecc_root=args.ecc_root)
+        pending["delta"] = reviews.delta(args.reviewer)
+        pending["report_template"] = {"schema": 1, "token": pending["token"],
+                                      "reviewer": args.reviewer, "summary": "", "findings": []}
+        return result("review launched snapshot; give this token and dispatch profile to the reviewer", pending), 0
+    if args.command == "review":
+        report_path = Path(args.file)
+        if report_path.stat().st_size > 200_000:
+            raise ValueError("review report exceeds 200 KB")
+        report = json.loads(report_path.read_text())
+        if args.reviewer and report.get("reviewer") != args.reviewer:
+            raise ValueError("report reviewer does not match the requested reviewer")
+        reviews.record(report)
+        return result("review recorded; resolve every finding", report, reviews.debt(), [args.file]), 0
+    if args.command == "resolve":
+        reviews.resolve(args.token, args.finding, args.outcome, args.reason)
+        return result("finding resolution recorded", owed=reviews.debt()), 0
+    if args.command == "install-hooks":
+        environment.install_hooks()
+        return result("Git pre-commit/pre-push hooks configured for this clone"), 0
+    if args.command == "sync-agents":
+        return result("local Codex reviewers generated from portable prompts and dispatch profiles",
+                      artifacts=agents.sync_configs()), 0
+    if args.command == "guard":
+        environment.guard(args.action, sys.stdin.read() if args.action == "push" else "")
+        return result("delivery verified"), 0
+    raise ValueError("unknown command")
+
+
+def parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("status", "verify", "plan", "run", "doctor", "checks", "task", "red", "reviewers",
+                 "agent-plan", "skill-plan", "review-start", "review", "resolve", "install-hooks", "sync-agents", "guard"):
+        command = commands.add_parser(name)
+        command.add_argument("--json", action="store_true")
+        if name in ("plan", "agent-plan", "skill-plan", "reviewers", "review-start"):
+            command.add_argument("--focus", action="append", choices=tuple(capabilities.ROUTES), default=[],
+                                 help="Task semantics paths cannot infer; repeat to add topics")
+            command.add_argument("--ecc-root", help="Installed ECC plugin directory; overrides ECC_PLUGIN_ROOT")
+        if name in ("status", "verify", "plan", "run"):
+            command.add_argument("--mode", choices=("fast", "final"), default="final")
+        if name == "run":
+            command.add_argument("stages", nargs="*")
+            command.add_argument("--build-only", action="store_true", help="CI: stage verdict only; never closes final review/RED debt")
+        elif name == "checks":
+            command.add_argument("--base")
+        elif name == "task":
+            command.add_argument("kind", choices=policy.KINDS)
+            command.add_argument("ref", nargs="?")
+        elif name == "red":
+            command.add_argument("--file", required=True)
+            command.add_argument("--tests", required=True)
+        elif name == "review-start":
+            command.add_argument("reviewer", choices=reviews.NAMES)
+            command.add_argument("--extra-round-reason", default="",
+                                 help="Only after the user's explicit instruction for another round")
+        elif name == "review":
+            command.add_argument("reviewer", nargs="?", help="Optional check against the report's reviewer")
+            command.add_argument("--file", required=True)
+        elif name == "resolve":
+            command.add_argument("token")
+            command.add_argument("finding")
+            command.add_argument("outcome", choices=("fixed", "rejected"))
+            command.add_argument("--reason", required=True)
+        elif name == "guard":
+            command.add_argument("action", choices=("commit", "push"))
+    return parser
+
+
+def main(argv=None):
+    args = parser().parse_args(argv or ["status"])
+    capture = io.StringIO()
+    try:
+        if not state.repo_root():
+            raise ValueError("not inside a Git repository")
+        with contextlib.redirect_stdout(capture) if args.json else contextlib.nullcontext():
+            output, code = dispatch(args)
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
+        output = {"status": "error", "summary": str(exc),
+                  "next_actions": ["Run gate.py doctor; fix the reported cause before retrying."], "artifacts": []}
+        code = 2
+    if args.json:
+        if capture.getvalue():
+            output["log"] = capture.getvalue()
+        print(json.dumps(output, indent=2))
     else:
-        lines.append("gate:    owed —")
-        lines += [f"           - {item}" for item in debt]
-        lines.append("run:     tools/harness/gate.py run")
-    for reviewer, delta in missed or []:
-        lines.append(f"unreviewed: {policy.agent_id(reviewer)} — {len(delta)} file(s) moved after "
-                     f"its {policy.REVIEW_ROUNDS} passes; the gate stopped asking, nobody read "
-                     "this:")
-        lines += [f"             {path}" for path in delta[:12]]
-        if len(delta) > 12:
-            lines.append(f"             ... and {len(delta) - 12} more")
-    return "\n".join(lines)
-
-
-def cmd_status(_: argparse.Namespace) -> int:
-    task, debt = policy.gate_debt()
-    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
-    return 1 if debt else 0
-
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="gate.py", description=__doc__)
-    sub = parser.add_subparsers(dest="command")
-
-    run = sub.add_parser("run", help="run the stages this change owes")
-    run.add_argument("stages", nargs="*", help="stage names; default is everything still owed")
-    run.add_argument("--keep-going", action="store_true", help="do not stop at the first failure")
-    run.add_argument("--keep-daemons", action="store_true", help="leave Gradle/Kotlin daemons up")
-    run.set_defaults(func=cmd_run)
-
-    red = sub.add_parser("red", help="record a test failing before the fix")
-    red.add_argument("--tests", required=True, help="Gradle --tests pattern")
-    red.add_argument("--task", help="Gradle test task, e.g. :shared:desktopTest")
-    red.add_argument("--file", help="path to the test file; the task is derived from it")
-    red.set_defaults(func=cmd_red)
-
-    task = sub.add_parser("task", help="declare the kind of change explicitly")
-    task.add_argument("kind", help=" | ".join(policy.KINDS))
-    task.add_argument("ref", nargs="?", help="issue or PR reference")
-    task.set_defaults(func=cmd_task)
-
-    review = sub.add_parser("review", help="record a reviewer's findings once its report arrives")
-    review.add_argument("agent", help="reviewer name, with or without its plugin prefix")
-    review.add_argument("--file", help="path to the report; omitted or '-' reads stdin")
-    review.set_defaults(func=cmd_review)
-
-    sub.add_parser("checks", help="deterministic project rules").set_defaults(func=cmd_checks)
-    sub.add_parser("reviewers", help="reviewers this change needs").set_defaults(func=cmd_reviewers)
-    sub.add_parser("status", help="what this change is and what it owes").set_defaults(func=cmd_status)
-
-    args = parser.parse_args(argv)
-    if not getattr(args, "func", None):
-        args = parser.parse_args(["status"])
-    if not state.repo_root():
-        print("harness: not inside a git repository")
-        return 2
-    return args.func(args)
+        print(output["summary"])
+        if args.command in ("plan", "reviewers", "agent-plan", "skill-plan", "doctor", "review-start"):
+            print(json.dumps(output.get("data", {}), indent=2))
+        for action in output["next_actions"]:
+            print("  owed: " + action)
+    return int(code)
 
 
 if __name__ == "__main__":

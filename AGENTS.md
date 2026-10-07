@@ -1,72 +1,63 @@
-# Skerry agent instructions
+# Skerry agent contract
 
-These instructions apply to the entire repository. Skerry is security-sensitive systems software;
-prefer a verified small change over a broad speculative one.
+Skerry is security-sensitive Kotlin Multiplatform software. Current user instructions, code,
+Git history and test results outrank these defaults. Commit and push only when the user asks.
 
-## Read order
+## Start
 
-1. Read this file.
-2. Read `docs/development-process.md` completely. It is the canonical development process and harness contract.
-3. Before changing code, read `docs/coding-guidelines.md` completely.
+1. Inspect `git status --short`; preserve existing work.
+2. Read `docs/development-process.md`. Before editing code, read `docs/coding-guidelines.md`.
+3. Run `python3 tools/harness/gate.py plan` and `doctor`.
+   Inspect the plan's ECC guidance; add semantic topics with repeated `--focus` flags when paths
+   cannot infer them. Read selected available skills before relevant work; report unavailable ones.
+4. Work on `feat/`, `fix/`, `refactor/` or `docs/`; protect `main`.
+   Declare a stricter task with `gate.py task <kind> [ref]` when needed.
 
-Authority, from highest to lowest: the current user request; current code, git history and test
-results; `AGENTS.md`, `docs/development-process.md` and `docs/coding-guidelines.md`.
+## Implement
 
-## Start every task safely
+- Search the existing abstraction catalogue before introducing a new abstraction.
+- Features start with tests. Bugs start with a regression that fails for the intended reason:
+  `gate.py red --file <test-file> --tests '<pattern>'`. Keep that regression unchanged through GREEN.
+- Put contracts and domain logic in commonMain, preserve desktop/Android parity, project primitives,
+  en/ru/zh/tr/de resources, structured concurrency and cancellation. Treat external data as untrusted.
+- Keep fixes small and delete code made obsolete by them.
 
-- Inspect `git status --short`; existing changes belong to the user.
-- Run `tools/harness/gate.py status` to identify the change kind, affected areas and existing debt.
-- Search for the existing abstraction before adding one. The catalogue is in
-  `docs/coding-guidelines.md`.
-- Work on a typed branch (`feat/`, `fix/`, `refactor/`, `docs/`). Never commit or push from `main`.
-- If the inferred kind is wrong, declare the stricter truth with
-  `tools/harness/gate.py task <bug|feature|refactor|docs> [ref]`.
+## Verify
 
-## Implementation contract
+- Iterate with `gate.py run --mode fast`; direct focused tests are also allowed.
+- Finish with `gate.py run`. It checks the affected modules and their consumers, then reports
+  outstanding reviews/findings. `gate.py verify` succeeds only when final evidence is complete.
+- Never run Gradle beside another build. The runner locks managed builds across worktrees/clones;
+  manual Gradle commands must obey the same rule. Check memory first.
+- Harness/policy/CI changes require `python3 tools/harness/selftest.py`; no Kotlin build for a
+  harness-only change. CI uses the same planner and runner with `run --build-only`.
+- Delivery guards use native Git hooks: `gate.py install-hooks`. Do not bypass them silently.
+  No shell-command matching hooks or inferred review completions are used.
 
-- Bug fixes start with a regression test that fails for the intended reason. Record RED with
-  `tools/harness/gate.py red --tests '<pattern>' --file <test-file>` before implementing the fix.
-- Features start with tests. Prefer `commonTest`; use platform tests only for platform behavior.
-- Keep contracts and domain logic in `shared/commonMain`. Hide platform APIs behind interfaces or
-  `expect`/`actual`. Desktop and Android must stay at feature parity unless explicitly scoped out.
-- Follow existing project primitives, resource strings, design tokens and dependency catalog.
-- Preserve structured concurrency, rethrow `CancellationException`, and keep blocking work off the
-  UI thread. Treat server, protocol and AI data as untrusted.
-- Delete code made obsolete by the change. Do not combine unrelated cleanup with the task.
+## Delegate and review
 
-## Verification and harness
-
-The portable gate is `tools/harness/gate.py`; the agent hooks are only adapters around it.
-Other agents do not receive those hooks automatically, so enforce the same contract explicitly.
-
-- Iterate with focused tests as needed.
-- Finish build stages with `tools/harness/gate.py run`; manual Gradle runs do not close the gate.
-- Never run two Gradle builds concurrently. Check memory before heavy work and stop daemons after a
-  build series when needed.
-- Run `python3 tools/harness/selftest.py` after changing the harness, its hooks, commands, reviewer
-  definitions, or policy-facing agent instructions.
-- Before any requested commit, push, or PR, run `tools/harness/gate.py status` and resolve every
-  owed item. `SKERRY_GATE_OVERRIDE=1` is exceptional and must be disclosed with the exact reason.
-- Commit and push only when the user asks.
-
-## Review compatibility
-
-For code changes, use the reviewer set printed by `tools/harness/gate.py reviewers`. Repository
-reviewer prompts live in `.agents/reviewers/`; plugin reviewers use the matching installed ECC
-capability. Reviewers are read-only and must not run Gradle or mutate git state.
-
-Save each completed review to a temporary file and record it explicitly:
-
-```bash
-tools/harness/gate.py review <reviewer-name> --file <report-file>
-```
-
-Verify every finding against the code. Fix it or report a reasoned rejection. Run no more than two
-review rounds per branch unless the user explicitly requests a third. Avoid parallel heavy agents;
-review fan-out is allowed only when available memory is safe, and reviewers still must not build.
+- Run `gate.py agent-plan` before delegation. Use its explicit model and reasoning effort from
+  `tools/harness/agents.toml`; do not inherit a maximum-effort parent profile.
+- Launch with `fork_turns="none"` and pass the bounded task, relevant contracts and files.
+  Include the dispatch's selected skill names, source paths and `capability_instruction`. Read
+  specialist prompts before use; follow project contracts over generic ECC stack examples.
+  Explorers are read-only. Workers need explicit file ownership and must accommodate others' edits.
+- Obey the reported concurrency limit. Do not run reviewers beside Gradle. Increase reasoning only
+  for a concrete unresolved problem; never retry every agent at maximum effort.
+- `gate.py reviewers` selects the repository reviewers by scope, without depending on an ECC cache.
+  The ECC specialist suggestions in `agent-plan` are optional; use the printed bounded dispatch and
+  `execution_role` fallback when the plugin role is not exposed by the runtime. They never count
+  as a completed review by being present in a plan. Verify and fix their findings or report rejection.
+  `gate.py review-start <name> --json` supplies the launch token, snapshot, delta and dispatch profile.
+- Reviewers are read-only: no builds, branch changes, stash or source edits. Return the structured
+  report described in `tools/harness/README.md`; the parent saves it outside the worktree and runs
+  `gate.py review <name> --file <report.json>`.
+- Verify every finding. Record `gate.py resolve <token> <id> <fixed|rejected> --reason '<evidence>'`.
+  Fixes must pass tests and invalidate affected receipts. Reports never erase unresolved findings.
+- Two completed rounds per reviewer/branch. Further drift remains owed; a third round requires the
+  user's instruction, recorded with `review-start --extra-round-reason`. No automatic exemption.
 
 ## Handoff
 
-State what changed, what was verified, and what was not verified on live platforms or services.
-For UI work, include a concrete visual verification path. Keep user-facing prose technical and
-short. Code comments and commit messages are in English.
+State the change, verified evidence and live-platform gaps. UI work needs a concrete visual path.
+Keep reports short and technical. Code comments, commit messages and PR descriptions are in English.
