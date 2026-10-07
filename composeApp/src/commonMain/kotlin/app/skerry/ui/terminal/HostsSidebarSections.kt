@@ -13,16 +13,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,8 +27,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.shared.ssh.isRemoteDesktop
-import app.skerry.ui.app.LocalConnectHost
-import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.host.asTeamShared
@@ -72,8 +66,6 @@ import app.skerry.ui.design.draggableFolderHeader
 import app.skerry.ui.design.folderHeaderAnchor
 import app.skerry.ui.design.folderRangeAnchor
 import app.skerry.ui.design.visibleItemIds
-import app.skerry.ui.host.connectionTypeLabel
-import app.skerry.ui.host.groupHostsByConnectionType
 import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.host.icon
 import org.jetbrains.compose.resources.stringResource
@@ -144,7 +136,7 @@ internal fun RecentSectionHeader() {
 }
 
 @Composable
-private fun TeamHostsSectionHeader() {
+internal fun TeamHostsSectionHeader() {
     SidebarSectionTitle(
         stringResource(Res.string.lib_teams_sidebar),
         modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 14.dp, bottom = 4.dp),
@@ -159,8 +151,8 @@ private fun TeamHostsSectionHeader() {
  * links are stripped on share).
  */
 @Composable
-internal fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, section: HostSection, mono: FontFamily) {
-    val teams = LocalTeams.current ?: return
+internal fun rememberTeamSections(hostsSnapshot: List<Host>, section: HostSection): List<TeamSection> {
+    val teams = LocalTeams.current ?: return emptyList()
     // Pulls shared team hosts when sync transitions to Online, see AutoPullTeamsOnOnline.
     AutoPullTeamsOnOnline()
     val teamList by teams.teams.collectAsState()
@@ -191,32 +183,18 @@ internal fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignSta
             }
         }
     }
-    if (sections.isEmpty()) return
-    TeamHostsSectionHeader()
-    sections.forEach { section ->
-        // Keyed by the space's ids, never by its label: the label is a peer's text put through a
-        // sanitizer, so two teams can perfectly well arrive at the same one — and then collapsing
-        // one folder would fold the other. Prefixed so a team and a host group of the same name
-        // still get separate entries in the shared collapsedGroups.
-        val collapseKey = section.collapseKey
-        val collapsed = state.isGroupCollapsed(collapseKey)
-        val onToggle = remember(state, collapseKey) { { state.toggleGroupCollapsed(collapseKey) } }
-        TeamFolderHeader(section.label, section.hosts.size, collapsed, onToggle)
-        if (!collapsed) {
-            section.hosts.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
-        }
-    }
+    return sections
 }
 
 /**
  * One shared space in the sidebar: what it is called, what it holds, and what its fold state is
  * filed under. The label and the key are deliberately different things — see [spaceLabel].
  */
-private class TeamSection(ref: TeamScopeRef, val label: String, val hosts: List<Host>) {
+internal class TeamSection(ref: TeamScopeRef, val label: String, val hosts: List<Host>) {
     val collapseKey: String = "$TEAM_COLLAPSE_PREFIX${ref.teamId}\u0000${ref.scopeId.orEmpty()}"
 }
 
-/** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
+/** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [rememberTeamSections]. */
 private const val TEAM_COLLAPSE_PREFIX = "\u0000team\u0000"
 
 /**
@@ -224,7 +202,7 @@ private const val TEAM_COLLAPSE_PREFIX = "\u0000team\u0000"
  * visually match host folders; differs only in the `group` icon marking its team-vault origin.
  */
 @Composable
-private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
+internal fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -275,27 +253,18 @@ internal fun EmptyCatalogNote() {
 }
 
 /**
- * Live catalog folder: same visuals, sourced from [HostFolder] over [HostManagerController]. Clicking
- * a host connects via [LocalConnectHost]; the status dot and highlight come from live sessions
- * ([LocalSessions]) — status-dot color reflects the most recent session's connection state.
- *
- * Manual reorder ([dragState]): dragging the folder header reorders folders; dragging a host row
- * reorders within a folder or moves it to another (see [app.skerry.ui.design.FolderDragState]). Drops commit through
- * [controller]; [foldersProvider] supplies the current folder list at gesture time.
+ * A live catalog folder's header, kept separate from its lazy host rows. Dragging this node
+ * temporarily hides rows while retaining the keyed header and its pointer gesture.
+ * Drops commit through [controller]; [foldersProvider] supplies the current filtered folder list.
  */
 @Composable
-internal fun LiveHostFolder(
+internal fun LiveHostFolderHeader(
     folder: HostFolder,
     state: DesktopDesignState,
-    mono: FontFamily,
     dragState: FolderDragState,
     controller: HostManagerController,
-    selectedHostId: String?,
-    onSelectHost: (String) -> Unit,
     foldersProvider: () -> List<DragFolder>,
 ) {
-    val sessions = LocalSessions.current
-    val connect = LocalConnectHost.current
     // Folder's group key: an empty folder uses its own name (like FolderBounds), otherwise the first
     // host's group. The synthetic "Ungrouped" folder is the null group.
     val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
@@ -306,16 +275,10 @@ internal fun LiveHostFolder(
     // Edit pencil in the header, except for the synthetic "Ungrouped" bucket (not renameable).
     val onEditGroup = if (folder.name == UNGROUPED_LABEL) null
         else remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
-    val isAnyFolderDragging = dragState.draggingFolderName != null
     val isThisFolderDragging = dragState.draggingFolderName == folder.name
     // Highlights the target folder while a host is dragged over it.
     val isDropTarget = dragState.draggingItemId != null && dragState.activeDrop?.group == group
     val folderAlpha = if (isThisFolderDragging) 0.6f else 1f
-    // Insertion line within the folder: the index excludes the dragged host (like moveHostToGroup),
-    // so it's anchored to visible rows via neighbors from the same filtered list.
-    val others = folder.hosts.filter { it.id != dragState.draggingItemId }
-    val dropIndex = if (isDropTarget) dragState.activeDrop?.index?.coerceIn(0, others.size) else null
-    val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
     Column(
         Modifier
             .padding(bottom = 2.dp)
@@ -359,34 +322,5 @@ internal fun LiveHostFolder(
             val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folderLabel(folder.name)
             FolderHeader(headerName, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
-        // A collapsed folder shows only the header; when any folder is dragged, all folders
-        // temporarily collapse to allow fast, compact and predictable folder reordering.
-        if (!collapsed && !isAnyFolderDragging) Column(Modifier.padding(start = 22.dp)) {
-            if (folder.name == UNGROUPED_LABEL) {
-                // No-group bucket: sub-group by connection type with a small header per transport.
-                // Reorder insertion lines are dropped here (ordering a typeless bucket is moot); a
-                // host can still be dragged out to a real folder, which owns its own drop target.
-                groupHostsByConnectionType(folder.hosts).forEach { (type, typeHosts) ->
-                    HostTypeSubheader(connectionTypeLabel(type))
-                    typeHosts.forEach { host ->
-                        key(host.id) {
-                            HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
-                        }
-                    }
-                }
-            } else {
-                // key(host.id): row positional identity is pinned to the host, so an open menu/row
-                // state doesn't jump to a neighbor when the catalog reorders after an edit.
-                folder.hosts.forEach { host ->
-                    key(host.id) {
-                        if (host.id == lineBeforeId) DropLine()
-                        HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
-                    }
-                }
-                // Drop at the folder's end: the line goes after the last row.
-                if (dropIndex != null && dropIndex == others.size) DropLine()
-            }
-        }
     }
 }
-

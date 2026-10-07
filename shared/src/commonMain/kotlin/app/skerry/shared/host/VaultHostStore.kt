@@ -36,7 +36,8 @@ class VaultHostStore(
 
     override fun all(): List<Host> {
         if (!vault.isUnlocked) return emptyList()
-        return codec.list().sortedByOrder(layout.read().hostOrder) { it.id }
+        // Team peers can encrypt arbitrary payloads: only the authenticated record owns this ID.
+        return codec.list { it.id }.sortedByOrder(layout.read().hostOrder) { it.id }
     }
 
     override fun put(host: Host) = vault.transaction {

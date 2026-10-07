@@ -21,11 +21,18 @@ internal class VaultRecordCodec<T>(
     private val label: (T) -> String = { "" },
 ) {
 
-    /** All live records of the type (tombstones and other types dropped); corrupt payload skipped. */
-    fun list(): List<T> =
+    /**
+     * All live records of the type; corrupt payloads are skipped. Stores with a payload identity can
+     * supply [recordIdOf] to reject a peer's payload claiming an ID other than its authenticated record.
+     */
+    fun list(recordIdOf: ((T) -> String)? = null): List<T> =
         vault.records()
             .filter { it.type == type && !it.deleted }
-            .mapNotNull { decode(vault.openPayload(it.id)) }
+            .mapNotNull { record ->
+                decode(vault.openPayload(record.id))?.takeIf { value ->
+                    recordIdOf == null || recordIdOf(value) == record.id
+                }
+            }
 
     /**
      * Ids of every live record of the type, whether or not its payload can be read. [list] drops

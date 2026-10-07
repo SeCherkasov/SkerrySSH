@@ -574,14 +574,13 @@ fun TerminalScreen(
     // The Text underlay itself is invisible: it sets the input/IME area and focus — glyphs are drawn by a separate overlay (below).
     val structural = remember { AnnotatedString("") }
 
-    // Glyph TextStyle cache keyed by TermStyle: toGlyphStyle does merge() (SpanStyle+TextStyle
-    // allocation) per run. There are hundreds of rows/runs per frame but few distinct styles, so
-    // memoize. Reset on a base style or palette (OSC 4/104) change — the result depends on them.
-    // Keyed by TermStyle, then by highlight category: looking up a highlighted run must not build a
-    // derived TermStyle first, or every frame of a drag would allocate one per run just to hit the cache.
-    // Its instance is also the generation of the glyph layouts cached per row (RowRenderCache), so
-    // density is in the keys: a layout is measured in pixels.
-    val glyphStyleCache = remember(textStyle, state.palette, termTheme, density) { HashMap<TermStyle, Array<TextStyle?>>() }
+    // Glyph styles depend on the base style, palette, theme and pixel density. The bounded cache
+    // also owns the row-layout generation: eviction keeps its identity, input changes replace it.
+    // Per-style/category lookup avoids allocating derived TermStyles on hits; session switches
+    // drop the old session's styles even if the font and palette happen to match.
+    val glyphStyleCache = remember(state, textStyle, state.palette, termTheme, density) {
+        GlyphStyleCache()
+    }
 
     // textStyle-derived styles are computed once per font/theme change, not in the draw phase: the
     // cursor overlay repaints every blink half-period, where copy() would allocate a new TextStyle per
@@ -824,17 +823,17 @@ fun TerminalScreen(
               }
           }
           val highlightByRow = rememberRowHighlights(state, screen, searchWindow)
+          val linkScanCache = remember(state) { LinkScanCache() }
           // Plain-text URLs for the visible window: a URL cut by a soft wrap spans several rows,
-          // and its chain is joined and matched once rather than per row. Hoisted out of the draw
-          // phase like hitsByRow above - computed inline in the draw lambda it re-flattened and
+          // and its chain is matched once; unchanged blocks survive publishes. Outside the draw
+          // phase like hitsByRow above - computed inline it re-flattened and
           // re-regexed the same rows on every repaint, sixty times a second during a scroll drag.
-          // searchWindow is a superset of the draw loop's window for any consistent scroll (it is
-          // built from the unpadded viewport height), and a fast drag inherits the same known,
+          // searchWindow contains the draw window (unpadded viewport height); a fast drag inherits the known,
           // self-healing one-frame race as the search highlight - not new here; clicks resolve
           // links from a fresh snapshot, never from this map.
           val linksByRow = remember(state, screenVersion, searchWindow) {
               linkScanPasses++
-              linkSpansByRow(screen, searchWindow)
+              linkSpansByRow(screen, searchWindow, linkScanCache)
           }
           // Glyph runs and layouts per row, kept across publishes for the rows that did not change
           // (see RowRenderCache): segmentation is O(row) with a per-run allocation, and laying out
@@ -854,7 +853,9 @@ fun TerminalScreen(
               // whenever output streams while the user sits scrolled up in history. The search
               // highlight above derives its window from the same helper.
               val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
-              rowRenderCache.fitWindow((drawWindow.last - drawWindow.first + 1) * (screen.firstOrNull()?.size ?: 0))
+              val windowCells = (drawWindow.last - drawWindow.first + 1) * (screen.firstOrNull()?.size ?: 0)
+              rowRenderCache.fitWindow(windowCells)
+              glyphStyleCache.fitWindow(windowCells)
               for (r in drawWindow) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
@@ -900,10 +901,9 @@ fun TerminalScreen(
                       val run = runs[i]
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
-                          val byKind = glyphStyleCache.getOrPut(run.style) { arrayOfNulls(HIGHLIGHT_KIND_COUNT) }
-                          val style = byKind[run.kind.ordinal]
-                              ?: run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
-                                  .also { byKind[run.kind.ordinal] = it }
+                          val style = glyphStyleCache.style(run.style, run.kind) {
+                              run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
+                          }
                           val layout = rowEntry.layout(i, glyphStyleCache)
                               ?: measureGlyphText(measurer, run.text, style).also { rowEntry.storeLayout(i, it) }
                           drawText(layout, color = style.color, topLeft = Offset(x, top))
