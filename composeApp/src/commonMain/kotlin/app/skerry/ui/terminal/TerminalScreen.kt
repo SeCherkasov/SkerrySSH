@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -214,6 +215,10 @@ fun TerminalScreen(
     onOpenPath: ((String) -> Unit)? = null,
 ) {
     terminalScreenCompositions++
+    DisposableEffect(state) {
+        state.attachRenderer()
+        onDispose { state.detachRenderer() }
+    }
     // Terminal font/size from Appearance settings ([LocalTerminalAppearance]); defaults to Hack 13px
     // where no provider is set (mobile target/preview/connection screen). Ligatures always disabled
     // ([NO_LIGATURES]) so `->`/`=>`/`!=` never merge regardless of font.

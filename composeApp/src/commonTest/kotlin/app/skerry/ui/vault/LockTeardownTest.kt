@@ -161,6 +161,8 @@ class LockTeardownTest {
         )
         advanceUntilIdle()
         val terminal = sessions.active!!.focusedPane.liveTerminal!!
+        // The password offer requires a surface where the user can read the prompt.
+        terminal.attachRenderer()
         channel.emit("[sudo] password for deploy: ".encodeToByteArray())
         advanceUntilIdle()
         assertTrue(terminal.sudoOffer, "the offer did not arm before the lock")

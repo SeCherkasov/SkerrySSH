@@ -376,6 +376,7 @@ class ConnectionController(
         return TerminalScreenState(
             ShellTerminalSession(channel, sScope),
             sScope,
+            backgroundWhenUnobserved = true,
             initialHistory = history?.load(historyKey).orEmpty(),
             scrollback = prefs.effectiveScrollback,
             cursorShape = prefs.cursorStyle.shape,
@@ -544,6 +545,7 @@ class ConnectionController(
         val terminal = TerminalScreenState(
             external,
             sScope,
+            backgroundWhenUnobserved = true,
             scrollback = prefs.effectiveScrollback,
             cursorShape = prefs.cursorStyle.shape,
             cursorBlink = prefs.cursorStyle.blink,
