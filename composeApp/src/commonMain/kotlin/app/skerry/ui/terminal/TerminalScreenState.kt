@@ -38,15 +38,8 @@ import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.ChannelResult
 import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.selects.onTimeout
-import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -95,7 +88,24 @@ class TerminalScreenState(
     // of someone else's session: the owner's terminal already answers, and a second answer would
     // arrive at the host as typed input.
     private val answersQueries: Boolean = true,
+    // Live connections opt in; standalone/headless consumers retain their full snapshot cadence.
+    private val backgroundWhenUnobserved: Boolean = false,
 ) {
+    /** Register a composed terminal surface; paired with [detachRenderer] on disposal. */
+    internal fun attachRenderer() { commands.trySend(TerminalCommand.Renderers(1)) }
+
+    internal fun detachRenderer() { commands.trySend(TerminalCommand.Renderers(-1)) }
+
+    // Owner-coroutine fields. Visibility travels in the same queue as output, never into parser
+    // state from the composition thread. A second surface must keep a shared terminal visible.
+    private var renderers = 0
+    private var renderRefreshRequested = false
+    private var lastFullPublishAt = Long.MIN_VALUE / 2
+    private var unpublishedRender = false
+
+    @Volatile
+    private var inputLine: CursorLine? = null
+
     // OSC 52 requests to write to the system clipboard. extraBufferCapacity keeps tryEmit from the
     // owner coroutine from dropping when there's no subscriber yet; DROP_OLDEST on burst keeps the
     // latest entry (last-writer-wins), not a stale one.
@@ -161,8 +171,9 @@ class TerminalScreenState(
     val autoFit = TerminalAutoFitState()
 
     /**
-     * Monotonic snapshot publish counter, incremented on every feed/resize even if [screen] is
-     * structurally unchanged. Auto-scroll-to-bottom must key off this, not [screen]: Compose
+     * Monotonic render snapshot counter, incremented on a full publish even if [screen] is
+     * structurally unchanged. Hidden surfaces publish at a lower cadence. Auto-scroll-to-bottom
+     * must key off this, not [screen]: Compose
      * compares the list structurally ([equals]), so two identical snapshots in a row would not
      * retrigger the effect.
      */
@@ -178,7 +189,7 @@ class TerminalScreenState(
     var inputVersion: Int by mutableStateOf(0)
         private set
 
-    /** Current grid size (live `cols x rows` from the emulator). */
+    /** Grid size of the last full render snapshot. */
     var cols: Int by mutableStateOf(emulator.cols)
         private set
 
@@ -373,18 +384,9 @@ class TerminalScreenState(
     val state: StateFlow<TerminalState> get() = session.state
 
     // The emulator is single-threaded: feed and resize must not be called from different coroutines.
-    // All interactions go through this command queue, drained by the single collector below, so
-    // PTY output and resize stay serialized relative to each other.
-    //
-    // The queue itself stays UNLIMITED: control commands (resize, recording, settings) are sent
-    // with fire-and-forget trySend from UI paths and must never be dropped on a full buffer. What
-    // is bounded is the Feed traffic specifically — the session collector takes a permit per chunk
-    // and the emulator returns it after parsing, so a backlog of unparsed output suspends the
-    // collector (and transitively the socket read) without ever touching control commands.
-    private val commands = Channel<TerminalCommand>(Channel.UNLIMITED)
-
-    /** Backpressure for Feed commands only — see [FEED_BACKLOG_CHUNKS] and the comment above. */
-    private val feedPermits = Semaphore(FEED_BACKLOG_CHUNKS)
+    // The owner queue serializes output and controls, bounding only the PTY backlog.
+    private val commandQueue = TerminalCommandQueue()
+    private val commands = commandQueue.channel
 
     /**
      * Test seam: invoked before each command is applied. The emulator has no reachable throw site
@@ -443,7 +445,14 @@ class TerminalScreenState(
     private suspend fun runEmulatorOwner() {
         EmulatorOwnerLoop(
             commands = commands,
-            nowMillis = nowMillis,
+            schedule = EmulatorPublicationSchedule(
+                nowMillis = nowMillis,
+                refreshRequested = { renderRefreshRequested },
+                pendingPublishDelay = {
+                    if (unpublishedRender) (BACKGROUND_PUBLISH_INTERVAL_MS - (nowMillis() - lastFullPublishAt)).coerceAtLeast(0)
+                    else null
+                },
+            ),
             apply = ::applyCommand,
             publish = ::publishSnapshot,
             heldFor = ::synchronizedHoldMillis,
@@ -454,6 +463,10 @@ class TerminalScreenState(
     private suspend fun applyCommand(cmd: TerminalCommand) {
         applyInterceptor?.invoke()
         when (cmd) {
+            is TerminalCommand.Renderers -> {
+                renderers = (renderers + cmd.delta).coerceAtLeast(0)
+                if (cmd.delta > 0) renderRefreshRequested = true
+            }
             // The permit was acquired by the session collector when the chunk was queued; releasing
             // it only after the parse is what makes the cap measure *unapplied* work. In finally:
             // a parser exception kills this loop, and a permit that never returns would wedge the
@@ -462,7 +475,7 @@ class TerminalScreenState(
             is TerminalCommand.Feed -> try {
                 feed(cmd.chunk)
             } finally {
-                feedPermits.release()
+                commandQueue.feedApplied()
             }
             is TerminalCommand.StartRecording -> startRecorder(cmd)
             is TerminalCommand.StopRecording -> {
@@ -474,33 +487,11 @@ class TerminalScreenState(
             is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
             is TerminalCommand.SetColors -> emulator.applyColors(cmd.colors)
             is TerminalCommand.ExpectStep -> applyExpectStep(cmd.token, cmd.hiddenEcho)
-            is TerminalCommand.Resize -> {
-                // PTY is resized first, the emulator only on success: otherwise the grid would be
-                // wider than the application knows and the tail of rows would stay undrawn. A PTY
-                // resize failure must not kill this coroutine, or feed stops being processed and
-                // the terminal freezes.
-                val ptyResized = try {
-                    session.resize(cmd.size)
-                    true
-                } catch (e: CancellationException) {
-                    throw e // do not swallow scope cancellation
-                } catch (_: Exception) {
-                    // Only recoverable failures (e.g. PTY dropped); Error propagates. The dedup
-                    // memo is cleared so the next request at the same size is re-attempted rather
-                    // than silently dropped — auto-fit's settled-snapshot gate waits on exactly
-                    // that retry. Written off the UI thread; the worst a race costs is one
-                    // redundant resize command, and the dedup is best-effort anyway.
-                    lastRequestedSize = null
-                    false
-                }
-                // Outside the catch: an emulator fault is a parser-class bug, not a PTY hiccup —
-                // it propagates to the owner-level handler (trace + close) like a feed fault,
-                // instead of leaving a silently stale grid.
-                if (ptyResized) {
-                    emulatorResizeInterceptor?.invoke()
-                    emulator.resize(cmd.size.cols, cmd.size.rows)
-                }
-            }
+            is TerminalCommand.Resize -> applyTerminalResize(
+                session, emulator, cmd.size,
+                onFailure = { lastRequestedSize = null },
+                beforeEmulatorResize = { emulatorResizeInterceptor?.invoke() },
+            )
         }
     }
 
@@ -560,19 +551,21 @@ class TerminalScreenState(
 
     /**
      * Publish the emulator snapshot into Compose state (after feed/resize). Must stay
-     * non-suspend: [flushTailBestEffort]'s finally-safety (no swallowed cancellation) depends
-     * on no suspension point ever existing here.
+     * non-suspend: the owner loop's final tail flush depends on no suspension point here.
      */
-    private fun publishSnapshot() {
+    private fun publishSnapshot(force: Boolean = false) {
         // A frame still open here is drawn torn (its hold ran out): holding it any longer gains
         // nothing, so what follows it is drawn at the usual pace until the next frame opens.
         holdSince = NOT_HOLDING
         if (emulator.synchronizedOutput) releasedFrame = emulator.synchronizedFrame
+        val now = nowMillis()
+        val full = force || !backgroundWhenUnobserved || renderers > 0 || renderRefreshRequested ||
+            now - lastFullPublishAt >= BACKGROUND_PUBLISH_INTERVAL_MS
         // The grid and the cursor apply as one atomic group: auto-fit reads them as a tuple under
         // snapshotFlow, and individual writes from this (session) thread could pair a fresh screen
         // with a stale cursor there — counting the user's own wrapped command line as wide output.
         // Single writer, so the apply cannot conflict.
-        Snapshot.withMutableSnapshot {
+        if (full) Snapshot.withMutableSnapshot {
             screen = emulator.lines // the cached instance while nothing visible mutated
             screenContentVersion = emulator.contentVersion
             cols = emulator.cols
@@ -584,6 +577,9 @@ class TerminalScreenState(
             commandMarks = emulator.shellCommandMarks()
             workingDirectory = emulator.workingDirectory
         }
+        // Input may arrive in a hidden pane through broadcast/runbooks/synchronized panes. Its
+        // password/guard checks cannot wait for a slower render snapshot or read a mutable parser.
+        inputLine = if (full) CursorLine(screen, cursorRow, cursorCol, rows) else emulator.inputLineSnapshot()
         cursorVisible = emulator.cursorVisible
         cursorShape = emulator.cursorShape
         cursorBlink = emulator.cursorBlink
@@ -602,20 +598,32 @@ class TerminalScreenState(
         // clears it — the same window every cross-thread engine write already lives with.
         if (altScreen != emulator.altScreen) autocomplete.reset()
         altScreen = emulator.altScreen
+        title = emulator.title
+        workingDirectory = emulator.workingDirectory
+        if (!full) {
+            // A hidden surface never offers a credential on a row its user cannot read. Also
+            // withdraw a previous offer at foreground cadence when that surface disappears.
+            sudo?.observe(PromptRow(-1, ""), now)
+            unpublishedRender = true
+            return
+        }
+        lastFullPublishAt = now
+        renderRefreshRequested = false
+        unpublishedRender = false
         // Arm or disarm the saved-password offer from the row that was just drawn, and stamp when
         // it appeared: the dwell [SudoPasswordOffer.take] requires is measured from here, which is
         // the only place that knows when the prompt reached the screen. Never on the alternate
         // screen — a fullscreen TUI paints arbitrary text, a line reading like a sudo prompt
         // included, and an Enter there edits a buffer.
         sudo?.observe(
-            if (altScreen) PromptRow(-1, "") else PromptRow(cursorRow, cursorLine().rowText()),
+            if (altScreen || (backgroundWhenUnobserved && renderers == 0)) PromptRow(-1, "")
+            else PromptRow(cursorRow, cursorLine().rowText()),
             nowMillis(),
         )
         // The echo of what was typed arrives here, and the ghost continues what this snapshot shows —
         // so this is where it is recomputed. Also clears it on entering a fullscreen TUI (vim/htop):
         // there is no "line" there.
         refreshSuggestion()
-        title = emulator.title
         palette = emulator.paletteSnapshot()
         // The buffer changed under an open search panel: rebuild the match list (throttled — see
         // refreshSearch) so the counter and navigation follow the output, keeping the user on the
@@ -970,11 +978,11 @@ class TerminalScreenState(
     fun dismissGuardedCommand() = guard.hold.dismiss()
 
     /**
-     * The shell line the cursor sits on, read off the published [screen] snapshot (UI thread, no
-     * race with the emulator). Built per call: it is a view over the snapshot, and the snapshot is
-     * replaced wholesale on every publish.
+     * Immutable input view, replaced by the emulator owner at frame cadence. Visible surfaces use
+     * the render grid; hidden surfaces freeze only the bounded logical cursor line, so an input
+     * check never races a mutable emulator or waits for a slower render snapshot.
      */
-    private fun cursorLine(): CursorLine = CursorLine(screen, cursorRow, cursorCol, rows)
+    private fun cursorLine(): CursorLine = inputLine ?: CursorLine(screen, cursorRow, cursorCol, rows)
 
     /**
      * Whether the current cursor row looks like a password prompt (echo is usually off there). The
@@ -1387,11 +1395,7 @@ class TerminalScreenState(
         scope.launch {
             try {
                 session.output.collect { chunk ->
-                    // If the owner closes the queue between acquire and send, this chunk's permit
-                    // is lost with the throwing send - inert: the instance is already being torn
-                    // down and a reconnect builds a fresh one.
-                    feedPermits.acquire()
-                    commands.send(TerminalCommand.Feed(chunk))
+                    commandQueue.feed(chunk)
                 }
             } catch (_: ClosedSendChannelException) {
                 // The emulator owner died (parser fault) and closed the queue on its way out: stop
@@ -1436,29 +1440,7 @@ class TerminalScreenState(
                 // for the same reason, and a String cannot be zeroed — the least this can do is not
                 // outlive the connection it belongs to.
                 sudo?.revoke()
-                // The scope is a SupervisorJob: this coroutine dying (parser exception) does NOT
-                // take the session collector with it. Close the queue so the collector's next send
-                // fails fast instead of feeding a channel nobody drains, and return the permits of
-                // the chunks being discarded so it cannot wedge on acquire meanwhile.
-                commands.close()
-                // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
-                // take over here rather than leave the exporting caller awaiting forever.
-                while (true) {
-                    val left = commands.tryReceive().getOrNull() ?: break
-                    // Exhaustive on purpose (no else): a future variant carrying a completion or a
-                    // resource token must force a decision here, or its awaiter hangs at teardown.
-                    when (left) {
-                        is TerminalCommand.StopRecording -> left.cast.complete(recorder?.finish())
-                        is TerminalCommand.Feed -> feedPermits.release()
-                        is TerminalCommand.StartRecording,
-                        is TerminalCommand.SetCursorDefault,
-                        is TerminalCommand.SetMaxScrollback,
-                        is TerminalCommand.SetClipboardWriteEnabled,
-                        is TerminalCommand.SetColors,
-                        is TerminalCommand.ExpectStep,
-                        is TerminalCommand.Resize -> Unit
-                    }
-                }
+                commandQueue.closeAndDrain { recorder?.finish() }
             }
         }
         // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
@@ -1523,166 +1505,6 @@ private const val NOT_HOLDING = -1L
 
 /** Numpad Enter in application-keypad mode (DECKPAM), as `keypadSequence` in TerminalInput.kt sends it. */
 private const val NUMPAD_ENTER_SS3 = "\u001bOM"
-
-/**
- * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
- * bounded rate. The first command after a quiet period publishes immediately; while commands keep
- * arriving, the mid-window wait absorbs the stream and a publish happens once per
- * [PUBLISH_MIN_INTERVAL_MS] — on the window edge if the stream pauses inside it (trailing
- * publish), so the last batch of a burst is never left undrawn. select (not
- * withTimeoutOrNull+receive) because select's clauses are atomic: a command cannot be lost to a
- * timeout racing an in-flight receive.
- *
- * Its own class rather than methods on [TerminalScreenState]: the loop owns pacing only — the
- * state object stays the sole owner of what applying and publishing mean.
- */
-private class EmulatorOwnerLoop(
-    private val commands: Channel<TerminalCommand>,
-    private val nowMillis: () -> Long,
-    private val apply: suspend (TerminalCommand) -> Unit,
-    private val publish: () -> Unit,
-    /** How long the application still holds the screen mid-frame (mode 2026); 0 when it does not. */
-    private val heldFor: () -> Long,
-) {
-    private var lastPublishAt = Long.MIN_VALUE / 2
-    private var dirty = false
-
-    suspend fun run() {
-        var pending: ChannelResult<TerminalCommand>? = null
-        try {
-            while (true) {
-                val received = pending ?: commands.receiveCatching()
-                val cmd = received.getOrNull() ?: break
-                pending = step(cmd)
-            }
-        } finally {
-            // Every exit — channel close, parser fault, cancellation — lands the tail applied
-            // since the last publish: the coalescing window must never widen how much parsed
-            // output a fault can erase from the screen.
-            if (dirty) flushTailBestEffort()
-        }
-    }
-
-    /**
-     * One paced iteration: apply [cmd], drain up to a window's worth of queued work, then either
-     * publish (window elapsed) or wait for the window edge. Returns a command received while
-     * waiting — the caller's next iteration consumes it — or null when this step published.
-     */
-    private suspend fun step(cmd: TerminalCommand): ChannelResult<TerminalCommand>? {
-        val entered = nowMillis()
-        apply(cmd)
-        // Before the drain: a fault inside a drained command must still flush what this step
-        // already applied - the finally's guarantee covers the whole batch, not just its tail.
-        dirty = true
-        val windowSpentParsing = drainWithinWindow(entered)
-        val held = heldFor()
-        if (held > 0) {
-            if (windowSpentParsing) yield()
-            // The frame closes with a later command; if none comes, the hold expiring draws it.
-            val next = awaitCommand(held)
-            if (next == null) publishNow(nowMillis())
-            return next
-        }
-        val now = nowMillis()
-        if (now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
-            publishNow(now)
-            // Mid-flood fairness: this coroutine shares the Default pool with the writer and
-            // other sessions; give them a slot before taking the next windowful.
-            if (windowSpentParsing) yield()
-            return null
-        }
-        val next = awaitCommand(PUBLISH_MIN_INTERVAL_MS - (now - lastPublishAt))
-        if (next == null) publishNow(nowMillis())
-        return next
-    }
-
-    /**
-     * Applies queued commands until the queue empties or one window of parse time has passed
-     * [since] the step began; true when the budget was spent parsing. Budgeted from step entry,
-     * not from the last publish: after a quiet period the window is long expired, and a stale
-     * budget would return "spent" before draining anything — splitting an already-queued batch
-     * across two frames and mislabeling every interactive echo as a flood. A host that keeps the
-     * queue non-empty (dense flood at parse rate) still cannot postpone publishes or monopolize
-     * the dispatcher: at most one window of parse work per publish.
-     */
-    private suspend fun drainWithinWindow(since: Long): Boolean {
-        while (true) {
-            if (nowMillis() - since >= PUBLISH_MIN_INTERVAL_MS) return true
-            val next = commands.tryReceive().getOrNull() ?: return false
-            apply(next)
-        }
-    }
-
-    /**
-     * Waits for the next command or [timeoutMs], whichever comes first; null means the timeout —
-     * the window edge, or the end of a synchronized-output hold. Runs once per drained batch during
-     * a sub-window burst — its per-call allocation is bounded by burst cadence, not by the window.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun awaitCommand(timeoutMs: Long): ChannelResult<TerminalCommand>? =
-        select {
-            commands.onReceiveCatching { it }
-            onTimeout(timeoutMs) { null }
-        }
-
-    private fun publishNow(at: Long) {
-        publish()
-        lastPublishAt = at
-        dirty = false
-    }
-
-    /**
-     * Tail flush for [run]'s finally. The publish callback ([TerminalScreenState.publishSnapshot])
-     * does not suspend, so no CancellationException can originate here; catching the rest keeps a
-     * flush-only failure from replacing an in-flight fault, while the trace keeps it visible on
-     * the clean-close path where this throw would otherwise be the only signal. No logging
-     * framework exists in this codebase — stderr is the convention (see the owner-level fault
-     * handler in [TerminalScreenState]).
-     */
-    @Suppress("TooGenericExceptionCaught", "PrintStackTrace")
-    private fun flushTailBestEffort() {
-        try {
-            publish()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-}
-
-/** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
-private sealed interface TerminalCommand {
-    /** Raw PTY output chunk to feed to the parser. */
-    class Feed(val chunk: ByteArray) : TerminalCommand
-
-    /** Begin recording. Carries the grid size and epoch stamp for the asciicast header. */
-    class StartRecording(
-        val title: String?,
-        val startedAtMillis: Long,
-        val columns: Int,
-        val rows: Int,
-    ) : TerminalCommand
-
-    /** End recording; [cast] receives the asciicast (or `null` if nothing was being recorded). */
-    class StopRecording(val cast: CompletableDeferred<String?>) : TerminalCommand
-
-    /** New grid size: applied to the emulator and forwarded to the PTY. */
-    class Resize(val size: PtySize) : TerminalCommand
-
-    /** New user default cursor (setting changed while the session is open). */
-    class SetCursorDefault(val shape: CursorShape, val blink: Boolean) : TerminalCommand
-
-    /** New scrollback depth (setting changed while the session is open). */
-    class SetMaxScrollback(val lines: Int) : TerminalCommand
-
-    /** New OSC 52 clipboard-write gate state (setting changed while the session is open). */
-    class SetClipboardWriteEnabled(val enabled: Boolean) : TerminalCommand
-
-    /** Colors to answer color queries with (the theme the session is drawn in changed). */
-    class SetColors(val colors: TerminalColors) : TerminalCommand
-
-    /** The runbook step the terminal should report, and the echo of its probes to hide. */
-    class ExpectStep(val token: String?, val hiddenEcho: List<String>) : TerminalCommand
-}
 
 /**
  * Extract the last command and its output from flat screen [text] (rows joined by '\n', trailing

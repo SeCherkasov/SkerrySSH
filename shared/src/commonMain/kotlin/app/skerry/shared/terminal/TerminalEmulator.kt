@@ -310,6 +310,13 @@ class TerminalEmulator(
     /** Cursor column (0-based). */
     val cursorCol: Int get() = cx
 
+    /** One immutable row in [lines] coordinates, without freezing the rest of the screen/history. */
+    fun rowSnapshot(row: Int): List<TermCell>? {
+        if (row < 0) return null
+        val history = if (altScreen) 0 else scrollback.size
+        return if (row < history) scrollback[row] else grid.getOrNull(row - history)?.snapshot()
+    }
+
     /**
      * Snapshot for rendering: scrollback (main buffer only) + current screen rows. A screen row is
      * copied into an immutable list only when it changed since the last snapshot ([TermRow.snapshot]),

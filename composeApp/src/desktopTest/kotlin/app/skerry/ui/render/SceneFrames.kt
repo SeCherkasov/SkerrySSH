@@ -50,14 +50,14 @@ internal class SceneFrames(
 
     /** One frame. */
     fun next(): PixelMap {
-        val pixels = draw().toComposeImageBitmap().toPixelMap()
+        val pixels = draw().use { it.toComposeImageBitmap().toPixelMap() }
         if (pauseMillis > 0) Thread.sleep(pauseMillis)
         return pixels
     }
 
     /** Drive one frame without reading it back — for a test that renders only to move the composition on. */
     fun advance() {
-        draw()
+        draw().close()
         if (pauseMillis > 0) Thread.sleep(pauseMillis)
     }
 

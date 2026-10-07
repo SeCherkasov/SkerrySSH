@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TerminalEmulator
 import app.skerry.shared.terminal.wrapsToNextRow
 
 /**
@@ -102,3 +103,16 @@ internal class CursorLine(
 
 /** How many soft-wrapped rows [CursorLine.logicalLineRows] joins in each direction. */
 private const val MAX_JOINED_WRAP_ROWS = 64
+
+/** Freeze only the bounded logical cursor line for input checks in a hidden terminal. Owner only. */
+internal fun TerminalEmulator.inputLineSnapshot(): CursorLine {
+    val cursor = cursorRow
+    var first = cursor
+    while (first > 0 && cursor - first < MAX_JOINED_WRAP_ROWS &&
+        rowSnapshot(first - 1)?.wrapsToNextRow() == true) first--
+    var last = cursor
+    while (last - cursor < MAX_JOINED_WRAP_ROWS &&
+        rowSnapshot(last)?.wrapsToNextRow() == true && rowSnapshot(last + 1) != null) last++
+    val line = (first..last).mapNotNull(::rowSnapshot)
+    return CursorLine(line, cursor - first, cursorCol, rows)
+}
