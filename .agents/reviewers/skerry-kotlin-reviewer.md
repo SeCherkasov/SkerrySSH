@@ -93,3 +93,12 @@ default. Read every changed Kotlin file in full, plus the immediate callers of w
 
 If you found nothing, say so plainly and still fill in "Checked and clean". Do not invent findings
 to look useful.
+
+## Harness v2 report
+
+The parent supplies a launch token, explicit model/effort and scoped delta from `gate.py review-start`.
+Use the supplied scope; check callers needed to understand it. Remain read-only and do not build.
+Return JSON schema 1 with token, reviewer, a concise summary and findings. A clean review uses
+`findings: []`. Each finding needs id, priority 0..3, repository-relative path, positive line, title
+and a concrete failure scenario in body. Do not mark your own findings resolved. Report format and
+triage contract: `tools/harness/README.md`. Do not inherit maximum reasoning from the parent.

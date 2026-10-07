@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Harness self-tests
+        run: python3 tools/harness/selftest.py
 
       - name: Set up JDK 21
         uses: actions/setup-java@v6
@@ -57,25 +62,10 @@ jobs:
         # tool is missing, so without this step a regression in either would go green here.
         run: sudo apt-get update && sudo apt-get install -y ffmpeg binutils
 
-      - name: Test
-        # `allTests` as well as `test`: :shared and :composeApp are Kotlin Multiplatform modules
-        # whose test tasks are named after their targets (desktopTest), so a bare `test` matched
-        # nothing in them and only :server was ever tested here.
-        #
-        # Under xvfb-run because compose-resources asks AWT for the screen resolution when it loads
-        # a string, which throws HeadlessException on a runner with no display — the failure lands
-        # inside a coroutine and surfaces as a test that never reaches its final state.
-        #
-        # -PskerryCi: binutils are installed above, so LlamatikNativeIsaTest treats a guard it
-        # cannot run as a failure rather than a skip. A property, not an environment variable — see
-        # the comment on it in shared/build.gradle.kts.
-        run: xvfb-run --auto-servernum ./gradlew test allTests --stacktrace -PskerryCi=1
-
-      # Static analysis. Runs after the tests so a red suite is reported first — detekt findings are
-      # cheaper to read once the behaviour is known good. Existing findings sit in
-      # gradle/detekt-baseline-*.xml; this step fails only on NEW ones.
-      - name: Detekt
-        run: ./gradlew detektAll --stacktrace
+      - name: Planned tests, builds and static analysis
+        # Explicit leaf suites, builds/lint and detekt come from the shared planner. Compose tests
+        # need Xvfb; CI=true adds -PskerryCi=1 for checks requiring installed ffmpeg/binutils.
+        run: xvfb-run --auto-servernum python3 tools/harness/gate.py run --build-only
 
       # Gradle prints only the assertion's file and line; the values it compared live in the report.
       - name: Upload test reports
@@ -83,8 +73,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-reports
+          include-hidden-files: true
           path: |
             **/build/reports/tests/
             **/build/test-results/
             **/build/reports/detekt/
+            .git/skerry-harness-v2/logs/
           retention-days: 7

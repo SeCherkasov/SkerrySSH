@@ -442,7 +442,11 @@ def _baseline_refs(cwd: str | None, base: str) -> list[tuple[str, str]]:
     commit, and a finding that names it twice reads as two baselines failing instead of one.
     """
     found: list[tuple[str, str]] = []
-    for ref in ("origin/main", "main", base or state.merge_base(cwd=cwd)):
+    try:
+        point = base or state.merge_base(cwd=cwd)
+    except ValueError:
+        point = ""
+    for ref in ("origin/main", "main", point):
         if not ref:
             continue
         code, out = state.git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd)

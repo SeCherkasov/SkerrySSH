@@ -31,7 +31,7 @@ Exact versions are in `gradle/libs.versions.toml`.
 | `server/.../Application.kt` | Ktor sync-server entry point and application module |
 | `sync-wire/` | Serializable client/server wire DTOs |
 | `docs/coding-guidelines.md` | Architecture, concurrency, security and UI rules |
-| `tools/harness/` | Content-pinned development gate and its self-tests |
+| `tools/harness/` | Module-aware v2 planner, receipts, agent profiles and self-tests |
 
 The common pattern is UI/controller → injected common contract/store → protocol or persistence
 implementation in `shared` → platform adapter where required. Server requests enter Ktor routes,
@@ -58,7 +58,7 @@ tools/harness/gate.py run
 python3 tools/harness/selftest.py
 ```
 
-Use `tools/harness/gate.py run` for final verification; a direct Gradle command is only an
+Use `tools/harness/gate.py plan`, `agent-plan` and `run` for final verification; a direct Gradle command is only an
 iteration and does not create a gate record.
 
 ## Where to look
