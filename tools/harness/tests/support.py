@@ -50,7 +50,9 @@ class SandboxCase(unittest.TestCase):
         self.box = Sandbox()
         self.addCleanup(self.box.cleanup)
         self.cwd = self.box.path
-        isolated_cache = patch.dict(os.environ, {"XDG_CACHE_HOME": str(Path(self.cwd, ".git/test-cache"))})
+        # CI behavior is selected explicitly by its tests, never inherited from the suite host.
+        isolated_cache = patch.dict(os.environ, {"CI": "false",
+                                                "XDG_CACHE_HOME": str(Path(self.cwd, ".git/test-cache"))})
         isolated_cache.start()
         self.addCleanup(isolated_cache.stop)
 

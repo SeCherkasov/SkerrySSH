@@ -133,7 +133,7 @@ def red(test_file, pattern, cwd=None):
             command = [policy.PY, "tools/harness/selftest.py", "-k", pattern.strip("*")]
             code = execute(command, log, cwd)
             text = log.read_text(errors="replace")
-            if code == 0 or not re.search(r"Ran [1-9]\d* tests", text) or "FAILED (failures=" not in text:
+            if code == 0 or not re.search(r"Ran [1-9]\d* tests?\b", text) or "FAILED (failures=" not in text:
                 raise ValueError("RED did not execute a failing assertion; inspect " + str(log))
         else:
             module = policy.module_of(test_file)
