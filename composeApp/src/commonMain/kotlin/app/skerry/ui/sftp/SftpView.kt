@@ -20,11 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -44,6 +46,7 @@ import app.skerry.ui.files.FKeyBar
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
+import app.skerry.ui.files.TransferStatus
 import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.generated.resources.Res
@@ -144,6 +147,8 @@ private fun LiveSftpView(
     // Persistent show-hidden setting (Ctrl+H) — single source of truth for both panes.
     val sftpPrefs = LocalSftpPrefs.current
     val focus = remember(controller) { FocusRequester() }
+    val cancelFocus = remember(controller) { FocusRequester() }
+    var cancelFocused by remember(controller) { mutableStateOf(false) }
     // A row dragged from one pane to the other (desktop mouse): copy, or move with Shift held.
     val drag = remember(controller) { FileDragState() }
     // Window position of the view, so the drag chip can place the window-space pointer inside it.
@@ -173,6 +178,11 @@ private fun LiveSftpView(
     val c = coord
     // Once the coordinator is open — give the panes focus so arrows/Tab work without a click.
     LaunchedEffect(c) { if (c != null) focus.requestFocus() }
+    val activeTransferId = c?.queue?.firstOrNull { it.status == TransferStatus.Active }?.id
+    val cancelWasFocused = cancelFocused
+    LaunchedEffect(activeTransferId) {
+        if (cancelWasFocused) focus.requestFocus()
+    }
     // A path clicked in terminal output: reveal it in the remote pane once the coordinator is open.
     // Keyed on the request itself, so a second click while this view is already up is honoured too.
     // The shell's cwd (OSC 7) is the FIRST-open fallback — while browsing, a directory change
@@ -286,6 +296,19 @@ private fun LiveSftpView(
                     if (editingPath || editingFilter) return@onPreviewKeyEvent false
                     // The editor is open: it owns every key, including the F-keys it redefines.
                     if (editor != null) return@onPreviewKeyEvent false
+                    // Shift+Tab reaches Cancel without changing the pane. Its Enter/Space must
+                    // reach the button, while Tab/Escape return to normal file navigation.
+                    if (cancelFocused) {
+                        if (event.key == Key.Tab || event.key == Key.Escape) {
+                            focus.requestFocus()
+                            return@onPreviewKeyEvent true
+                        }
+                        return@onPreviewKeyEvent false
+                    }
+                    if (event.key == Key.Tab && event.isShiftPressed && activeTransferId != null) {
+                        cancelFocus.requestFocus()
+                        return@onPreviewKeyEvent true
+                    }
                     // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
                     // LaunchedEffect below applies it to both panes (single source of truth).
                     if (event.isCtrlPressed && event.key == Key.H) {
@@ -413,7 +436,14 @@ private fun LiveSftpView(
                             dropTarget = drag.target == ActivePane.Remote,
                         )
                     }
-                    TransferQueueStrip(c.queue, mono, onDismiss = c::dismissTransfer)
+                    TransferQueueStrip(c.queue, mono,
+                        cancelModifier = Modifier.focusRequester(cancelFocus).onFocusChanged { cancelFocused = it.isFocused },
+                        onDismiss = {
+                        c.dismissTransfer(it)
+                        // Cancelling replaces the focused button with a finished row. Keep the
+                        // panel's Escape, arrows and F-keys available after that node disappears.
+                        focus.requestFocus()
+                    })
                 }
             }
             // The editor brings its own key bar (Save/Edit/Search/Quit) — the panel's would be a legend

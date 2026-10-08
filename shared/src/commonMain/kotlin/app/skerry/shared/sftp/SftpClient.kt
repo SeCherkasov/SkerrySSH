@@ -8,7 +8,8 @@ package app.skerry.shared.sftp
  * read/write for small files ([read]/[write]), path operations ([rename]/[remove]), and streamed
  * transfer between server and local filesystem ([download]/[upload]) without loading the whole
  * file into memory, with a progress callback. Resuming a partial transfer is not supported. All
- * methods are suspend: I/O runs off the calling thread.
+ * methods are suspend: I/O runs off the calling thread. Cancellation interrupts blocking IO;
+ * streamed transfers check it between chunks, and the channel remains available afterward.
  *
  * Paths are interpreted by the server (POSIX semantics, `/` separator). Relative paths and `~`
  * are expanded by the server; [realpath] canonicalizes a path (including the start directory via `.`).
@@ -60,7 +61,8 @@ interface SftpClient {
     /**
      * Streams remote file [remotePath] to local path [localPath] without loading it entirely into
      * memory (unlike [read]). The local file is created/overwritten, and only once the transfer is
-     * complete: a failed one leaves whatever was there before. Its mode is the remote one narrowed —
+     * complete: a failed or cancelled one leaves whatever was there before and removes staging.
+     * Its mode is the remote one narrowed —
      * never wider, never group/other-writable, always owner read-write; its modification time is
      * the remote one. [onProgress] is called with
      * (transferred bytes, total bytes) as the transfer proceeds; total is the remote file's
@@ -77,7 +79,7 @@ interface SftpClient {
     /**
      * Streams local file [localPath] to remote path [remotePath], creating/overwriting it in place
      * (a symlink is written through, an existing file keeps its mode; a failed transfer leaves the
-     * target truncated).
+     * target truncated; cancelling also leaves a partial target, without deleting the source).
      * [onProgress] is called with (transferred bytes, total bytes), where total is the local
      * file's size. The parent directory on the server must exist.
      * @throws SftpException local file missing, no permission/parent on the server, or channel failure

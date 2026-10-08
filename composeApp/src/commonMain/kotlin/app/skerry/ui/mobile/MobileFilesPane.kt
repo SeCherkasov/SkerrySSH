@@ -1,6 +1,10 @@
 package app.skerry.ui.mobile
 
+import app.skerry.ui.files.isFinished
+
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,13 +13,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -56,20 +57,18 @@ import app.skerry.ui.generated.resources.sftp_download_to_device
 import app.skerry.ui.generated.resources.sftp_error
 import app.skerry.ui.generated.resources.sftp_loading
 import app.skerry.ui.generated.resources.sftp_meta_joined
-import app.skerry.ui.generated.resources.sftp_queue_cancel
 import app.skerry.ui.generated.resources.sftp_queue_clear
-import app.skerry.ui.generated.resources.sftp_queue_waiting
 import app.skerry.ui.generated.resources.sftp_rename
 import app.skerry.ui.generated.resources.sftp_transfer_error
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.transferQueueAnnouncement
+import app.skerry.ui.sftp.TransferQueueRow
 import app.skerry.ui.sftp.fileDateText
 import app.skerry.ui.sftp.permissionsText
 import app.skerry.ui.sftp.sizeText
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.sftp.ConfirmDeleteDialog
 import app.skerry.ui.design.IconBtn
-import app.skerry.ui.design.MeterBar
 import app.skerry.ui.sftp.NameDialog
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -282,7 +281,7 @@ private fun MobileFileUpRow(mono: FontFamily, onClick: () -> Unit) {
 
 
 /**
- * Mobile layout's transfer card (below the list): direction icon + name + percent + bar.
+ * Mobile transfer card: pinned active file, batch counter, bytes and speed above a virtual backlog.
  * Active shows live progress; Failed shows the error with a close button; Idle renders nothing.
  *
  * The card follows what is actually moving, and below it comes one row per operation still waiting
@@ -302,33 +301,25 @@ internal fun MobileTransferCard(
 ) {
     StatusAnnouncer(transferQueueAnnouncement(queue))
     when (transfer) {
-        TransferState.Idle -> Unit
+        TransferState.Idle -> queue.lastOrNull { it.status.isFinished }
+            ?.takeIf { it.status == TransferStatus.Cancelled }?.let { entry ->
+                Column(Modifier.padding(horizontal = 22.dp, vertical = 10.dp).fillMaxWidth()) {
+                    TransferQueueRow(entry, mono, onDrop, touch = true)
+                }
+            }
 
         is TransferState.Active -> {
-            val up = transfer.direction == TransferDirection.Upload
-            val fraction = if (transfer.total > 0) transfer.transferred.toFloat() / transfer.total else 0f
-            val percent = (fraction * 100).toInt()
+            val entry = queue.firstOrNull { it.status == TransferStatus.Active } ?: TransferEntry(
+                0, transfer.direction, transfer.name, transfer.fileIndex, transfer.fileCount,
+                transfer.transferred, transfer.total, 0, 0, TransferStatus.Active,
+            )
             Column(
-                Modifier
-                    .padding(horizontal = 22.dp, vertical = 14.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Skerry.colors.surface2)
+                Modifier.padding(horizontal = 22.dp, vertical = 14.dp).fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp)).background(Skerry.colors.surface2)
                     .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
-                ) {
-                    Sym(if (up) "upload" else "download", size = 17.sp, color = Skerry.colors.cyan)
-                    Txt(transferDisplayName(transfer.name), color = Skerry.colors.textBright, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Txt("$percent%", color = Skerry.colors.dim, size = 11.sp)
-                }
-                Spacer(Modifier.height(8.dp))
-                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Skerry.colors.overlayStrong)) {
-                    MeterBar(fraction, Skerry.colors.cyan, Modifier.fillMaxWidth())
-                }
+                TransferQueueRow(entry, mono, onDrop, touch = true)
             }
         }
 
@@ -357,7 +348,7 @@ internal fun MobileTransferCard(
                     label = stringResource(Res.string.sftp_queue_clear, transferDisplayName(transfer.name)),
                     // The row the card is showing, not every finished one: the label names one file.
                     onClick = { onDrop(transfer.id) },
-                    box = 26,
+                    box = 48,
                     icon = 16.sp,
                 )
             }
@@ -365,50 +356,24 @@ internal fun MobileTransferCard(
     }
     val waiting = queue.filter { it.status == TransferStatus.Waiting }
     if (waiting.isEmpty()) return
-    Column(
-        // No top padding: the card above ends with its own, and with no card there is nothing to
-        // separate from either. Bounded and scrollable, because the screen below it does not
-        // scroll: a long backlog would push its own tail — and the FAB — off the display.
-        Modifier
-            .padding(start = 22.dp, end = 22.dp, bottom = 14.dp)
-            .fillMaxWidth()
-            .heightIn(max = WAITING_ROWS_MAX_HEIGHT)
-            .verticalScroll(rememberScrollState()),
+    LazyColumn(
+        Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp)
+            .fillMaxWidth().heightIn(max = WAITING_ROWS_MAX_HEIGHT),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        waiting.forEach { entry -> key(entry.id) { MobileWaitingRow(entry, mono, onDrop) } }
+        items(waiting, key = { it.id }) { entry ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.overlayStrong, RoundedCornerShape(12.dp))
+                    .padding(start = 14.dp, end = 6.dp),
+            ) {
+                TransferQueueRow(entry, mono, onDrop, touch = true)
+            }
+        }
     }
 }
 
-/** About three waiting rows: enough to see the backlog, little enough to leave the list its screen. */
+/** About two touch-sized waiting rows, leaving the file list room on a phone. */
 private val WAITING_ROWS_MAX_HEIGHT = 132.dp
-
-/**
- * One operation still queued behind the running transfer: dimmed, named, and cancellable. Taking it
- * back is what releases the handle the picker already committed — the SAF document at the chosen
- * location, or the staged copy of the picked upload.
- */
-@Composable
-private fun MobileWaitingRow(entry: TransferEntry, mono: FontFamily, onCancel: (Long) -> Unit) {
-    val up = entry.direction == TransferDirection.Upload
-    val name = transferDisplayName(entry.name)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Skerry.colors.surface2)
-            .border(1.dp, Skerry.colors.overlayStrong, RoundedCornerShape(12.dp))
-            .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        Sym(if (up) "upload" else "download", size = 17.sp, color = Skerry.colors.dim)
-        Txt(name, color = Skerry.colors.dim, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Txt(stringResource(Res.string.sftp_queue_waiting), color = Skerry.colors.dim, size = 11.sp)
-        // Named after its row: several operations wait at once, and identical controls cannot be
-        // told apart by a screen reader navigating controls rather than reading in order.
-        IconBtn("close", label = stringResource(Res.string.sftp_queue_cancel, name), onClick = { onCancel(entry.id) }, box = 26, icon = 16.sp)
-    }
-}
 
 // Shared chrome.

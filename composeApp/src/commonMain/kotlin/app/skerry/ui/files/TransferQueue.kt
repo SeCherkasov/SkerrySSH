@@ -11,12 +11,13 @@ sealed interface TransferStatus {
     data object Waiting : TransferStatus
     data object Active : TransferStatus
     data object Done : TransferStatus
+    data object Cancelled : TransferStatus
     data class Failed(val failure: FileTransferFailure) : TransferStatus
 }
 
 /** Whether the operation is over — its row is history, and the user's to clear. */
 val TransferStatus.isFinished: Boolean
-    get() = this == TransferStatus.Done || this is TransferStatus.Failed
+    get() = this == TransferStatus.Done || this == TransferStatus.Cancelled || this is TransferStatus.Failed
 
 /**
  * One line of the transfer queue: a single operation (F5/F6, a picked upload, a download to a
@@ -94,6 +95,16 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
     private var startedAt = 0L
     private var bytesDone = 0L
 
+    // Byte callbacks run on the transfer's IO thread. Keep their latest values without allocating
+    // a Compose snapshot for every packet; file boundaries and terminal outcomes remain immediate.
+    private var progressName: String? = null
+    private var progressIndex = 0
+    private var progressCount = 0
+    private var progressBytes = 0L
+    private var progressTotal = 0L
+    private var publishedAt = 0L
+    private var pendingProgress = false
+
     /**
      * Opens the entry of a requested operation and returns its id. The entry starts [Waiting]:
      * every operation goes through the queue, whether or not it has to wait there. [name] is what
@@ -124,6 +135,8 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
     fun activate(id: Long) {
         startedAt = now()
         bytesDone = 0
+        progressName = null
+        pendingProgress = false
         val index = entries.indexOfFirst { it.id == id }
         if (index >= 0) entries[index] = entries[index].copy(status = TransferStatus.Active)
     }
@@ -142,17 +155,34 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
 
     /** Progress of the file the running operation is on ([index] of [count] in the operation). */
     fun step(name: String, index: Int, count: Int, transferred: Long, total: Long) {
+        val changedFile = name != progressName || index != progressIndex || count != progressCount
+        progressName = name
+        progressIndex = index
+        progressCount = count
+        progressBytes = transferred
+        progressTotal = total
+        pendingProgress = true
+        val time = now()
+        val fileComplete = total > 0 && transferred >= total
+        val cadenceElapsed = time < publishedAt || time - publishedAt >= PROGRESS_INTERVAL_MS
+        if (changedFile || cadenceElapsed || fileComplete) publishProgress(time)
+    }
+
+    private fun publishProgress(time: Long) {
+        if (!pendingProgress) return
         updateActive {
             it.copy(
-                name = name,
-                fileIndex = index,
-                fileCount = count,
-                transferred = transferred,
-                total = total,
-                bytesDone = bytesDone + transferred,
-                elapsedMillis = now() - startedAt,
+                name = progressName ?: it.name,
+                fileIndex = progressIndex,
+                fileCount = progressCount,
+                transferred = progressBytes,
+                total = progressTotal,
+                bytesDone = bytesDone + progressBytes,
+                elapsedMillis = (time - startedAt).coerceAtLeast(0L),
             )
         }
+        publishedAt = time
+        pendingProgress = false
     }
 
     /**
@@ -161,8 +191,9 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
      * leave the total at whatever the last callback said — nothing, for the whole operation.
      */
     fun fileFinished(bytes: Long) {
+        publishProgress(now())
         bytesDone += bytes
-        updateActive { it.copy(bytesDone = bytesDone, elapsedMillis = now() - startedAt) }
+        updateActive { it.copy(bytesDone = bytesDone, elapsedMillis = (now() - startedAt).coerceAtLeast(0L)) }
     }
 
     /** Closes the running operation as failed, naming the item it stopped on. */
@@ -172,7 +203,8 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
 
     /** Closes the running entry (if one is still open) and trims the finished ones. */
     fun end(status: TransferStatus, name: String? = null) {
-        updateActive { it.copy(status = status, name = name ?: it.name, elapsedMillis = now() - startedAt) }
+        publishProgress(now())
+        updateActive { it.copy(status = status, name = name ?: it.name, elapsedMillis = (now() - startedAt).coerceAtLeast(0L)) }
         trim()
     }
 
@@ -185,7 +217,7 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
 
     /**
      * Drops entry [id]; a transfer still running is left alone. A waiting one goes — that is how
-     * the user cancels it, and [TransferRunner.cancelWaiting] releases what it was holding.
+     * the user cancels it, and [TransferRunner.cancel] releases what it was holding.
      */
     fun dismiss(id: Long) {
         entries.removeAll { it.id == id && it.status != TransferStatus.Active }
@@ -196,3 +228,5 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
         if (index >= 0) entries[index] = edit(entries[index])
     }
 }
+
+private const val PROGRESS_INTERVAL_MS = 100L

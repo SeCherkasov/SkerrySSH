@@ -60,6 +60,7 @@ import app.skerry.ui.generated.resources.settings_kb_lock
 import app.skerry.ui.generated.resources.settings_kb_new_connection
 import app.skerry.ui.generated.resources.settings_kb_next_prev_tab
 import app.skerry.ui.generated.resources.settings_kb_open_sftp
+import app.skerry.ui.generated.resources.sftp_cancel_transfer
 import app.skerry.ui.generated.resources.settings_kb_paste
 import app.skerry.ui.generated.resources.settings_kb_play_recording
 import app.skerry.ui.generated.resources.settings_kb_record_session
@@ -162,6 +163,7 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.ftail_fkey_refresh), "F9", live = true),
         KeyboardBinding(stringResource(Res.string.ftail_fkey_quit), "F10", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_switch_pane), "Tab", live = true),
+        KeyboardBinding(stringResource(Res.string.sftp_cancel_transfer), "Shift+Tab → Enter / Space", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_hidden), ctrl("H"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_filter), ctrl("F"), live = true),
         // Mouse gestures, listed with the F-keys they stand in for.
