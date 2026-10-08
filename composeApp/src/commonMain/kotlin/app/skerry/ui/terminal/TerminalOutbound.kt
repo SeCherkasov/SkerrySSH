@@ -10,7 +10,7 @@ import kotlinx.coroutines.channels.Channel
  * never blocks or drops, except for [reply] while the host is not reading.
  */
 internal class TerminalOutbound {
-    private class Item(val bytes: ByteArray, val reply: Boolean)
+    private class Item(val bytes: ByteArray, val reply: Boolean, val userInput: Boolean = false)
 
     private val queue = Channel<Item>(Channel.UNLIMITED)
 
@@ -20,8 +20,12 @@ internal class TerminalOutbound {
     private val lock = SynchronizedObject()
     private var queuedReplyBytes = 0L
 
-    fun send(bytes: ByteArray) {
-        queue.trySend(Item(bytes, reply = false))
+    fun send(bytes: ByteArray, userInput: Boolean = false) {
+        queue.trySend(Item(bytes, reply = false, userInput = userInput))
+    }
+
+    fun sendInput(text: String) {
+        send(text.encodeToByteArray(), userInput = true)
     }
 
     /**
@@ -38,33 +42,40 @@ internal class TerminalOutbound {
     }
 
     /** The sole consumer: writes everything queued through [write], in order, until cancelled. */
-    suspend fun drainTo(write: suspend (ByteArray) -> Unit) {
-        for (item in queue) write(withQueuedBehind(item))
+    suspend fun drainTo(onUserInputWrite: () -> Unit = {}, write: suspend (ByteArray) -> Unit) {
+        for (item in queue) {
+            val batch = withQueuedBehind(item)
+            if (batch.userInput) onUserInputWrite()
+            write(batch.bytes)
+            if (batch.userInput) onUserInputWrite()
+        }
     }
 
     /**
      * [first] joined by whatever else is already queued, up to [OUTBOUND_BATCH_BYTES] — in order, and
      * without waiting for more: an idle keystroke goes out alone and at once.
      */
-    private fun withQueuedBehind(first: Item): ByteArray {
+    private fun withQueuedBehind(first: Item): Item {
         var total = first.bytes.size
         var replies = if (first.reply) total else 0
+        var userInput = first.userInput
         var batch: ArrayList<Item>? = null
         while (total < OUTBOUND_BATCH_BYTES) {
             val next = queue.tryReceive().getOrNull() ?: break
             (batch ?: arrayListOf(first).also { batch = it }).add(next)
             total += next.bytes.size
             if (next.reply) replies += next.bytes.size
+            userInput = userInput || next.userInput
         }
         if (replies > 0) synchronized(lock) { queuedReplyBytes -= replies }
-        val parts = batch ?: return first.bytes
+        val parts = batch ?: return first
         val out = ByteArray(total)
         var at = 0
         for (part in parts) {
             part.bytes.copyInto(out, at)
             at += part.bytes.size
         }
-        return out
+        return Item(out, reply = false, userInput = userInput)
     }
 }
 

@@ -22,7 +22,7 @@ internal const val BACKGROUND_PUBLISH_INTERVAL_MS = 250L
  * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
  * bounded rate. The first command after a quiet period publishes immediately; while commands keep
  * arriving, the mid-window wait absorbs the stream and a publish happens once per
- * [PUBLISH_MIN_INTERVAL_MS] — on the window edge if the stream pauses inside it (trailing
+ * the current publication interval (normally [PUBLISH_MIN_INTERVAL_MS]) — on the window edge if the stream pauses inside it (trailing
  * publish), so the last batch of a burst is never left undrawn. select (not
  * withTimeoutOrNull+receive) because select's clauses are atomic: a command cannot be lost to a
  * timeout racing an in-flight receive.
@@ -87,14 +87,15 @@ internal class EmulatorOwnerLoop(
             return next
         }
         val now = schedule.nowMillis()
-        if (schedule.refreshRequested() || now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
+        val interval = schedule.publishIntervalMillis()
+        if (schedule.refreshRequested() || now - lastPublishAt >= interval) {
             publishNow(now)
             // Mid-flood fairness: this coroutine shares the Default pool with the writer and
             // other sessions; give them a slot before taking the next windowful.
             if (windowSpentParsing) yield()
             return null
         }
-        val next = awaitCommand(PUBLISH_MIN_INTERVAL_MS - (now - lastPublishAt))
+        val next = awaitCommand(interval - (now - lastPublishAt))
         if (next == null) publishNow(schedule.nowMillis())
         return next
     }
@@ -110,7 +111,7 @@ internal class EmulatorOwnerLoop(
      */
     private suspend fun drainWithinWindow(since: Long): Boolean {
         while (true) {
-            if (schedule.nowMillis() - since >= PUBLISH_MIN_INTERVAL_MS) return true
+            if (schedule.nowMillis() - since >= schedule.publishIntervalMillis()) return true
             val next = commands.tryReceive().getOrNull() ?: return false
             apply(next)
         }
@@ -157,6 +158,7 @@ internal class EmulatorPublicationSchedule(
     val nowMillis: () -> Long,
     val refreshRequested: () -> Boolean,
     val pendingPublishDelay: () -> Long?,
+    val publishIntervalMillis: () -> Long = { PUBLISH_MIN_INTERVAL_MS },
 )
 
 internal suspend fun applyTerminalResize(
