@@ -123,4 +123,8 @@
     <!-- Accessible names -->
     <string name="sftp_path_field">Yola git</string>
     <string name="sftp_edit_buffer">Dosya içeriği</string>
+    <string name="sftp_queue_file_counter">%1$d/%2$d</string>
+    <string name="sftp_queue_operation_bytes">Aktarılan: %1$s</string>
+    <string name="sftp_queue_cancelled">iptal edildi</string>
+    <string name="sftp_cancel_transfer">Etkin aktarımı iptal et</string>
 </resources>

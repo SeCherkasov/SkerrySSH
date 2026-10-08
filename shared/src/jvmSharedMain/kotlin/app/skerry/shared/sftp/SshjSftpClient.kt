@@ -16,7 +16,11 @@ import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.FileMode
@@ -64,23 +68,15 @@ internal class SshjSftpClient(
         sftp.ls(path, listingSelector(path, limit)).map { it.toEntry() }
     }
 
-    override suspend fun stat(path: String): SftpEntry? = withContext(Dispatchers.IO) {
-        if (closed.get()) throw SftpException("SFTP channel closed")
+    override suspend fun stat(path: String): SftpEntry? = io("Failed to get metadata for $path") {
         try {
-            // lstat, not stat: don't follow symlinks — attributes of the link itself, consistent with list().
+            // lstat, not stat: don't follow symlinks — consistent with list().
             sftp.lstat(path).toEntry(path)
         } catch (e: SFTPException) {
-            // "No such file" maps to null. Servers differ: OpenSSH/embedded may return NO_SUCH_PATH
-            // instead of NO_SUCH_FILE when a path component is missing — map both.
+            // Servers differ on a missing path component: accept both missing-object codes.
             if (e.statusCode == Response.StatusCode.NO_SUCH_FILE ||
                 e.statusCode == Response.StatusCode.NO_SUCH_PATH
-            ) {
-                null
-            } else {
-                throw SftpException("Failed to get metadata for $path", e)
-            }
-        } catch (e: IOException) {
-            throw SftpException("Failed to get metadata for $path", e)
+            ) null else throw e
         }
     }
 
@@ -109,7 +105,7 @@ internal class SshjSftpClient(
         remotePath: String,
         localPath: String,
         onProgress: SftpProgress,
-    ): Unit = io("Failed to download file $remotePath") {
+    ): Unit = io("Failed to download file $remotePath") { context ->
         val target = Paths.get(localPath)
         // sshj would write into a directory given as the target; a caller always names the file.
         if (Files.isDirectory(target)) throw IOException("$localPath is a directory")
@@ -119,9 +115,13 @@ internal class SshjSftpClient(
         try {
             // Owner-only while the bytes arrive; the final mode is set once they are all there.
             createOwnerOnly(staging)
-            withTransferListener(onProgress, preserveAttributes = false) { sftp.get(remotePath, staging.toString()) }
+            withTransferListener(SftpProgress { bytes, total ->
+                context.ensureActive()
+                onProgress.onProgress(bytes, total)
+            }, preserveAttributes = false) { sftp.get(remotePath, staging.toString()) }
             narrowToRemoteMode(staging, remote.mode.permissionsMask)
             Files.setLastModifiedTime(staging, FileTime.from(remote.mtime, TimeUnit.SECONDS))
+            context.ensureActive()
             moveReplacing(staging, target)
             placed = true
         } finally {
@@ -133,11 +133,14 @@ internal class SshjSftpClient(
         localPath: String,
         remotePath: String,
         onProgress: SftpProgress,
-    ): Unit = io("Failed to upload file to $remotePath") {
+    ): Unit = io("Failed to upload file to $remotePath") { context ->
         // Written in place, as OpenSSH's sftp does: a symlink is written through, and the file keeps
         // its owner, group and mode. A failed transfer leaves the target truncated. No attributes
         // are sent after the write: sshj's would be 0644 for every file, whatever its local mode.
-        withTransferListener(onProgress, preserveAttributes = false) { sftp.put(localPath, remotePath) }
+        withTransferListener(SftpProgress { bytes, total ->
+            context.ensureActive()
+            onProgress.onProgress(bytes, total)
+        }, preserveAttributes = false) { sftp.put(localPath, remotePath) }
     }
 
     override suspend fun mkdir(path: String): Unit = io("Failed to create directory $path") {
@@ -167,11 +170,14 @@ internal class SshjSftpClient(
      * Run a blocking sshj operation, wrapping its errors as [SftpException]. Rejects use after
      * [close] up front — otherwise sshj would throw an opaque engine IOException instead.
      */
-    private inline fun <T> ioBody(message: String, block: () -> T): T {
+    private inline fun <T> ioBody(message: String, context: CoroutineContext, block: () -> T): T {
         if (closed.get()) throw SftpException("SFTP channel closed")
         return try {
             block()
         } catch (e: IOException) {
+            // sshj wraps an interrupted Promise wait in IOException. Cancellation must not
+            // escape as a network failure and cancel the caller's parent session.
+            context.ensureActive()
             // Include the sshj cause in the text: otherwise the UI shows only the wrapper message
             // ("Failed to upload file...") and the real reason (no space/permissions, channel drop) is lost.
             val cause = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName
@@ -179,8 +185,13 @@ internal class SshjSftpClient(
         }
     }
 
-    private suspend inline fun <T> io(message: String, crossinline block: () -> T): T =
-        withContext(Dispatchers.IO) { ioBody(message, block) }
+    private suspend inline fun <T> io(message: String, crossinline block: (CoroutineContext) -> T): T {
+        // sshj's Promise waits preserve the interrupt flag when wrapping InterruptedException.
+        // runInterruptible breaks those waits and clears its interrupt before releasing the IO
+        // thread. The SFTP channel and SSH session remain available for subsequent operations.
+        val context = currentCoroutineContext()
+        return runInterruptible(Dispatchers.IO) { ioBody(message, context) { block(context) } }
+    }
 
     /**
      * Set a progress listener on sshj's shared transfer channel for the duration of [block] and

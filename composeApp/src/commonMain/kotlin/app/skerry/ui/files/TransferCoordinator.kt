@@ -340,13 +340,13 @@ class TransferCoordinator(
     }
 
     /**
-     * Drops one queue entry ([id]); a transfer still running is left alone. An entry still waiting
-     * for its turn is cancelled by dropping it, and whatever it was holding — a picked upload's
-     * staged copy, a "Save to…" document — is released with it.
+     * Cancels active or waiting work, or clears a finished row. Active IO must unwind before
+     * cleanup and the next operation; its row remains visible with the cancelled outcome.
      */
     fun dismissTransfer(id: Long) {
-        runner.cancelWaiting(id)
-        transfers.dismiss(id)
+        val active = queue.any { it.id == id && it.status == TransferStatus.Active }
+        runner.cancel(id)
+        if (!active) transfers.dismiss(id)
     }
 
     /**

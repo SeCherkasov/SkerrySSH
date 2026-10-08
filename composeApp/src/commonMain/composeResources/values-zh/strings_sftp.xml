@@ -125,4 +125,8 @@
     <string name="sftp_queue_state">%1$s：%2$s</string>
     <string name="sftp_path_field">跳转到路径</string>
     <string name="sftp_edit_buffer">文件内容</string>
+    <string name="sftp_queue_file_counter">%1$d/%2$d</string>
+    <string name="sftp_queue_operation_bytes">已传输：%1$s</string>
+    <string name="sftp_queue_cancelled">已取消</string>
+    <string name="sftp_cancel_transfer">取消当前传输</string>
 </resources>

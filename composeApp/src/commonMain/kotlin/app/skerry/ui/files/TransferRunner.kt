@@ -5,6 +5,9 @@ import app.skerry.ui.sftp.TransferDirection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -15,7 +18,10 @@ private class PendingTransfer(
     val id: Long,
     val onFinally: suspend () -> Unit,
     val block: suspend () -> Unit,
-)
+) {
+    var job: Job? = null
+    var cancelledByUser = false
+}
 
 /**
  * Runs transfer operations one at a time over the session's single SFTP channel, in the order they
@@ -29,7 +35,7 @@ private class PendingTransfer(
  * deletes.
  *
  * Every operation gets its [TransferQueue] entry when it is submitted, so a waiting one is visible
- * and can be taken back ([cancelWaiting]). [onFinally] runs exactly once per operation — after the
+ * and can be taken back ([cancel]). [onFinally] runs exactly once per operation — after the
  * block on every exit path, or on its own if the operation never gets to run — and under
  * [NonCancellable], because releasing the picker's handle is what it is for and a dying scope is
  * when that matters most.
@@ -41,6 +47,7 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
 
     private val pending = ArrayDeque<PendingTransfer>()
     private var running = false
+    private var active: PendingTransfer? = null
 
     /**
      * Submits an operation. [direction] and [name] fill in its queue row before it starts — [name]
@@ -58,11 +65,16 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
     }
 
     /**
-     * Takes the waiting operation with entry [id] back off the queue and releases its handle. No-op
-     * if [id] is not waiting — already running (not the user's to cancel), or already finished.
-     * Leaves the row to the caller: this is the user dropping it, and dropping means it goes.
+     * Stops the active operation, or removes a waiting one and releases its handle. The active
+     * row stays open until its IO and cleanup have unwound; only then may the next operation run.
+     * A stale id cannot cancel the operation that starts after it.
      */
-    fun cancelWaiting(id: Long) {
+    fun cancel(id: Long) {
+        active?.takeIf { it.id == id }?.let {
+            it.cancelledByUser = true
+            it.job?.cancel()
+            return
+        }
         val op = pending.firstOrNull { it.id == id } ?: return
         pending.remove(op)
         release(op.onFinally)
@@ -108,10 +120,12 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
             return
         }
         running = true
+        active = op
         queue.activate(op.id)
-        scope.launch(start = CoroutineStart.ATOMIC) {
+        op.job = scope.launch(start = CoroutineStart.ATOMIC) {
             try {
                 op.block()
+                currentCoroutineContext().ensureActive()
                 // A block can finish normally having already closed its own entry as failed
                 // (a move whose transfer went through but whose source delete didn't) — that
                 // verdict wins, so the entry is only marked done while it is still open.
@@ -119,7 +133,7 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
             } catch (e: CancellationException) {
                 // A cancelled operation is over too: leaving the entry Active would show a
                 // progress bar that never moves again.
-                queue.end(TransferStatus.Failed(FileTransferFailure.Transfer))
+                queue.end(if (op.cancelledByUser) TransferStatus.Cancelled else TransferStatus.Failed(FileTransferFailure.Transfer))
                 throw e
             } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
                 // Throwable, not Exception: a tree walk deep enough to overflow the stack arrives as
@@ -133,6 +147,7 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
                 queue.end(TransferStatus.Failed(failure))
             } finally {
                 withContext(NonCancellable) { runCatching { op.onFinally() } }
+                active = null
                 startNext()
             }
         }
