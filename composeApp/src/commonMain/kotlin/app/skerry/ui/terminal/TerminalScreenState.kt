@@ -405,6 +405,7 @@ class TerminalScreenState(
     // Outbound byte queue to the PTY (input, mouse reports, DSR/DA responses). The single writer
     // in init serializes writes, preserving order across sends from different coroutines.
     private val outbound = TerminalOutbound()
+    private val inputPublication = TerminalInputPublication(nowMillis)
 
     // Last size sent to the PTY: duplicates are suppressed to avoid spamming resize on relayout.
     // @Volatile because resize() can be called from different coroutines (LaunchedEffect/gestures).
@@ -448,6 +449,7 @@ class TerminalScreenState(
             schedule = EmulatorPublicationSchedule(
                 nowMillis = nowMillis,
                 refreshRequested = { renderRefreshRequested },
+                publishIntervalMillis = { inputPublication.intervalMillis(!backgroundWhenUnobserved || renderers > 0) },
                 pendingPublishDelay = {
                     if (unpublishedRender) (BACKGROUND_PUBLISH_INTERVAL_MS - (nowMillis() - lastFullPublishAt)).coerceAtLeast(0)
                     else null
@@ -839,7 +841,7 @@ class TerminalScreenState(
         if (awaitingSecret) {
             autocomplete.reset()
             refreshSuggestion()
-            send(text)
+            outbound.sendInput(text)
             // A secret is mirrored like anything else typed: entering one sudo password across
             // synchronized panes is the case people turn the toggle on for. Each pane decides on its
             // own screen whether to keep it out of history — this one just did.
@@ -858,7 +860,7 @@ class TerminalScreenState(
         // edited config would land in vault-backed history and surface as a ghost suggestion and in
         // the cross-host palette.
         if (altScreen) {
-            send(text)
+            outbound.sendInput(text)
             if (mirror) inputMirror?.invoke(text, MirroredInput.Typed)
             return
         }
@@ -880,7 +882,7 @@ class TerminalScreenState(
                 ?.let { guard.completedLine(typed) }
                 ?.also { autocomplete.commandHistory.record(it, sessionOnly = true) }
         refreshSuggestion(lineChanged = true)
-        send(text)
+        outbound.sendInput(text)
         // Mirrored from here, not from typeInput: input held by the production guard must reach the
         // other panes only once it is confirmed (this runs again on confirm), never on the hold.
         if (mirror) inputMirror?.invoke(text, MirroredInput.Typed)
@@ -1039,7 +1041,7 @@ class TerminalScreenState(
         // cursor of a password prompt.
         autocomplete.reset()
         refreshSuggestion()
-        send(secret + "\r")
+        outbound.sendInput(secret + "\r")
         return true
     }
 
@@ -1095,7 +1097,7 @@ class TerminalScreenState(
         if (altScreen) return false
         val tail = autocomplete.acceptSuggestion() ?: return false
         refreshSuggestion(lineChanged = true)
-        sendBytes(tail)
+        outbound.send(tail, userInput = true)
         return true
     }
 
@@ -1232,7 +1234,7 @@ class TerminalScreenState(
             // completion of text the shell does not have, and Tab would send its tail.
             refreshSuggestion(lineChanged = true)
         }
-        send(text)
+        outbound.sendInput(text)
     }
 
     /**
@@ -1264,7 +1266,7 @@ class TerminalScreenState(
         // replaced with a line explaining who withdrew it, because the owner's next Enter must
         // commit what the viewer entered either way, and that is what the hint's absence says.
         declineSudoOffer()
-        sendBytes(bytes)
+        outbound.send(bytes, userInput = true)
     }
 
     /** Rows of [screen] above the live grid: the scrollback on the primary buffer, none on the alt one. */
@@ -1329,7 +1331,7 @@ class TerminalScreenState(
             autocomplete.onUserInput(text.encodeToByteArray())
             refreshSuggestion(lineChanged = true) // the paste moved the line; the screen has not seen it yet
         }
-        send(bracketedPasteWrap(text, bracketedPaste))
+        outbound.sendInput(bracketedPasteWrap(text, bracketedPaste))
         // Mirrored as a paste, not as typing: each pane wraps it for its own bracketed-paste mode,
         // which the target may have set differently from this one.
         if (mirror) inputMirror?.invoke(text, MirroredInput.Pasted)
@@ -1446,7 +1448,7 @@ class TerminalScreenState(
         // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
         // many coroutines call send/sendBytes. All sends go through [outbound].
         scope.launch {
-            outbound.drainTo { session.send(it) }
+            outbound.drainTo(onUserInputWrite = inputPublication::onUserInputWrite) { session.send(it) }
         }
     }
 }
