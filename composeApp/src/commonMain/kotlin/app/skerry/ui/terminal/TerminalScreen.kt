@@ -37,6 +37,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.key.Key
@@ -64,6 +65,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -846,6 +848,9 @@ fun TerminalScreen(
           // The highlight instance is part of an entry's validity — a rebuilt highlight (cursor
           // move through the live line) must re-segment its row.
           val rowRenderCache = remember(state) { RowRenderCache(GLYPH_RUN_CACHE_ROWS, GLYPH_RUN_CACHE_RUNS) }
+          val graphics = LocalGraphicsContext.current
+          val rowDrawingCache = remember(state, graphics, glyphStyleCache, metrics) { RowDrawingCache(graphics) }
+          DisposableEffect(rowDrawingCache) { onDispose { rowDrawingCache.close() } }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -859,6 +864,7 @@ fun TerminalScreen(
               // highlight above derives its window from the same helper.
               val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
               val windowCells = (drawWindow.last - drawWindow.first + 1) * (screen.firstOrNull()?.size ?: 0)
+              rowDrawingCache.retain(drawWindow)
               rowRenderCache.fitWindow(windowCells)
               glyphStyleCache.fitWindow(windowCells)
               for (r in drawWindow) {
@@ -901,20 +907,24 @@ fun TerminalScreen(
                   // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
                   // horizontals, colored rows sliding). A wide cell — span=2.
                   val rowEntry = rowRenderCache.entry(r, row, highlightByRow[r])
-                  val runs = rowEntry.runs
-                  for (i in runs.indices) {
-                      val run = runs[i]
-                      val x = run.col * cw
-                      if (run.text.isNotBlank()) {
-                          val style = glyphStyleCache.style(run.style, run.kind) {
-                              run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
+                  translate(top = top) {
+                      rowDrawingCache.draw(r, rowEntry, this, IntSize(size.width.roundToInt(), chh.roundToInt())) {
+                          val runs = rowEntry.runs
+                          for (i in runs.indices) {
+                              val run = runs[i]
+                              val x = run.col * cw
+                              if (run.text.isNotBlank()) {
+                                  val style = glyphStyleCache.style(run.style, run.kind) {
+                                      run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
+                                  }
+                                  val layout = rowEntry.layout(i, glyphStyleCache)
+                                      ?: measureGlyphText(measurer, run.text, style).also { rowEntry.storeLayout(i, it) }
+                                  drawText(layout, color = style.color, topLeft = Offset(x, 0f))
+                              }
+                              // Draw the underline across the full run width, including under spaces (like xterm).
+                              if (run.style.underline) drawCellUnderline(run.style, x, 0f, run.span * cw, chh, palette, underlineEffects, termTheme)
                           }
-                          val layout = rowEntry.layout(i, glyphStyleCache)
-                              ?: measureGlyphText(measurer, run.text, style).also { rowEntry.storeLayout(i, it) }
-                          drawText(layout, color = style.color, topLeft = Offset(x, top))
                       }
-                      // Draw the underline across the full run width, including under spaces (like xterm).
-                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
                   }
                   // 4) Hyperlinks (OSC 8) are underlined in a separate pass — runs of adjacent cells with
                   // one URI; skip those already underlined by the app (SGR) to avoid duplicating. Only

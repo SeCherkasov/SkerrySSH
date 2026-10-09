@@ -60,6 +60,7 @@ class SyncCoordinatorTokenRefreshTest {
         val expiredTokens = CopyOnWriteArrayList<String>()
         val refreshCalls = AtomicInteger(0)
         val watchTokens = CopyOnWriteArrayList<String>()
+        val syncedTokens = CopyOnWriteArrayList<String>()
         val closeCalls = AtomicInteger(0)
         @Volatile
         var refreshUnauthorized = false
@@ -86,7 +87,9 @@ class SyncCoordinatorTokenRefreshTest {
         }
         override suspend fun pull(session: SyncSession, since: Long): RecordPage = RecordPage(emptyList(), 1)
         override suspend fun push(session: SyncSession, records: List<app.skerry.shared.sync.RemoteRecord>): RecordPage = RecordPage(emptyList(), 1)
-        override suspend fun ping(): Boolean = true
+        // These tests drive token recovery through syncNow/watch. A reachable health ping can
+        // launch an extra recovery between their controlled failures; health recovery is tested separately.
+        override suspend fun ping(): Boolean = false
         override suspend fun close() { closeCalls.incrementAndGet() }
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
         override suspend fun accountSummary(session: SyncSession): AccountSummary = error("unused")
@@ -119,6 +122,7 @@ class SyncCoordinatorTokenRefreshTest {
             engineFactory = { _ ->
                 SyncRunner { s ->
                     if (s.accessToken in client.expiredTokens) throw SyncException(SyncException.Kind.UNAUTHORIZED, "token expired")
+                    client.syncedTokens += s.accessToken
                     SyncOutcome(pulled = 0, pushed = 0, cursor = 1)
                 }
             },
@@ -141,11 +145,24 @@ class SyncCoordinatorTokenRefreshTest {
             // The 15-minute TTL passes: the server now rejects the session's access token.
             client.expiredTokens += "access-1"
             sut.syncNow()
-            val terminal = sut.status.awaitStatus("the expired sync to refresh and retry") {
-                (it is SyncStatus.Online && client.refreshCalls.get() > 0) || it is SyncStatus.Failed || it is SyncStatus.Configured
+            // StateFlow can conflate Online -> Busy -> the same Online before a collector resumes.
+            // Refresh completion also changes the sealed token; poll the whole postcondition instead
+            // of expecting that an external counter change emits a new, equal status.
+            val terminal = awaitSync("the expired sync to refresh and retry") {
+                var status = sut.status.value
+                while (status !is SyncStatus.Failed && status !is SyncStatus.Configured) {
+                    val rotated = client.refreshCalls.get() > 0 && config.load()?.sealedRefreshToken != sealedAtConnect
+                    val retried = "access-2" in client.syncedTokens
+                    // Read after the postconditions: an Online captured before rotation is stale.
+                    status = sut.status.value
+                    if (status is SyncStatus.Online && rotated && retried) break
+                    delay(20)
+                }
+                status
             }
             assertTrue(terminal is SyncStatus.Online, "an expired access token must refresh+retry, not surface as $terminal")
             assertEquals(1, client.refreshCalls.get(), "exactly one refresh for one expired sync")
+            assertTrue("access-2" in client.syncedTokens, "the sync runner must receive the rotated access token")
 
             // The rotated refresh token must be re-sealed, or the next cold-start restore would use a stale one.
             val sealedAfter = config.load()?.sealedRefreshToken
