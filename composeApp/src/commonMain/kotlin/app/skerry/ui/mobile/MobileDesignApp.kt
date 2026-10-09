@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,7 +22,6 @@ import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.remote.toCredentials
 import app.skerry.ui.remote.toTarget
 import app.skerry.ui.session.SessionsController
-import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.SyncOnboardingScreen
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.LocalTerminalHighlight
@@ -95,7 +93,7 @@ fun MobileDesignApp(
     updatesOverride: app.skerry.ui.update.UpdateNoticeController? = null,
     // Hook on vault unlock (parity with desktop `main`/`DesktopDesignApp`): reload managers from
     // decrypted records, restore the sync session. No-op in preview/offscreen.
-    onVaultUnlocked: () -> Unit = {},
+    onVaultUnlocked: (suspend () -> Unit)? = null,
     // External cleanup on an irreversible vault reset (hosts/known_hosts/settings by [ResetScope]).
     // Parity seam with desktop: the Android entry point wires up real cleanup (like `onVaultReset`
     // in desktop `main`) once the mobile vault graph is wired. No-op in preview/offscreen.
@@ -212,20 +210,14 @@ fun MobileDesignApp(
     // instead of leaving it running on the still-alive scope.
     DisposableEffect(builtUpdates) { onDispose { builtUpdates?.stop() } }
     val updates = updatesOverride ?: builtUpdates
-    // AI settings live as a SETTINGS record in the (synced) vault. The controller must be reloaded
-    // when sync pulls records from the server, otherwise a BYOK key configured on another device
-    // won't show up in the mobile UI without a re-login. Vault unlock is handled SEPARATELY, in
-    // [MobileChrome] (it composes only behind the gate and re-enters composition on every unlock):
-    // hanging refresh off [deps.credentials] won't work — on Android that controller is created
-    // once and never changes, so the effect would fire exactly once at locked startup and reset to defaults.
-    val syncStatus = deps.sync?.status?.collectAsState()?.value
-    LaunchedEffect(syncStatus) {
-        if (syncStatus is SyncStatus.Online && syncStatus.lastPulled > 0) {
-            ai?.refresh()
-            // The update-check toggle is also a synced SETTINGS record; refresh() only reconciles
-            // the loop, it does not re-run the check on every pull.
-            updates?.refresh()
-        }
+    // These composition-owned controllers join the sync callback's refresh-debt boundary.
+    // Status changes must not cancel a received SETTINGS projection. Unlock remains in MobileChrome.
+    val settingsCatalogs = remember(ai, updates) {
+        app.skerry.ui.vault.vaultSettingsCatalogs(ai, updates)
+    }
+    DisposableEffect(deps.sync, settingsCatalogs) {
+        val unregister = deps.sync?.registerCatalogs(settingsCatalogs)
+        onDispose { unregister?.invoke() }
     }
     // Terminal AI response language follows the UI language (see DesktopDesignApp): the provider
     // reads the applied locale tag and resets when the language changes.

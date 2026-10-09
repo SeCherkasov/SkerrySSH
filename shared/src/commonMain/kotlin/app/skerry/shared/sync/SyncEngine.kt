@@ -78,7 +78,14 @@ class KeyedStateStore(
  * authentication against their claimed metadata and were NOT applied (a tampering/replay signal
  * from the server — see [app.skerry.shared.vault.MergeResult]); local records survived.
  */
-data class SyncOutcome(val pulled: Int, val pushed: Int, val cursor: Long, val rejected: Int = 0)
+data class SyncOutcome(
+    val pulled: Int,
+    val pushed: Int,
+    val cursor: Long,
+    val rejected: Int = 0,
+    /** Applied record types across all pages. Legacy injected runners request a full refresh. */
+    val changedTypes: Set<RecordType> = if (pulled > 0) RecordType.entries.toSet() else emptySet(),
+)
 
 /**
  * Client-side sync engine. Runs deltas between the local [Vault]
@@ -114,9 +121,11 @@ class SyncEngine(
         var cursor = state.cursor(session.accountId)
         var pulled = 0
         var rejected = 0
+        val changedTypes = mutableSetOf<RecordType>()
         val onMerged = { m: MergeResult ->
             pulled += m.applied.size
             rejected += m.rejected.size
+            m.applied.forEach { changedTypes += it.type }
         }
 
         cursor = drainPull(session, cursor, onMerged)
@@ -154,7 +163,7 @@ class SyncEngine(
         cursor = drainPull(session, cursor, onMerged)
 
         state.setCursor(session.accountId, cursor)
-        return SyncOutcome(pulled = pulled, pushed = pushed, cursor = cursor, rejected = rejected)
+        return SyncOutcome(pulled = pulled, pushed = pushed, cursor = cursor, rejected = rejected, changedTypes = changedTypes.toSet())
     }
 
     /**

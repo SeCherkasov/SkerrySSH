@@ -82,7 +82,7 @@ internal class FakeVault : Vault {
         val version = maxOf((entries[id]?.record?.version ?: 0L) + 1, minVersion)
         entries[id] = Entry(
             VaultRecord(id, type, version, "2026-06-12T00:00:00Z", "test-device", deleted = false, blob = SEALED),
-            payload,
+            payload.copyOf(),
         )
     }
 

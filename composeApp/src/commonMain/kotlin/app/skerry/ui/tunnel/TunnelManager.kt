@@ -219,13 +219,19 @@ class TunnelManager(
      * rows are kept by id to preserve runtime state of active forwards; removed tunnels are
      * dropped, new ones added.
      */
-    fun reload() {
+    fun reload() { prepareReload().invoke() }
+
+    fun prepareReload(): () -> Unit {
         val incoming = store.all()
         // liveIds, not the ids of `incoming`: a record whose payload cannot be decrypted is missing
         // from `all()` but is very much still there — adopting an account dataKey leaves every
         // not-yet-pushed record sealed under the previous key. Tearing down on that would stop a
         // live tunnel the moment this desktop joins an existing sync account.
         val kept = store.liveIds()
+        return { applyReload(incoming, kept) }
+    }
+
+    private fun applyReload(incoming: List<Tunnel>, kept: Set<String>) {
         // A row that has really left the store takes its forward with it. Deleting a tunnel on
         // another device arrives here as a store write plus a reload — `delete()` is never called —
         // so dropping the entry alone would leave the port bound and the SSH connection open with

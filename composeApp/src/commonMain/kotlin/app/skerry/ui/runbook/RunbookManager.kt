@@ -61,8 +61,11 @@ class RunbookManager(
         private set
 
     /** Reload from the store — needed after sync writes and on vault unlock (locked reads empty). */
-    fun reload() {
-        runbooks = store.all().map { RunbookEntry(it.canonical()) }
+    fun reload() { prepareReload().invoke() }
+
+    fun prepareReload(): () -> Unit {
+        val incoming = store.all().map { RunbookEntry(it.canonical()) }
+        return { runbooks = incoming }
     }
 
     fun find(id: String?): RunbookEntry? = id?.let { wanted -> runbooks.firstOrNull { it.id == wanted } }

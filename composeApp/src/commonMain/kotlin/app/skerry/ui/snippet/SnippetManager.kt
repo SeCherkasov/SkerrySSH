@@ -103,8 +103,11 @@ class SnippetManager(
      * Reload the list from the store. Needed after writes that bypass the manager and on vault unlock:
      * at startup the vault is locked and [store] returns empty; snippets appear after unlock.
      */
-    fun reload() {
-        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    fun reload() { prepareReload().invoke() }
+
+    fun prepareReload(): () -> Unit {
+        val incoming = store.all().map { SnippetEntry(it.canonical()) }
+        return { snippets = incoming }
     }
 
     fun find(id: String?): SnippetEntry? = id?.let { wanted -> snippets.firstOrNull { it.id == wanted } }

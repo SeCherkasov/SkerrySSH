@@ -15,6 +15,9 @@ interface HostStore {
     /** Create a new record or replace an existing one with the same [Host.id] (upsert). */
     fun put(host: Host)
 
+    /** Upserts a batch in order. Persistent stores may commit the batch in one write. */
+    fun putAll(hosts: List<Host>) { hosts.forEach(::put) }
+
     /** Remove the record by id; missing id is a no-op. */
     fun remove(id: String)
 

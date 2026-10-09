@@ -194,7 +194,7 @@ fun DesktopDesignApp(
     features: FeatureFlags = FeatureFlags(),
     // Called once after vault unlock, before list reload — reloads managers from decrypted records
     // and restores the sync session (supplied by desktop `main`). No-op in mock/preview.
-    onVaultUnlocked: () -> Unit = {},
+    onVaultUnlocked: (suspend () -> Unit)? = null,
     // Empty host folders sync in the vault layout record: at startup the vault is locked, so after
     // unlock (and [onVaultUnlocked]) reread them into state from here. No-op in mock/preview.
     customGroupsProvider: () -> List<CustomGroup> = { emptyList() },

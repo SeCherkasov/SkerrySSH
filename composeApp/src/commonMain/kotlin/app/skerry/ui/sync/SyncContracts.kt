@@ -242,7 +242,13 @@ sealed interface SyncStatus {
      * (zero-knowledge, design §4). Master password re-entry is needed; server/account are known.
      */
     data class Configured(val serverUrl: String, val accountId: String) : SyncStatus
-    data class Online(val accountId: String, val lastPushed: Int, val lastPulled: Int) : SyncStatus
+    data class Online(
+        val accountId: String,
+        val lastPushed: Int,
+        val lastPulled: Int,
+        val changedTypes: Set<app.skerry.shared.vault.RecordType> =
+            if (lastPulled > 0) app.skerry.shared.vault.RecordType.entries.toSet() else emptySet(),
+    ) : SyncStatus
 
     /**
      * The typed password is a valid password for an EXISTING account, but not this device's vault
