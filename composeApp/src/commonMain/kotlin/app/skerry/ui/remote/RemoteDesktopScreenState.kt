@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import app.skerry.shared.graphics.IdentityCache
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteDesktopUpdate
@@ -22,10 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +50,8 @@ class RemoteDesktopScreenState(
     /** The profile's remembered quality (V-03); applied at connect, changes reported outward. */
     private val qualityInitial: RemoteDesktopQuality = RemoteDesktopQuality.Auto,
     private val onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
+    clipboardSharedInitial: Boolean = true,
+    private val viewOnlyInitial: Boolean = false,
 ) {
     private val image = FramebufferImage(
         session.framebuffer.width.coerceAtLeast(1),
@@ -81,7 +80,8 @@ class RemoteDesktopScreenState(
 
     // Declared above the init block on purpose: the actor launched there reads it, and on an
     // eager dispatcher it does so before any property declared below the block exists.
-    private val inputActor = RemoteInputActor(session)
+    private val lifetime = RemoteDesktopLifetime(session, scope) { frameSignal.close() }
+    private val inputActor = lifetime.input
 
     @Volatile
     private var lastLockKeys: LockKeys? = null
@@ -200,10 +200,10 @@ class RemoteDesktopScreenState(
     /**
      * Debounced resize request: a window drag spews sizes many times a second, and each server-side
      * resize costs a full-screen retransmit — so only the size the user settles on is sent. Same
-     * swallow-the-write discipline as [send].
+     * failure handling as [RemoteDesktopLifetime.send].
      */
     private fun scheduleRemoteResize() {
-        if (!canResizeRemote) return
+        if (close.value != null || !canResizeRemote) return
         scope.launch {
             resizeLock.withLock {
                 resizeJob?.cancel()
@@ -213,7 +213,7 @@ class RemoteDesktopScreenState(
                     // and a wrapper carrying a stale captured size could win the lock last. The
                     // volatile [viewport] is always the freshest, and re-checking [remoteResize]
                     // honours a toggle-off that landed while this debounce was pending.
-                    if (!remoteResize) return@launch
+                    if (close.value != null || !remoteResize) return@launch
                     val requested = viewport
                     val (target, displayScale) = requested
                     if (target.width <= 0 || target.height <= 0) return@launch
@@ -224,6 +224,7 @@ class RemoteDesktopScreenState(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
+                        lifetime.markClosed(RemoteDesktopUpdate.Closed(false))
                     }
                 }
             }
@@ -234,41 +235,20 @@ class RemoteDesktopScreenState(
     fun applyQuality(newQuality: RemoteDesktopQuality) {
         quality = newQuality
         onQualityChanged(newQuality)
-        send { session.setQuality(newQuality) }
+        lifetime.send { session.setQuality(newQuality) }
     }
 
-    /**
-     * The remote cursor sprite, drawn at our own pointer. Null while the server hasn't sent a shape
-     * — either it paints the cursor into the framebuffer, or it is telling us the cursor is hidden.
-     */
-    var cursor: VncCursorImage? by mutableStateOf(null)
-        private set
+    private val peripheral = RemoteDesktopPeripheralState(onClipboard, clipboardSharedInitial)
 
-    /**
-     * Where the server last put the pointer itself (SetCursorPos — installers, remote apps that
-     * recentre the mouse). Drawn instead of the local position until the local mouse next speaks,
-     * so the user is not aiming at one place while clicking in another (F-21). In view-only it is
-     * the only pointer source there is, since no local events are sent.
-     */
-    var serverPointer: IntOffset? by mutableStateOf(null)
-        private set
-
-    // Sprites already built, keyed by the shape *instance*: a cached pointer re-announcement is
-    // the same object end to end, so switching arrow ↔ I-beam costs a list scan, not a bitmap
-    // rebuild (F-26).
-    private val spriteCache =
-        IdentityCache<RemoteDesktopUpdate.CursorShape, VncCursorImage?>(SPRITE_CACHE_SIZE)
-
-    /**
-     * The server asked for the ordinary system pointer instead of a shape of its own (RDP's
-     * SYSPTR_DEFAULT). There is nothing to draw, so the local pointer is shown rather than hidden —
-     * distinct from a hidden cursor, where neither is drawn.
-     */
-    var systemCursor by mutableStateOf(false)
-        private set
+    /** Remote cursor sprite; null when hidden or the server paints it. */
+    val cursor: VncCursorImage? get() = peripheral.cursor
+    /** Server-reported pointer position, superseded by local pointer input. */
+    val serverPointer: IntOffset? get() = peripheral.serverPointer
+    /** True when the server asks for the ordinary system pointer. */
+    val systemCursor: Boolean get() = peripheral.systemCursor
 
     /** View-only: when true, pointer/key input is not forwarded (look, don't touch). */
-    var viewOnly by mutableStateOf(false)
+    var viewOnly by mutableStateOf(viewOnlyInitial)
         private set
 
     /**
@@ -285,7 +265,7 @@ class RemoteDesktopScreenState(
         // position — so the full repaint bought nothing (F-27).
         if (!capabilities.cursorHandover) return
         val localCursor = !viewOnly
-        send {
+        lifetime.send {
             session.setLocalCursor(localCursor)
             session.requestFullUpdate()
         }
@@ -317,7 +297,7 @@ class RemoteDesktopScreenState(
         // server until it comes back — release it on the way out, like a focus loss (F-12).
         if (!visible) releaseHeldKeys()
         val previous = visibilityJob
-        visibilityJob = send {
+        visibilityJob = lifetime.send {
             previous?.join()
             session.setOutputVisible(visible)
         }
@@ -329,31 +309,16 @@ class RemoteDesktopScreenState(
 
     fun toggleAudioMuted() {
         audioMuted = !audioMuted
-        send { session.setAudioMuted(audioMuted) }
+        lifetime.send { session.setAudioMuted(audioMuted) }
     }
 
-    /**
-     * The local device stopped taking sound: the session is mute for a reason that has nothing to do
-     * with [audioMuted] and that nothing else on screen would show. Cleared by the same report when
-     * a device takes blocks again.
-     */
-    var audioFailed by mutableStateOf(false)
-        private set
+    /** Whether the local audio output stopped taking blocks. */
+    val audioFailed: Boolean get() = peripheral.audioFailed
 
-    /**
-     * Whether the clipboard travels at all. Enforced here rather than on the channel: both protocols
-     * settle their clipboard at connect time, so this is the only place a running session can stop
-     * text from crossing — in either direction, since the risk is symmetric.
-     */
-    var clipboardShared by mutableStateOf(true)
-        private set
+    /** Controls clipboard sharing in both directions. */
+    val clipboardShared: Boolean get() = peripheral.clipboardShared
 
-    fun toggleClipboardShared() {
-        clipboardShared = !clipboardShared
-        // Text that crossed while sharing was on is retracted with the switch: leaving it on screen
-        // would keep offering the remote machine's clipboard after the user said it should stay there.
-        if (!clipboardShared) serverClipboard = null
-    }
+    fun toggleClipboardShared() = peripheral.toggleClipboardShared()
 
     /**
      * The secure attention sequence. It cannot be typed: the local OS takes Ctrl+Alt+Del for itself
@@ -361,14 +326,12 @@ class RemoteDesktopScreenState(
      * machine it can only arrive as keys the client synthesizes.
      */
     fun sendCtrlAltDel() {
-        if (viewOnly) return
+        if (viewOnly || close.value != null) return
         // Through the actor like every other key, so the sequence cannot interleave with typing.
         val keys = CTRL_ALT_DEL.mapNotNull { remoteKeyEvent(it, 0) }
         keys.forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = true)) }
         keys.asReversed().forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = false)) }
     }
-
-    private val _close = MutableStateFlow<RemoteDesktopUpdate.Closed?>(null)
 
     /**
      * The close, once the session ended on its own (server drop / EOF); null while it is live. It
@@ -380,11 +343,10 @@ class RemoteDesktopScreenState(
      * registry — delivered by whatever frame happens to run next. The terminal side watches
      * `TerminalState` the same way.
      */
-    val close: StateFlow<RemoteDesktopUpdate.Closed?> = _close.asStateFlow()
+    val close: StateFlow<RemoteDesktopUpdate.Closed?> = lifetime.close
 
     /** Latest clipboard text from the remote host; the view mirrors it into the system clipboard. */
-    var serverClipboard: String? by mutableStateOf(null)
-        private set
+    val serverClipboard: String? get() = peripheral.serverClipboard
 
     val serverName: String get() = session.title
 
@@ -392,41 +354,22 @@ class RemoteDesktopScreenState(
     val imageBitmap: ImageBitmap get() = image.bitmap
 
     init {
+        if (viewOnlyInitial && capabilities.cursorHandover) {
+            lifetime.send {
+                session.setLocalCursor(false)
+                session.requestFullUpdate()
+            }
+        }
         // The profile's remembered quality (V-03). Auto is the wire default — announcing it would
         // be noise — and seeding is not a change, so onQualityChanged stays silent here.
         if (qualityInitial != RemoteDesktopQuality.Auto) {
-            send { session.setQuality(qualityInitial) }
+            lifetime.send { session.setQuality(qualityInitial) }
         }
-        scope.launch {
-            // The same belt-and-braces net as the updates collector below, for the same reason: on
-            // a supervisor scope a dying actor cancels nothing else, so without this a bug in the
-            // actor's own control flow would leave a live-looking picture with silently dead input.
-            try {
-                inputActor.run()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                _close.compareAndSet(null, RemoteDesktopUpdate.Closed(cleanExit = false))
-            }
-        }
-        scope.launch {
-            // The transports already turn a decode failure into a Closed update; this is the
-            // belt-and-braces net, so a throwing session surfaces as a dropped session (the UI shows
-            // "Connection lost") instead of an uncaught exception that would kill the collector
-            // silently on desktop and the whole process on Android.
-            try {
-                session.updates.collect { onUpdate(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Only if nothing closed the session already: a read loop that blows up behind an
-                // orderly close must not replace the server's own words with a bare drop.
-                _close.compareAndSet(null, RemoteDesktopUpdate.Closed(cleanExit = false))
-            }
-        }
+        lifetime.start(::onUpdate)
     }
 
     private fun onUpdate(update: RemoteDesktopUpdate) {
+        if (close.value != null) return
         when (update) {
             is RemoteDesktopUpdate.Region -> {
                 // An empty region is a protocol event with no pixels behind it (an RDP frame
@@ -455,50 +398,9 @@ class RemoteDesktopScreenState(
                 if (remoteResize) scheduleRemoteResize()
             }
 
-            is RemoteDesktopUpdate.Closed -> _close.value = update
+            is RemoteDesktopUpdate.Closed -> lifetime.markClosed(update)
 
-            else -> onPeripheralUpdate(update)
-        }
-    }
-
-    /**
-     * Everything that touches neither the picture nor the session's life: cursor, clipboard, sound.
-     *
-     * Exhaustive on purpose — the members [onUpdate] handles are listed here as no-ops rather than
-     * swept up by an `else`. The compiler refusing to build until a new [RemoteDesktopUpdate] is
-     * handled somewhere is the only thing that kept every update reaching the screen; an `else` in
-     * both halves would have let the next one be dropped in silence, which is exactly the bug this
-     * split was made to accommodate.
-     */
-    private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
-        when (update) {
-            is RemoteDesktopUpdate.CursorShape -> {
-                cursor = spriteCache.getOrPut(update) { VncCursorImage.of(update) }
-                systemCursor = false
-            }
-
-            is RemoteDesktopUpdate.CursorPosition -> serverPointer = IntOffset(update.x, update.y)
-            // "Visible" here is the server asking for its default pointer, not for the shape it sent
-            // last: the sprite goes, and the local pointer takes over. Hidden drops both.
-            is RemoteDesktopUpdate.CursorVisible -> {
-                cursor = null
-                systemCursor = update.visible
-            }
-
-            is RemoteDesktopUpdate.ClipboardText -> if (clipboardShared) {
-                serverClipboard = update.text
-                onClipboard(update.text)
-            }
-
-            is RemoteDesktopUpdate.AudioPlaybackFailing -> audioFailed = update.failing
-            is RemoteDesktopUpdate.Bell -> {}
-
-            // Handled by the caller; named so this `when` stays exhaustive.
-            is RemoteDesktopUpdate.Region,
-            is RemoteDesktopUpdate.Resize,
-            is RemoteDesktopUpdate.RemoteResizeSupported,
-            is RemoteDesktopUpdate.Closed,
-            -> Unit
+            else -> peripheral.onUpdate(update)
         }
     }
 
@@ -508,9 +410,9 @@ class RemoteDesktopScreenState(
      * way it does a move — see [RemoteInputActor].
      */
     fun onPointer(x: Int, y: Int, buttonMask: Int, wheel: Boolean = false) {
-        if (viewOnly) return
+        if (viewOnly || close.value != null) return
         // The local mouse speaking takes the cursor back from a server-side warp (F-21).
-        serverPointer = null
+        peripheral.serverPointer = null
         inputActor.submit(RemoteInputActor.PointerWrite(x, y, buttonMask, wheel))
     }
 
@@ -519,7 +421,7 @@ class RemoteDesktopScreenState(
      * [syncModifiers] can lift it again if the local machine lets go of it without telling us.
      */
     fun onKey(event: RemoteKeyEvent, down: Boolean, modifier: RemoteModifier? = null) {
-        if (viewOnly) return
+        if (viewOnly || close.value != null) return
         held.record(event, down, modifier)
         inputActor.submit(RemoteInputActor.KeyWrite(event, down))
     }
@@ -532,7 +434,7 @@ class RemoteDesktopScreenState(
      * Alt+click or Win+click and the desktop stops answering the mouse.
      */
     fun syncModifiers(local: RemoteModifiers, except: RemoteModifier? = null) {
-        if (viewOnly) return
+        if (viewOnly || close.value != null) return
         for (event in held.outOfStep(local, except)) {
             inputActor.submit(RemoteInputActor.KeyWrite(event, down = false))
         }
@@ -553,6 +455,7 @@ class RemoteDesktopScreenState(
      * in the background the user may have toggled one, and only this side can notice.
      */
     fun notifyFocus(focused: Boolean) {
+        if (close.value != null) return
         if (focused) {
             lastLockKeys?.let { inputActor.submit(RemoteInputActor.LockWrite(it)) }
         } else {
@@ -566,7 +469,7 @@ class RemoteDesktopScreenState(
      * apart silently otherwise (F-13).
      */
     fun onLockKeys(keys: LockKeys?) {
-        if (keys == null || keys == lastLockKeys) return
+        if (close.value != null || keys == null || keys == lastLockKeys) return
         lastLockKeys = keys
         inputActor.submit(RemoteInputActor.LockWrite(keys))
     }
@@ -574,35 +477,12 @@ class RemoteDesktopScreenState(
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
-        if (!clipboardShared) return
-        send { session.sendClipboardText(text) }
-    }
-
-    /**
-     * Fire-and-forget a write to the server. Every caller is a UI event (a mouse move, a menu click)
-     * racing the read loop, so the socket can already be dead when the write lands — and an exception
-     * escaping a bare `launch` isn't merely lost, it reaches the default handler and takes the whole
-     * process down on Android. The dropped session surfaces through [close] instead, which is the
-     * read loop's job; there is nothing a failed input write can tell the user that the imminent
-     * "Connection lost" doesn't.
-     *
-     * The job is returned for the one caller that has to order its writes ([setVisible]); the rest
-     * drop it.
-     */
-    private fun send(block: suspend () -> Unit): Job = scope.launch {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-        }
+        if (close.value != null || !clipboardShared) return
+        lifetime.send { session.sendClipboardText(text) }
     }
 
     private companion object {
         const val RESIZE_DEBOUNCE_MS = 400L
-
-        /** Matches the RDP pointer cache (25 slots) with room for uncached shapes on top. */
-        const val SPRITE_CACHE_SIZE = 32
 
         val CTRL_ALT_DEL = listOf(Key.CtrlLeft, Key.AltLeft, Key.Delete)
     }

@@ -97,4 +97,5 @@
     <string name="rdp_drop_reset">Соединение сброшено.</string>
     <string name="rdp_drop_refused">В подключении отказано.</string>
     <string name="rdp_drop_unresolved">Хост не найден.</string>
+    <string name="rd_reconnect">Переподключиться</string>
 </resources>

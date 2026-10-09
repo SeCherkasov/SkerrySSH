@@ -39,17 +39,17 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_no_session
 import app.skerry.ui.generated.resources.rd_pick_to_connect
 import app.skerry.ui.generated.resources.vnc_connecting
-import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality_auto
 import app.skerry.ui.generated.resources.vnc_quality_high
 import app.skerry.ui.generated.resources.vnc_quality_low
 import app.skerry.ui.generated.resources.vnc_quality_medium
-import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.remote.REMOTE_BAR_AUTO_HIDE_MS
 import app.skerry.ui.remote.REMOTE_BAR_EDGE
 import app.skerry.ui.remote.RemoteBarState
 import app.skerry.ui.remote.RemoteDesktopBar
 import app.skerry.ui.remote.RemoteDesktopController
+import app.skerry.ui.remote.RemoteDesktopConnectionError
+import app.skerry.ui.remote.RemoteDesktopDisconnected
 import app.skerry.ui.remote.RemoteDesktopUiState
 import app.skerry.ui.remote.ReportOutputVisibility
 import app.skerry.ui.remote.rememberClipboardActions
@@ -179,19 +179,8 @@ fun VncView(state: DesktopDesignState) {
                     }
                 }
             }
-            is RemoteDesktopUiState.Error -> CenterNotice(
-                "error",
-                remoteDesktopErrorText(ui),
-                color = Skerry.colors.sunset,
-            )
-            is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
-                VncSurface(ui.screen, interactive = false)
-                CenterNotice(
-                    "link_off",
-                    stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
-                    color = Skerry.colors.sunset,
-                )
-            }
+            is RemoteDesktopUiState.Error -> RemoteDesktopConnectionError(ui, vnc::reconnect)
+            is RemoteDesktopUiState.Disconnected -> RemoteDesktopDisconnected(ui, vnc::reconnect)
         }
     }
 }

@@ -95,4 +95,5 @@
     <string name="rdp_drop_reset">Bağlantı sıfırlandı.</string>
     <string name="rdp_drop_refused">Bağlantı reddedildi.</string>
     <string name="rdp_drop_unresolved">Sunucu bulunamadı.</string>
+    <string name="rd_reconnect">Yeniden bağlan</string>
 </resources>
