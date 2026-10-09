@@ -153,9 +153,10 @@ class SyncCoordinator(
      * calling (main) thread before the launch; released by the operation ITSELF, the moment what it was
      * going to do is decided — in [activateSession], with the session live and the first cycle about to
      * publish it. What is left of the operation then needs no guard: [opMutex] serializes it and the
-     * next connect simply queues behind it, instead of being dropped in silence (issue #328). The
-     * `finally` around each launch is the backstop for every path that never gets that far (a failure,
-     * a cancellation, the password-replace pause). @Volatile because the release runs on
+     * next connect simply queues behind it, instead of being dropped in silence (issue #328).
+     * Failure and password-replace results release it before publication too, so an immediate retry
+     * can queue behind their cleanup. The `finally` around each launch is the cancellation backstop.
+     * @Volatile because the release runs on
      * [scope] and the guard reads it without the lock.
      *
      * Deliberately NOT keyed on the status alone: [_status] is written from a dozen places that never
@@ -193,6 +194,12 @@ class SyncCoordinator(
         if (linkingGeneration == generation) linkingInFlight = false
     }
 
+    /** Publish this attempt's result only after it can admit the caller's next linking action. */
+    private fun reportLinkingResult(status: SyncStatus, linking: Int?) {
+        if (linking != null) endLinking(linking)
+        _status.value = status
+    }
+
     // Guards the pending replace together with the status that advertises it. [pauseForLock] declines from
     // the main thread while [doConnect] is publishing from [scope], and the two orders in between are both
     // wrong: a decline that lands first leaves the ACCOUNT password stashed behind an already-locked vault,
@@ -210,11 +217,12 @@ class SyncCoordinator(
         accountId: String,
         password: CharArray,
         keepConnected: Boolean,
+        linking: Int?,
     ): Boolean = synchronized(pendingLock) {
         if (lockPaused) return false
         clearPendingReplace() // a superseded pause's password is not left behind
         pendingReplace = PendingReplace(serverUrl, accountId, password.copyOf(), keepConnected)
-        _status.value = SyncStatus.NeedsPasswordReplaceConfirm(serverUrl, accountId)
+        reportLinkingResult(SyncStatus.NeedsPasswordReplaceConfirm(serverUrl, accountId), linking)
         true
     }
 
@@ -356,7 +364,7 @@ class SyncCoordinator(
      *   open is a lie for every caller, not only for the tests that wait on it and then assert the
      *   release (issue #365).
      */
-    private inner class AttemptClient {
+    private inner class AttemptClient(private val linking: Int? = null) {
         private var client: SyncClient? = null
 
         /** Take ownership of a freshly opened client. */
@@ -390,7 +398,7 @@ class SyncCoordinator(
         /** Report the attempt's result, with everything it owned already given back. */
         suspend fun report(status: SyncStatus) {
             release()
-            _status.value = status
+            reportLinkingResult(status, linking)
         }
     }
 
@@ -589,8 +597,8 @@ class SyncCoordinator(
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
-            _status.value = SyncStatus.Failed(SyncFailureReason.VaultLocked)
             masterPassword.fill(' ')
+            reportLinkingResult(SyncStatus.Failed(SyncFailureReason.VaultLocked), linking)
             return
         }
         // Keep key material in outer vars to wipe it in finally (zero-knowledge: masterKey is the
@@ -599,7 +607,7 @@ class SyncCoordinator(
         var authKey: ByteArray? = null
         // The client this connect opens, and the release that has to precede every status it
         // publishes (see [AttemptClient], issues #308 and #365).
-        val attempt = AttemptClient()
+        val attempt = AttemptClient(linking)
         try {
             // Argon2id inside try: heavy and may throw (up to OutOfMemoryError) — otherwise the password
             // wouldn't be wiped (finally) and the status would be stuck on Busy forever.
@@ -703,7 +711,7 @@ class SyncCoordinator(
                 // The verify is all this client was for, and the pause is a status like any other:
                 // release before publishing it, not in the finally behind it (issue #365).
                 attempt.release()
-                if (!publishPendingReplace(serverUrl, accountId, masterPassword, keepConnected)) {
+                if (!publishPendingReplace(serverUrl, accountId, masterPassword, keepConnected, linking)) {
                     // The vault locked while this connect was on the network (the lock has no idea one is
                     // in flight, and a sync connect does not defer the idle timer). Fall back to the saved
                     // state rather than asking a question nobody can see — the reactivation debt above is
@@ -1378,15 +1386,15 @@ class SyncCoordinator(
         _status.value = SyncStatus.Busy
         val parsed = PairingPayload.decode(payload)
         if (parsed == null) {
-            _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeMalformed)
             localPassword.fill(' ')
+            reportLinkingResult(SyncStatus.Failed(SyncFailureReason.PairingCodeMalformed), linking)
             return
         }
         // Keep the unwrapped account key in an outer var to wipe in finally until adoptDataKey takes
         // ownership (null the ref after a successful adopt — else we'd wipe the live key).
         var accountDataKey: DataKey? = null
         // The client this claim opens, released before every status it publishes ([AttemptClient]).
-        val attempt = AttemptClient()
+        val attempt = AttemptClient(linking)
         try {
             val syncClient = attempt.opened(clientFactory(parsed.serverUrl))
             val deviceId = deviceIdProvider() // a new device for the account — always a fresh id

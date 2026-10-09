@@ -4,9 +4,14 @@ import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -28,6 +33,70 @@ class SyncCoordinatorConnectGuardTest {
     private val firstUrl = "https://one.test"
     private val secondUrl = "https://two.test"
     private val thirdUrl = "https://three.test"
+
+    @Test
+    fun `an account key failure admits a retry as soon as it is published`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newAccountVault(crypto, password)
+        val wrap = wrapOwnKey(vault, crypto, password, account)
+        val first = ReactivatingClient(wrap, reactivated = false, corruptWraps = 1)
+        val second = ReactivatingClient(wrap, reactivated = false)
+        val sut = SyncCoordinator(
+            clientFactory = { url -> if (url == firstUrl) first else second },
+            crypto = crypto,
+            vault = vault,
+            configStore = InMemorySyncConfigStore(),
+            debtStore = InMemoryReconcileDebtStore(),
+            syncState = InMemorySyncStateStore(),
+        )
+        val result = CompletableDeferred<Triple<SyncFailureReason, Boolean, Boolean>>()
+        // Unconfined resumes inside the status publication, before the failed operation's finally.
+        val observer = launch(Dispatchers.Unconfined) {
+            val failure = sut.status.filterIsInstance<SyncStatus.Failed>().first()
+            val released = first.closed.get()
+            sut.connect(secondUrl, account, password.toCharArray())
+            result.complete(Triple(failure.reason, released, sut.status.value == SyncStatus.Busy))
+        }
+        try {
+            sut.connect(firstUrl, account, password.toCharArray())
+            val (reason, released, admitted) = awaitSync("the immediate retry") { result.await() }
+            assertEquals(SyncFailureReason.AccountKeyNotAdopted, reason)
+            assertTrue(released, "the failed client's release precedes its result")
+            assertTrue(admitted, "a published failure must admit a new connect before its tail unwinds")
+            awaitSync("the retry to reach the second server") { while (second.pulledSince.isEmpty()) delay(20) }
+        } finally {
+            observer.cancel()
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `a malformed pairing result admits a corrected claim immediately`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newAccountVault(crypto, password)
+        val client = ReactivatingClient(wrapOwnKey(vault, crypto, password, account), reactivated = false)
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = vault,
+            configStore = InMemorySyncConfigStore(),
+            debtStore = InMemoryReconcileDebtStore(),
+            syncState = InMemorySyncStateStore(),
+        )
+        val admitted = CompletableDeferred<Boolean>()
+        val observer = launch(Dispatchers.Unconfined) {
+            sut.status.filterIsInstance<SyncStatus.Failed>().first()
+            sut.claimPairing("still malformed", password.toCharArray())
+            admitted.complete(sut.status.value == SyncStatus.Busy)
+        }
+        try {
+            sut.claimPairing("malformed", password.toCharArray())
+            assertTrue(awaitSync("the immediate corrected claim") { admitted.await() })
+        } finally {
+            observer.cancel()
+            sut.close()
+        }
+    }
 
     @Test
     fun `a connect issued on a published status is not swallowed by the previous connect's tail`() = runBlocking {
