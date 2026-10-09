@@ -1,41 +1,14 @@
 package app.skerry.shared.vault
 
+import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import okio.FileSystem
 import okio.Path
-
-/**
- * Plaintext part of the vault file: format version and material for dataKey derivation/wrapping.
- * [keyCheck] is an empty AEAD box sealed under the dataKey: the one thing a key handed in from outside
- * ([FileVault.unlockWithDataKey]) can be checked against without the password. `null` in files written
- * before it existed; filled in by the next password unlock. Optional, so older clients read the file.
- */
-@Serializable
-internal data class VaultMeta(
-    val formatVersion: Int,
-    val salt: ByteArray,
-    val wrappedDataKey: ByteArray,
-    val keyCheck: ByteArray? = null,
-)
-
-/** Root of the vault file: [VaultMeta] + encrypted records. */
-@Serializable
-internal data class VaultFileBody(
-    val meta: VaultMeta,
-    val records: List<VaultRecord>,
-)
 
 /**
  * File-backed [Vault] over okio (desktop JVM + Android), I/O behind [FileSystem] (desktop/mobile
@@ -65,11 +38,13 @@ class FileVault(
     private val now: () -> String,
 ) : Vault {
 
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val fileCodec = VaultFileCodec(path, fileSystem, harden)
     private val lock = SynchronizedObject()
     private var dataKey: DataKey? = null
     private var meta: VaultMeta? = null
-    private val records = mutableListOf<VaultRecord>()
+    private var records = IndexedVaultRecords()
+    private val catalogRevision = atomic(0L)
+    override val revision: Long get() = catalogRevision.value
 
     // Records this app version couldn't parse (unfamiliar RecordType/ConnectionType after another
     // device upgraded, or some future format). Kept as raw JSON verbatim and re-appended on every file
@@ -108,7 +83,7 @@ class FileVault(
             dataKey?.bytes?.fill(0) // don't orphan the old key on repeated create
             dataKey = freshDataKey
             meta = newMeta
-            records.clear()
+            replaceRecords(emptyList())
         } finally {
             password.fill(' ')
         }
@@ -128,13 +103,13 @@ class FileVault(
         this.dataKey?.bytes?.fill(0)
         this.dataKey = dataKey
         meta = newMeta
-        records.clear()
+        replaceRecords(emptyList())
     }
 
     override fun unlock(password: CharArray): UnlockResult = synchronized(lock) {
         try {
             val body = runCatching {
-                parseBody(fileSystem.read(path) { readUtf8() })
+                fileCodec.read()
             }.getOrElse { return@synchronized UnlockResult.Corrupted }
             val masterKey = crypto.deriveMasterKey(password, body.meta.salt)
             val unwrapped = crypto.unwrapDataKey(masterKey, body.meta.wrappedDataKey)
@@ -153,7 +128,7 @@ class FileVault(
 
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = synchronized(lock) {
         val body = runCatching {
-            parseBody(fileSystem.read(path) { readUtf8() })
+            fileCodec.read()
         }.getOrElse {
             dataKey.bytes.fill(0) // nothing to assign — don't leave the passed-in key dangling in memory
             return@synchronized UnlockResult.Corrupted
@@ -191,6 +166,7 @@ class FileVault(
             rewrapMeta(newDataKey, password)
             key.bytes.fill(0) // old key no longer needed
             dataKey = newDataKey
+            catalogRevision.incrementAndGet()
             true
         } finally {
             password.fill(' ')
@@ -239,8 +215,7 @@ class FileVault(
         val rekeyedMeta = currentMeta.copy(keyCheck = keyCheckFor(newKey))
         writeFile(rekeyedMeta, rekeyed) // commit after persist — a failed write leaves fields untouched
         meta = rekeyedMeta
-        records.clear()
-        records.addAll(rekeyed)
+        replaceRecords(rekeyed)
         oldKey.bytes.fill(0)
         dataKey = newKey
         _localChanges.tryEmit(Unit) // re-encrypted records need pushing
@@ -251,7 +226,7 @@ class FileVault(
         dataKey?.bytes?.fill(0)
         dataKey = null
         meta = null
-        records.clear()
+        replaceRecords(emptyList())
         unknownRecords.clear()
     }
 
@@ -262,7 +237,7 @@ class FileVault(
         // password); on irreversible reset, wipe it too so no key material lingers in the heap.
         meta?.wrappedDataKey?.fill(0)
         meta = null
-        records.clear()
+        replaceRecords(emptyList())
         unknownRecords.clear()
         // mustExist=false: reset is idempotent and must not fail on an already-missing/broken file.
         fileSystem.delete(path, mustExist = false)
@@ -282,10 +257,11 @@ class FileVault(
         val key = requireUnlocked()
         val currentMeta = session()
         val working = records.toMutableList()
+        val positions = records.positions.toMutableMap()
         val applied = mutableListOf<VaultRecord>()
         val rejected = mutableListOf<VaultRecord>()
         for (r in remote) {
-            val index = working.indexOfFirst { it.id == r.id }
+            val index = positions[r.id] ?: -1
             val local = if (index >= 0) working[index] else null
             if (retypes(local, r)) {
                 rejected += r
@@ -301,7 +277,10 @@ class FileVault(
                 rejected += r
                 continue
             }
-            if (index >= 0) working[index] = r else working += r
+            if (index >= 0) working[index] = r else {
+                positions[r.id] = working.size
+                working += r
+            }
             applied += r
         }
         if (applied.isNotEmpty()) {
@@ -333,7 +312,9 @@ class FileVault(
 
     override fun openPayload(id: String): ByteArray? = synchronized(lock) {
         val key = requireUnlocked()
-        val record = records.firstOrNull { it.id == id } ?: return@synchronized null
+        val index = records.indexOfId(id)
+        if (index < 0) return@synchronized null
+        val record = records[index]
         // A tombstone doesn't return a payload: the deleted record's blob is kept for sync but never exposed.
         if (record.deleted) return@synchronized null
         openRecord(key, record)
@@ -350,13 +331,21 @@ class FileVault(
 
     override fun put(id: String, type: RecordType, payload: ByteArray): Unit = store(id, type, payload, minVersion = 0L)
 
+    override fun putAll(writes: List<VaultWrite>): Unit = synchronized(lock) {
+        val key = requireUnlocked()
+        if (writes.isEmpty()) return@synchronized
+        val currentMeta = session()
+        commit(currentMeta, records.sealWrites(writes, crypto, key, deviceId, now))
+        _localChanges.tryEmit(Unit)
+    }
+
     override fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long): Unit =
         store(id, type, payload, minVersion)
 
     private fun store(id: String, type: RecordType, payload: ByteArray, minVersion: Long): Unit = synchronized(lock) {
         val key = requireUnlocked()
         val currentMeta = session()
-        val index = records.indexOfFirst { it.id == id }
+        val index = records.indexOfId(id)
         // A record is located by id ALONE, and not every id is this device's to choose: a team id, a
         // peer's account id and a scope id all arrive from the sync server. Re-typing a record in place
         // would let a server that names a team after another store's record have this client overwrite
@@ -377,7 +366,7 @@ class FileVault(
     override fun remove(id: String): Unit = synchronized(lock) {
         val key = requireUnlocked()
         val currentMeta = session()
-        val index = records.indexOfFirst { it.id == id }
+        val index = records.indexOfId(id)
         if (index < 0) return@synchronized
         val current = records[index]
         if (current.deleted) return@synchronized
@@ -481,65 +470,25 @@ class FileVault(
     /** Persist-then-commit: atomically write the snapshot and update the record cache only after success. */
     private fun commit(meta: VaultMeta, updated: List<VaultRecord>) {
         writeFile(meta, updated) // on failure the cache is untouched
-        records.clear()
-        records.addAll(updated)
+        replaceRecords(updated)
     }
 
-    /**
-     * Atomically writes the vault snapshot (tmp + move — [atomicWriteUtf8]). A pure function of its
-     * arguments — doesn't read or write fields (except [unknownRecords], see below). If the write/move
-     * fails, the exception propagates and fields stay unchanged (commit happens after persist): no
-     * data is lost, the error is visible upstream. [harden] tightens tmp permissions before the target
-     * swap, so the secrets file itself — not just the directory — stays private.
-     */
+    private fun replaceRecords(updated: List<VaultRecord>) {
+        records = IndexedVaultRecords(updated)
+        catalogRevision.incrementAndGet()
+    }
+
     private fun writeFile(meta: VaultMeta, records: List<VaultRecord>) {
-        // Unrecognized records are re-appended verbatim so this app version doesn't drop data it
-        // doesn't understand (see [unknownRecords]). The file shape matches VaultFileBody
-        // ({meta, records}), so old and new clients read it without a format change.
-        val body = buildJsonObject {
-            put("meta", json.encodeToJsonElement(VaultMeta.serializer(), meta))
-            put("records", buildJsonArray {
-                records.forEach { add(json.encodeToJsonElement(VaultRecord.serializer(), it)) }
-                unknownRecords.forEach { add(it) }
-            })
-        }
-        atomicWriteUtf8(fileSystem, path, json.encodeToString(JsonObject.serializer(), body), harden)
+        fileCodec.write(meta, records, unknownRecords)
     }
 
     /** Assigns a parsed file snapshot to the session fields (shared by [unlock]/[unlockWithDataKey]). */
-    private fun adoptBody(body: ParsedBody) {
+    private fun adoptBody(body: ParsedVaultBody) {
         meta = body.meta
-        records.clear()
-        records.addAll(body.records)
+        replaceRecords(body.records)
         unknownRecords.clear()
         unknownRecords.addAll(body.unknown)
     }
-
-    /**
-     * Parses the vault file tolerantly: `meta` and the overall structure are required (otherwise the
-     * file really is broken — the exception surfaces as [UnlockResult.Corrupted]), but each record is
-     * decoded independently. A record this version doesn't understand (unfamiliar enum value, etc.)
-     * doesn't fail the whole file — it's kept raw in [ParsedBody.unknown] and survives rewrites (see
-     * [writeFile]).
-     */
-    private fun parseBody(text: String): ParsedBody {
-        val root = json.parseToJsonElement(text).jsonObject
-        val parsedMeta = json.decodeFromJsonElement(VaultMeta.serializer(), root.getValue("meta"))
-        val known = mutableListOf<VaultRecord>()
-        val unknown = mutableListOf<JsonElement>()
-        (root["records"] as? JsonArray)?.forEach { el ->
-            runCatching { json.decodeFromJsonElement(VaultRecord.serializer(), el) }
-                .onSuccess { known += it }
-                .onFailure { unknown += el }
-        }
-        return ParsedBody(parsedMeta, known, unknown)
-    }
-
-    private class ParsedBody(
-        val meta: VaultMeta,
-        val records: List<VaultRecord>,
-        val unknown: List<JsonElement>,
-    )
 
     /**
      * Decrypts a record's blob against the metadata it claims ([recordAad]). Legacy blobs (sealed
@@ -590,8 +539,7 @@ class FileVault(
         // reads them; on persist failure the on-disk formatVersion stays 1, so migration simply
         // re-runs on the next unlock (re-sealing is idempotent — a v2 blob is left untouched).
         val persisted = runCatching { writeFile(newMeta, migrated) }.isSuccess
-        records.clear()
-        records.addAll(migrated)
+        replaceRecords(migrated)
         if (persisted) meta = newMeta
     }
 

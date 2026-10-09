@@ -93,6 +93,20 @@ class KnownHostsControllerTest {
     }
 
     @Test
+    fun `prepared refresh cannot resurrect a dismissed mismatch`() {
+        val store = fakeStore(KnownHost("nas", 22, ed, "SHA256:OLD", ""))
+        val mismatch = HostKeyMismatch("nas", 22, ed, "SHA256:OLD", "SHA256:NEW", "")
+        val controller = KnownHostsController(store, fakeMismatches(mismatch))
+        val publish = controller.prepareRefresh()
+
+        controller.reject(mismatch)
+        publish()
+
+        assertTrue(controller.mismatches.isEmpty())
+        assertEquals(KnownHostStatus.Verified, controller.entries.single().status)
+    }
+
+    @Test
     fun `shortFingerprint strips the prefix and elides the middle`() {
         assertEquals("8c3F1a2bQz…wQ1z", shortFingerprint("SHA256:8c3F1a2bQzABCDEFwQ1z"))
         assertEquals("short", shortFingerprint("SHA256:short"))

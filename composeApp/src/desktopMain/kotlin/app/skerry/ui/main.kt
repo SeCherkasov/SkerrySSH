@@ -206,7 +206,7 @@ private class DesktopGraph(
     val workspaceLayout: WorkspaceLayoutStore,
     val ai: AiAssistantController,
     val updates: app.skerry.ui.update.UpdateNoticeController,
-    val onVaultUnlocked: () -> Unit,
+    val onVaultUnlocked: suspend () -> Unit,
     val onVaultReset: (ResetScope) -> Unit,
 )
 
@@ -329,7 +329,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // start; LWW is idempotent). Reloading list managers after sync/unlock is deferred via a var:
     // tunnels/snippets are created below, and sync references reload through this var (called only
     // after full initialization).
-    var reloadManagers: () -> Unit = {}
+    val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    var reloadManagers: suspend (Set<app.skerry.shared.vault.RecordType>) -> Unit = {}
     // The teams coordinator is created below (it needs the sync session), but onSynced must call
     // it: the team key arrives as a TEAM record via the regular account sync. Wired late via a var.
     var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
@@ -346,9 +347,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         deviceIdProvider = { deviceId(dir) },
         deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
         // Sync pulled records directly into the vault; refresh managers or the data stays invisible until re-entry.
-        onSynced = {
-            reloadManagers()
-            teamsForSync?.onAccountSynced()
+        onSynced = { types ->
+            reloadManagers(types)
+            if (app.skerry.shared.vault.RecordType.TEAM in types) teamsForSync?.onAccountSynced()
         },
         onRecordsRejected = { count -> securityLog.record(SecurityEventType.SyncRecordsRejected, count.toString()) },
         // A trusted device opens the vault with nobody's password; the pairing code carries the account key.
@@ -377,7 +378,11 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         ),
         teamState = FileSyncStateStore(dir.resolve("team-cursor.json")),
         newId = { UUID.randomUUID().toString() },
-        onTeamsChanged = { reloadManagers() },
+        onTeamsChanged = {
+            tunnelScope.launch {
+                reloadManagers(app.skerry.shared.vault.RecordType.entries.toSet())
+            }
+        },
     )
     teamsForSync = teams
     // A missing team key (skipped by an older client's delta sync) is only fixed by a full re-pull.
@@ -401,7 +406,6 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
     )
-    val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault, trash),
         transport = tunnelTransport,
@@ -459,36 +463,16 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // restored. There is no more migration of the old local workspace (hosts/snippets/tunnels.json):
     // the workspace lives in vault records.
     // All managers now exist, so reload is wired up (used both from onSynced and on unlock).
-    reloadManagers = {
-        hosts.reload()
-        snippets.reload()
-        runbooks.reload()
-        tunnels.reload()
-        knownHosts.refresh()
-        // Keychain secrets are CREDENTIAL records too: a key/password pulled by live sync must show
-        // up without a restart. Safe on a locked vault (all() degrades to an empty list).
-        credentials.reload()
-        // AI BYOK settings (key/model) are also a SETTINGS vault record, so they're reread here too:
-        // an edit that arrives via live sync from another device (onSynced calls reloadManagers)
-        // reflects in the UI immediately instead of only after a re-login.
-        ai.refresh()
-        // Same story for the update-check toggle (also a synced SETTINGS record); refresh() only
-        // reconciles the loop, it does not re-run the check on every synced change.
-        updates.refresh()
-    }
-    val onVaultUnlocked: () -> Unit = {
-        // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
-        reloadManagers()
-        // Tunnels flagged for autostart come up now, not in reloadManagers: that one also runs on
-        // every synced change, and raising there would fight the user's own toggles.
-        tunnels.startAutostart()
-        // Apply the trash retention window here, not only when its screen is opened: otherwise a
-        // deleted secret a user never goes looking for would sit in the vault (and keep being
-        // pushed to the server) long past the 30 days the UI promises.
-        trash.purgeExpired()
-        // Resume the live sync paused by the lock, or — on a cold start with keep-connected — silently
-        // restore the session (the open vault means a dataKey to unseal the refresh token with).
-        sync.resumeAfterUnlock()
+    val catalogReload = app.skerry.ui.vault.VaultCatalogs(
+        hosts, snippets, runbooks, tunnels, knownHosts, credentials,
+    ).reloader(vault, ai, updates)
+    reloadManagers = { types -> catalogReload.reload(types); Unit }
+    val onVaultUnlocked: suspend () -> Unit = {
+        if (catalogReload.reload()) {
+            tunnels.startAutostart()
+            kotlinx.coroutines.withContext(Dispatchers.Default) { trash.purgeExpired() }
+            sync.resumeAfterUnlock()
+        }
     }
     // Vault reset (forgotten password / corrupted file). Hosts/snippets/tunnels are vault records,
     // so Vault.reset() already erased them along with the secrets (zero-knowledge: they can't be

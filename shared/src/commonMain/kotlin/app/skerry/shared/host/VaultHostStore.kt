@@ -3,6 +3,8 @@ package app.skerry.shared.host
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultWrite
+import app.skerry.shared.vault.WorkspaceLayout
 import app.skerry.shared.vault.VaultRecordCodec
 import app.skerry.shared.vault.WorkspaceLayoutStore
 import app.skerry.shared.vault.requireSameIds
@@ -51,6 +53,29 @@ class VaultHostStore(
         val current = layout.readOrNull() ?: return@transaction
         if (host.id !in current.hostOrder) {
             layout.write(current.copy(hostOrder = current.hostOrder + host.id))
+        }
+    }
+
+    override fun putAll(hosts: List<Host>): Unit = vault.transaction {
+        if (hosts.isEmpty()) return@transaction
+        val writes = mutableListOf<VaultWrite>()
+        try {
+            hosts.forEach { writes += VaultWrite(it.id, RecordType.HOST, codec.encode(it)) }
+            // Preserve an unreadable layout and its other fields, exactly as a single put does.
+            val current = layout.readOrNull()
+            if (current != null) {
+                val known = current.hostOrder.toHashSet()
+                val added = hosts.map { it.id }.filter { known.add(it) }
+                if (added.isNotEmpty()) {
+                    val payload = VaultRecordCodec.json.encodeToString(
+                        WorkspaceLayout.serializer(), current.copy(hostOrder = current.hostOrder + added),
+                    ).encodeToByteArray()
+                    writes += VaultWrite(WorkspaceLayoutStore.LAYOUT_ID, RecordType.GROUP, payload)
+                }
+            }
+            vault.putAll(writes)
+        } finally {
+            writes.forEach { it.payload.fill(0) }
         }
     }
 

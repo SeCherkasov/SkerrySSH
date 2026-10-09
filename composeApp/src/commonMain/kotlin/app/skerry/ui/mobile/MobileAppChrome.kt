@@ -87,7 +87,7 @@ internal fun MobileChrome(
     onLock: (() -> Unit)?,
     sessions: SessionsController?,
     credentials: CredentialManagerController?,
-    onVaultUnlocked: () -> Unit,
+    onVaultUnlocked: (suspend () -> Unit)?,
     ai: AiAssistantController?,
     updates: app.skerry.ui.update.UpdateNoticeController?,
 ) {
@@ -98,18 +98,21 @@ internal fun MobileChrome(
     // The size above is physical pixels; this is how large one of them is, and it travels with the
     // size so an RDP session comes up at this screen's DPI (see [RdpDisplayScale]).
     val displayScale = LocalDensity.current.density
+    val vault = app.skerry.ui.app.LocalVault.current
+    val settingsReload = remember(vault, ai, updates) {
+        vault?.let { app.skerry.ui.vault.vaultSettingsReloader(it, ai, updates) }
+    }
     // Keychain secrets live in the open vault — behind the master password gate, first fire
     // [onVaultUnlocked], then reload. [MobileChrome] composes only behind the gate and
     // re-enters composition on every unlock, so also reload AI settings here from the now-open vault
     // (BYOK key is a SETTINGS record; at locked startup the controller saw only the default). Edits
     // synced from another device are caught by a separate effect in MobileDesignApp.
     LaunchedEffect(credentials) {
-        onVaultUnlocked()
-        credentials?.reload()
-        ai?.refresh()
-        // Reload the update-check toggle from the now-open vault and start the daily check loop
-        // (no network happens before this point).
-        updates?.refresh()
+        if (onVaultUnlocked != null) onVaultUnlocked() else credentials?.reload()
+        if (settingsReload != null) settingsReload.reload() else {
+            ai?.refresh()
+            updates?.refresh()
+        }
     }
 
     // Host with no bound secret → ask for a password via a sheet before connecting. Along with the

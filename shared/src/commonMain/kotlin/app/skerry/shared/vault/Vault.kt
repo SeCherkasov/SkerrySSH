@@ -58,6 +58,13 @@ interface Vault {
     val isUnlocked: Boolean
 
     /**
+     * Monotonic in-memory catalog revision, including lock/unlock and key replacement. Reading it
+     * must not wait for disk IO. Persistent vaults override it; stateless test/preview vaults use zero.
+     * Used to discard a background projection prepared before a local edit or a lock.
+     */
+    val revision: Long get() = 0L
+
+    /**
      * Creates a new vault from scratch (salt + random dataKey + wrapper under the master
      * password), writes an empty file. The vault is unlocked after the call. Overwrites an
      * existing file — the caller checks [exists] beforehand.
@@ -207,6 +214,15 @@ interface Vault {
      * `updatedAt`.
      */
     fun put(id: String, type: RecordType, payload: ByteArray)
+
+    /**
+     * Ordered upserts; repeated ids bump versions in order. FileVault persists the entire batch
+     * once, all-or-nothing, and emits one local-change signal only after success. Payloads remain
+     * caller-owned. The default supports non-persistent fakes via their ordinary puts.
+     */
+    fun putAll(writes: List<VaultWrite>): Unit = transaction {
+        writes.forEach { put(it.id, it.type, it.payload) }
+    }
 
     /**
      * [put] with a version floor: the stored record gets `max(current + 1, minVersion)`. Used to

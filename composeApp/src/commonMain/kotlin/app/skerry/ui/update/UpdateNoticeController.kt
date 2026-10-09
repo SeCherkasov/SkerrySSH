@@ -49,9 +49,11 @@ class UpdateNoticeController(
      * Deliberately does NOT restart an already-running loop: reloadManagers fires on every synced
      * change, and each restart would re-check immediately.
      */
-    fun refresh() {
-        settings = reload()
-        reconcile()
+    fun refresh() { prepareRefresh().invoke() }
+
+    fun prepareRefresh(): () -> Unit {
+        val incoming = reload()
+        return { settings = incoming; reconcile() }
     }
 
     /** Persists the toggle; turning it off also stops the loop and hides any current notice. */

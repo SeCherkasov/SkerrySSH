@@ -85,8 +85,11 @@ class HostManagerController(
      * Reread the list from the store. Needed after writes bypassing the controller (e.g. vault
      * migration writes remapped [Host.credentialId] straight into [HostStore] on unlock).
      */
-    fun reload() {
-        hosts = canonicalHosts()
+    fun reload() { prepareReload().invoke() }
+
+    fun prepareReload(): () -> Unit {
+        val incoming = canonicalHosts()
+        return { hosts = incoming }
     }
 
     /**
@@ -137,7 +140,7 @@ class HostManagerController(
      */
     fun importHosts(imported: List<Host>) {
         // Canonical on write like [save]: an `ssh_config` tag is whatever the file said.
-        for (host in imported) store.put(host.copy(tags = normalizeTags(host.tags)))
+        store.putAll(imported.map { it.copy(tags = normalizeTags(it.tags)) })
         hosts = canonicalHosts()
     }
 

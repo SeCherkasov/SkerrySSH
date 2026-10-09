@@ -123,7 +123,7 @@ class MainActivity : FragmentActivity() {
 
     // One-time secret migration on unlock. Field because it references the dependency graph; set in
     // [buildDependencies], invoked from [MobileDesignApp].
-    private var onVaultUnlocked: () -> Unit = {}
+    private var onVaultUnlocked: suspend () -> Unit = {}
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -674,6 +674,9 @@ class MainActivity : FragmentActivity() {
         // Sync cursor persists in sync-cursor.json (incremental pull after restart).
         // The teams coordinator is created after sync (it needs the session), but onSynced must call
         // it: the team key arrives via a TEAM record over the regular account sync. Late binding via var.
+        val catalogReload = app.skerry.ui.vault.VaultCatalogs(
+            hosts, snippets, runbooks, tunnels, knownHosts, credentials,
+        ).reloader(vault)
         var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
         val sync = SyncCoordinator(
             clientFactory = { url -> KtorSyncClient(url) },
@@ -698,14 +701,9 @@ class MainActivity : FragmentActivity() {
             },
             // Sync pulled records directly into the vault; reload managers on the main thread so
             // synced data appears without requiring a re-visit.
-            onSynced = {
-                lifecycleScope.launch(Dispatchers.Main) {
-                    hosts.reload(); snippets.reload(); runbooks.reload(); tunnels.reload(); knownHosts.refresh()
-                    // Keychain secrets are CREDENTIAL records too: without this a key pulled by live
-                    // sync shows up only after the next lock/unlock cycle re-enters MobileChrome.
-                    credentials.reload()
-                }
-                teamsForSync?.onAccountSynced()
+            onSynced = { types ->
+                catalogReload.reload(types)
+                if (app.skerry.shared.vault.RecordType.TEAM in types) teamsForSync?.onAccountSynced()
             },
             onRecordsRejected = { count -> securityLog.record(SecurityEventType.SyncRecordsRejected, count.toString()) },
         )
@@ -729,7 +727,7 @@ class MainActivity : FragmentActivity() {
             newId = { UUID.randomUUID().toString() },
             onTeamsChanged = {
                 lifecycleScope.launch(Dispatchers.Main) {
-                    hosts.reload(); snippets.reload(); runbooks.reload(); tunnels.reload()
+                    catalogReload.reload()
                 }
             },
         )
@@ -757,18 +755,11 @@ class MainActivity : FragmentActivity() {
         // Manager reload and sync resume on unlock (the coordinator manages its own scope): the live
         // sync paused by the lock comes back, a cold start restores the keep-connected session instead.
         onVaultUnlocked = {
-            hosts.reload()
-            snippets.reload()
-            runbooks.reload()
-            tunnels.reload()
-            // Tunnels flagged for autostart come up here and only here: the other reload sites run
-            // on every synced change, and raising there would fight the user's own toggles.
-            tunnels.startAutostart()
-            knownHosts.refresh()
-            // Trash retention is applied on unlock too (desktop parity): waiting for the user to
-            // open the Trash screen would keep an expired secret in the vault indefinitely.
-            trash.purgeExpired()
-            sync.resumeAfterUnlock()
+            if (catalogReload.reload()) {
+                tunnels.startAutostart()
+                kotlinx.coroutines.withContext(Dispatchers.Default) { trash.purgeExpired() }
+                sync.resumeAfterUnlock()
+            }
         }
         // Clears data outside the vault on reset. The vault file is already wiped and locked, so
         // credentials aren't touched here (secrets reload when a new vault is created). Host

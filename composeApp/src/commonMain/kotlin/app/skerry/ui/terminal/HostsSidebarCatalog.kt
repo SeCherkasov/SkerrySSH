@@ -197,7 +197,7 @@ internal fun HostsSidebarCatalog(
 
 /** Retain the gesture node while wheel scrolling carries its lazy item outside the viewport. */
 @Composable
-private fun PinSidebarDrag(dragging: Boolean) {
+internal fun PinSidebarDrag(dragging: Boolean) {
     val container = LocalPinnableContainer.current
     DisposableEffect(container, dragging) {
         val pin = if (dragging) container?.pin() else null

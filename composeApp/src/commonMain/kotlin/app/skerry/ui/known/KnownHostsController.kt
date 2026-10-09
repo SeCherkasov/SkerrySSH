@@ -9,6 +9,7 @@ import app.skerry.shared.ssh.HostKeyMismatch
 import app.skerry.shared.ssh.HostKeyMismatchStore
 import app.skerry.shared.ssh.KnownHost
 import app.skerry.shared.ssh.KnownHostsStore
+import kotlinx.atomicfu.atomic
 
 /** Status of a trusted key in the known-hosts table. */
 enum class KnownHostStatus { Verified, Changed }
@@ -42,6 +43,7 @@ class KnownHostsController(
     private val mismatchStore: HostKeyMismatchStore,
     private val now: () -> String = { "" },
 ) {
+    private val refreshGeneration = atomic(0L)
     var entries by mutableStateOf(emptyList<KnownHostEntry>())
         private set
     var mismatches by mutableStateOf(emptyList<HostKeyMismatch>())
@@ -87,13 +89,25 @@ class KnownHostsController(
      * only on app restart.
      */
     fun refresh() {
+        refreshGeneration.incrementAndGet()
+        prepareRefresh().invoke()
+    }
+
+    fun prepareRefresh(): () -> Unit {
+        val generation = refreshGeneration.value
         val pending = mismatchStore.all()
-        mismatches = pending
-        entries = store.all().map { host ->
+        val incoming = store.all().map { host ->
             val changed = pending.any {
                 it.host == host.host && it.port == host.port && it.keyType == host.keyType
             }
             KnownHostEntry(host, if (changed) KnownHostStatus.Changed else KnownHostStatus.Verified)
+        }
+        return {
+            // Dismissing a local mismatch does not change the vault revision.
+            if (generation == refreshGeneration.value) {
+                mismatches = pending
+                entries = incoming
+            }
         }
     }
 }

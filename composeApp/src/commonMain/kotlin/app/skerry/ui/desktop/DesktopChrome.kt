@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,7 +138,7 @@ internal fun DesktopChrome(
     onLock: (() -> Unit)?,
     sessions: SessionsController?,
     credentials: CredentialManagerController?,
-    onVaultUnlocked: () -> Unit,
+    onVaultUnlocked: (suspend () -> Unit)?,
     customGroupsProvider: () -> List<CustomGroup>,
     windowChrome: WindowChrome? = null,
 ) {
@@ -150,12 +151,28 @@ internal fun DesktopChrome(
     // The window is measured in physical pixels; this is how large one of them is, and it travels
     // with the size so the session comes up at this display's DPI (see [RdpDisplayScale]).
     val displayScale = LocalDensity.current.density
-    // Keychain secrets live in the open vault — behind the master-password gate we first fire
-    // [onVaultUnlocked], then reload (secrets + synced empty folders).
+    val vault = app.skerry.ui.app.LocalVault.current
+    val groupsProvider = rememberUpdatedState(customGroupsProvider)
+    val groupCatalog = remember(state, groupsProvider) {
+        app.skerry.ui.vault.VaultCatalogReload(setOf(app.skerry.shared.vault.RecordType.GROUP)) {
+            val groups = groupsProvider.value()
+            val publish: () -> Unit = { state.loadCustomGroups(groups) }
+            publish
+        }
+    }
+    val groupReload = remember(vault, groupCatalog) {
+        vault?.let { openVault ->
+            app.skerry.ui.vault.VaultCatalogReloader(openVault, listOf(groupCatalog))
+        }
+    }
+    val sync = LocalSync.current
+    DisposableEffect(sync, groupCatalog) {
+        val unregister = sync?.registerCatalogs(listOf(groupCatalog))
+        onDispose { unregister?.invoke() }
+    }
     LaunchedEffect(credentials) {
-        onVaultUnlocked()
-        credentials?.reload()
-        state.loadCustomGroups(customGroupsProvider())
+        if (onVaultUnlocked != null) onVaultUnlocked() else credentials?.reload()
+        if (groupReload != null) groupReload.reload() else state.loadCustomGroups(customGroupsProvider())
     }
 
     // A host with no bound secret → ask for a password before connecting. One shared state for all

@@ -22,12 +22,17 @@ internal sealed interface SidebarCatalogRow {
     }
 }
 
-internal fun sidebarCatalogRows(folders: List<HostFolder>, collapsed: (String) -> Boolean, folderDragging: Boolean): List<SidebarCatalogRow> =
+internal fun sidebarCatalogRows(
+    folders: List<HostFolder>,
+    collapsed: (String) -> Boolean,
+    folderDragging: Boolean,
+    groupUngroupedByTransport: Boolean = true,
+): List<SidebarCatalogRow> =
     buildList {
         folders.forEachIndexed { folderIndex, folder ->
             add(SidebarCatalogRow.Header(folder, folderIndex))
             if (!collapsed(folder.name) && !folderDragging) {
-                if (folder.name == UNGROUPED_LABEL) {
+                if (groupUngroupedByTransport && folder.name == UNGROUPED_LABEL) {
                     var index = 0
                     groupHostsByConnectionType(folder.hosts).forEach { (type, hosts) ->
                         add(SidebarCatalogRow.Transport(type, folderIndex))

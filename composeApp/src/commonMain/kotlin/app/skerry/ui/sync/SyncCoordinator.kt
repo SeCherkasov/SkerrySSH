@@ -89,7 +89,7 @@ class SyncCoordinator(
      * sync wrote to the vault directly — without this callback synced data doesn't appear on screen
      * until a reopen. The platform wires a manager reload here (on the main thread).
      */
-    private val onSynced: () -> Unit = {},
+    private val onSynced: suspend (Set<RecordType>) -> Unit = {},
     /**
      * Called with [SyncOutcome.rejected] when a cycle refused records the server handed back — ones
      * that do not authenticate under the account key or would re-type a record. The vault keeps its
@@ -106,6 +106,16 @@ class SyncCoordinator(
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+
+    private val uiCatalogs = app.skerry.ui.vault.VaultCatalogReloader(vault, emptyList())
+    private val catalogRefresh = SyncedCatalogRefresh(vault) { types ->
+        if (RecordType.SETTINGS in types) refreshSyncSettings()
+        onSynced(types)
+        if (uiCatalogs.hasCatalogs) uiCatalogs.reload(types)
+    }
+
+    /** Status is conflated; UI projections must stay inside the reliable refresh-debt boundary. */
+    fun registerCatalogs(catalogs: List<app.skerry.ui.vault.VaultCatalogReload>): () -> Unit = uiCatalogs.register(catalogs)
 
     /**
      * Raised when connecting adopted an account key and thereby reset enabled biometrics
@@ -1043,6 +1053,7 @@ class SyncCoordinator(
         // re-confirmation; a missing one costs the confirmation itself.
         val dropped = RecordType.entries.filter { syncCapable.shouldSync(it) && it != RecordType.TEAM_PEER }
         vault.clearRecords(dropped.toSet(), deviceLocal::survivesClear)
+        catalogRefresh.invalidateAll()
         syncState.setCursor(link.cursorKey, 0) // reactivation always full-pulls to rebuild from the server
         armedFor = link // only now, and named — see [retireDischargedDebt]
     }
@@ -1072,6 +1083,7 @@ class SyncCoordinator(
         // re-enroll under the new key.
         val adopted = vault.adoptDataKey(accountDataKey, password)
         if (adopted) {
+            catalogRefresh.invalidateAll()
             if (runCatching { onDataKeyAdopted() }.getOrDefault(false)) _biometricResetNeeded.value = true
         }
         return if (adopted) KeyAdoption.Adopted else KeyAdoption.AlreadyOurs
@@ -1424,7 +1436,10 @@ class SyncCoordinator(
             // adoptDataKey takes ownership of the key only when adopted (true). If it rejected the key
             // (false — matched the current one; practically impossible for a new device) — ownership
             // stays with us, keep the ref so finally wipes it. Otherwise null it.
-            if (adopted) accountDataKey = null
+            if (adopted) {
+                accountDataKey = null
+                catalogRefresh.invalidateAll()
+            }
             if (adopted && runCatching { onDataKeyAdopted() }.getOrDefault(false)) {
                 _biometricResetNeeded.value = true
             }
@@ -1745,15 +1760,11 @@ class SyncCoordinator(
 
     // One sync attempt + the Online bookkeeping; exceptions propagate to runSyncLocked.
     private suspend fun runSyncAttempt(c: SyncClient, s: SyncSession) {
-        val outcome = engineFactory(c).sync(s)
+        val outcome = catalogRefresh.sync { engineFactory(c).sync(s) }
         retireDischargedDebt(s.accountId)
-        _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
+        _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled, outcome.changedTypes)
         if (outcome.rejected > 0) runCatching { onRecordsRejected(outcome.rejected) }
-        // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
-        if (outcome.pulled > 0) {
-            refreshSyncSettings() // another device may have changed "what to sync"
-            runCatching { onSynced() }
-        }
+        catalogRefresh.refresh()
     }
 
     /**

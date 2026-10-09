@@ -106,7 +106,12 @@ class AiAssistantController(
      * edit). Goes through the same endpoint check as a local change: a provider or key that arrives
      * over sync moves the conversations to a different server just as surely as one typed here.
      */
-    fun refresh() { applySettings(reload()) }
+    fun refresh() { prepareRefresh().invoke() }
+
+    fun prepareRefresh(): () -> Unit {
+        val incoming = reload()
+        return { applySettings(incoming) }
+    }
 
     /**
      * Builds a terminal AI bar controller for a per-host [policy], sharing provider/scope/settings

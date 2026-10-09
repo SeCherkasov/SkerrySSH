@@ -94,8 +94,17 @@ class CredentialManagerController(
     private var usageById by mutableStateOf(emptyMap<String, CredentialUsage>())
 
     /** Reloads the list from the vault. Requires an unlocked vault (call after unlock). */
-    fun reload() {
-        credentials = store.all()
+    fun reload() { prepareReload().invoke() }
+
+    fun prepareReload(): () -> Unit {
+        val incoming = store.all()
+        return {
+            credentials = incoming
+            refreshUsage()
+        }
+    }
+
+    private fun refreshUsage() {
         val log = usage ?: return
         // Same best-effort rule as `record`: an unreadable trail leaves the panel without dates, it
         // does not stop the keychain from loading.
