@@ -4,6 +4,7 @@ import com.hierynomus.sshj.sftp.RemoteResourceSelector
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,7 +32,6 @@ import net.schmizz.sshj.sftp.Response
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.sftp.SFTPException
 import net.schmizz.sshj.common.StreamCopier
-import net.schmizz.sshj.xfer.TransferListener
 
 /**
  * Desktop [SftpClient] implementation over sshj `SFTPClient` (one SFTP channel per instance).
@@ -110,15 +110,25 @@ internal class SshjSftpClient(
         // sshj would write into a directory given as the target; a caller always names the file.
         if (Files.isDirectory(target)) throw IOException("$localPath is a directory")
         val staging = target.resolveSibling(stagingName(target.fileName.toString()))
+        val metadataStarted = System.nanoTime()
         val remote = sftp.stat(remotePath)
+        val requests = transferRequests(metadataStarted)
         var placed = false
         try {
             // Owner-only while the bytes arrive; the final mode is set once they are all there.
             createOwnerOnly(staging)
-            withTransferListener(SftpProgress { bytes, total ->
-                context.ensureActive()
-                onProgress.onProgress(bytes, total)
-            }, preserveAttributes = false) { sftp.get(remotePath, staging.toString()) }
+            if (remote.type != FileMode.Type.REGULAR && remote.type != FileMode.Type.UNKNOWN) {
+                throw IOException("$remotePath is not a regular file")
+            }
+            sftp.open(remotePath).use { file ->
+                file.ReadAheadRemoteFileInputStream(requests, 0, remote.size).use { input ->
+                    Files.newOutputStream(staging).use { output ->
+                        copyTransfer(input, output, TRANSFER_BUFFER_BYTES, context) { transferred ->
+                            onProgress.onProgress(transferred, remote.size)
+                        }
+                    }
+                }
+            }
             narrowToRemoteMode(staging, remote.mode.permissionsMask)
             Files.setLastModifiedTime(staging, FileTime.from(remote.mtime, TimeUnit.SECONDS))
             context.ensureActive()
@@ -137,10 +147,26 @@ internal class SshjSftpClient(
         // Written in place, as OpenSSH's sftp does: a symlink is written through, and the file keeps
         // its owner, group and mode. A failed transfer leaves the target truncated. No attributes
         // are sent after the write: sshj's would be 0644 for every file, whatever its local mode.
-        withTransferListener(SftpProgress { bytes, total ->
-            context.ensureActive()
-            onProgress.onProgress(bytes, total)
-        }, preserveAttributes = false) { sftp.put(localPath, remotePath) }
+        val source = Paths.get(localPath)
+        if (!Files.isRegularFile(source)) throw IOException("$localPath is not a regular file")
+        Files.newInputStream(source).use { input ->
+            val total = Files.size(source)
+            // Keep sshj's directory-target behavior, but avoid its second redundant STAT.
+            val metadataStarted = System.nanoTime()
+            val destination = uploadDestination(source, remotePath)
+            val requests = transferRequests(metadataStarted)
+            sftp.open(destination, EnumSet.of(OpenMode.WRITE, OpenMode.CREAT, OpenMode.TRUNC)).use { file ->
+                val bufferSize = minOf(TRANSFER_BUFFER_BYTES,
+                    sftp.sftpEngine.subsystem.remoteMaxPacketSize - file.outgoingPacketOverhead)
+                if (bufferSize <= 0) throw IOException("SFTP packet size is too small for file data")
+                // The stream drains and checks every WRITE status before the remote handle closes.
+                file.RemoteFileOutputStream(0, requests).use { output ->
+                    copyTransfer(input, output, bufferSize, context) { transferred ->
+                        onProgress.onProgress(transferred, total)
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun mkdir(path: String): Unit = io("Failed to create directory $path") {
@@ -193,43 +219,53 @@ internal class SshjSftpClient(
         return runInterruptible(Dispatchers.IO) { ioBody(message, context) { block(context) } }
     }
 
-    /**
-     * Set a progress listener on sshj's shared transfer channel for the duration of [block] and
-     * clear it after — so the previous transfer's listener doesn't linger on the shared
-     * `fileTransfer` (operations are serialized higher up the stack, but the channel's global
-     * state is best not left dirty). [preserveAttributes] is set for every transfer rather than
-     * restored, since each direction states its own.
-     */
-    private inline fun <T> withTransferListener(
-        onProgress: SftpProgress,
-        preserveAttributes: Boolean,
-        block: () -> T,
-    ): T {
-        sftp.fileTransfer.transferListener = progressListener(onProgress)
-        sftp.fileTransfer.preserveAttributes = preserveAttributes
-        try {
-            return block()
-        } finally {
-            sftp.fileTransfer.transferListener = progressListener(SftpProgress { _, _ -> })
-        }
+    /** Bounded packet size and request window; progress belongs to this transfer, not the channel. */
+    private fun copyTransfer(
+        input: InputStream,
+        output: OutputStream,
+        bufferSize: Int,
+        context: CoroutineContext,
+        onProgress: (Long) -> Unit,
+    ) {
+        StreamCopier(input, output, sftp.sftpEngine.subsystem.getLoggerFactory())
+            .bufSize(bufferSize)
+            .keepFlushing(false)
+            .listener { transferred ->
+                context.ensureActive()
+                onProgress(transferred)
+            }
+            .copy()
+        context.ensureActive()
     }
 
-    /**
-     * Adapts sshj's progress hierarchy to [SftpProgress]. A hierarchical [TransferListener] for a
-     * single file reduces to a byte listener: `file(name, size)` gives the full size, and its
-     * `reportProgress` reports cumulative bytes transferred. A single file transfer has no nested
-     * directories, so `directory` just returns itself.
-     */
-    private fun progressListener(onProgress: SftpProgress): TransferListener =
-        object : TransferListener {
-            override fun directory(name: String): TransferListener = this
-            override fun file(name: String, size: Long): StreamCopier.Listener =
-                StreamCopier.Listener { transferred -> onProgress.onProgress(transferred, size) }
+    private fun uploadDestination(source: Path, remotePath: String): String {
+        val remote = try {
+            sftp.stat(remotePath)
+        } catch (e: SFTPException) {
+            if (e.statusCode == Response.StatusCode.NO_SUCH_FILE ||
+                e.statusCode == Response.StatusCode.NO_SUCH_PATH
+            ) return remotePath else throw e
         }
+        return if (remote.type == FileMode.Type.DIRECTORY) {
+            "${remotePath.trimEnd('/')}/${source.fileName}"
+        } else remotePath
+    }
+
+    private fun transferRequests(metadataStarted: Long): Int =
+        if (System.nanoTime() - metadataStarted >= HIGH_LATENCY_NANOS) HIGH_LATENCY_REQUESTS else DEFAULT_REQUESTS
 
     private companion object {
         /** Default channel-level read cap for [read]; the shared contract's [SFTP_MAX_READ_BYTES]. */
         const val DEFAULT_MAX_READ_BYTES = SFTP_MAX_READ_BYTES
+
+        // sshj's get/put hardcode 16. A 64-request window fills a high-latency link without growing
+        // requested packet payloads. sshj may queue up to two extra requests: under 2.1 MiB of
+        // requested read-ahead data at 32 KiB per packet.
+        // Reuse the required STAT as a latency sample: larger queues cost throughput on fast links.
+        const val DEFAULT_REQUESTS = 16
+        const val HIGH_LATENCY_REQUESTS = 64
+        const val HIGH_LATENCY_NANOS = 25_000_000L
+        const val TRANSFER_BUFFER_BYTES = 32 * 1024
     }
 }
 

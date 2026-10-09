@@ -13,13 +13,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
-import org.apache.sshd.server.SshServer
-import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import org.apache.sshd.server.session.ServerSession
 import org.apache.sshd.sftp.server.FileHandle
 import org.apache.sshd.sftp.server.SftpEventListener
-import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -56,18 +52,9 @@ class SftpCancellationTest {
             }
         }
         root.resolve("readme.txt").writeText("channel still works")
-        Files.write((if (upload) local else root).resolve("large.bin"), ByteArray(1024 * 1024))
+        Files.write((if (upload) local else root).resolve("large.bin"), ByteArray(3 * 1024 * 1024))
         if (!upload) local.resolve("large.bin").writeText("previous target")
-        val subsystem = SftpSubsystemFactory.Builder().apply { addSftpEventListener(listener) }.build()
-        val server = SshServer.setUpDefaultServer().apply {
-            host = "127.0.0.1"
-            port = 0
-            keyPairProvider = SimpleGeneratorHostKeyProvider()
-            setPasswordAuthenticator { user, password, _ -> user == "test" && password == "test" }
-            subsystemFactories = listOf(subsystem)
-            fileSystemFactory = VirtualFileSystemFactory(root)
-            start()
-        }
+        val server = startSftpTestServer(root, "test", "test", listener, metadataDelayMillis = 50)
         try {
             val connection = SshjTransport(HostKeyVerifier { null }).connect(
                 SshTarget("127.0.0.1", server.port, "test"), SshAuth.Password("test"))
