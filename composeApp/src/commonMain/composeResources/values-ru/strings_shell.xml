@@ -33,11 +33,11 @@
     <string name="shell_corrupted_subtitle">Файл vault не читается или не расшифровывается. Чтобы снова пользоваться Skerry, сбросьте его.</string>
 
     <string name="shell_reset_skerry">Сбросить Skerry</string>
-    <string name="shell_reset_subtitle">Необратимо. Сохранённые пароли, ключи и учётные записи будут стёрты. Восстановления нет.</string>
-    <string name="shell_reset_scope_secrets_title">Только секреты</string>
-    <string name="shell_reset_scope_secrets_subtitle">Сохранить профили хостов и known_hosts.</string>
-    <string name="shell_reset_scope_all_title">Стереть всё</string>
-    <string name="shell_reset_scope_all_subtitle">Также удалить профили хостов, known_hosts и настройки.</string>
+    <string name="shell_reset_subtitle">Безвозвратно удаляет все данные хранилища: профили хостов, учётные данные, сниппеты, сценарии, туннели и корзину. Восстановление невозможно.</string>
+    <string name="shell_reset_scope_secrets_title">Сбросить хранилище</string>
+    <string name="shell_reset_scope_secrets_subtitle">Сохранить доверенные ключи хостов и настройки терминала.</string>
+    <string name="shell_reset_scope_all_title">Сбросить хранилище и настройки устройства</string>
+    <string name="shell_reset_scope_all_subtitle">Также удалить доверенные ключи хостов и сбросить настройки терминала, языка и блокировки.</string>
     <string name="shell_reset_confirm_placeholder">Введите %1$s для подтверждения</string>
     <string name="shell_reset_permanently">Сбросить безвозвратно</string>
 
@@ -65,7 +65,7 @@
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">Удалить «%1$s»?</string>
-    <string name="shell_delete_host_body">Удалён из каталога хостов. Сохранённые учётные данные останутся в vault. Отменить нельзя.</string>
+    <string name="shell_delete_host_body">Сохранённый профиль переместится в корзину. Его учётные данные останутся в хранилище.</string>
 
     <!-- Mobile host detail (MobileHostDetailView.kt) -->
     <string name="shell_host">Хост</string>
@@ -127,7 +127,7 @@
     <string name="shell_view_terminal">Терминал</string>
     <string name="shell_view_files">Файлы</string>
     <string name="shell_view_monitor">Мониторинг</string>
-    <string name="shell_view_runbook">Ранбук</string>
+    <string name="shell_view_runbook">Сценарий</string>
     <string name="shell_view_player">Запись</string>
     <string name="shell_view_desktop">Удалённый рабочий стол</string>
     <string name="shell_tip_disconnect">Отключить</string>

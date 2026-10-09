@@ -245,7 +245,7 @@
     <string name="lib_teams_delete_message">Dieses Team für alle löschen? Geteilte Datensätze werden vom Server entfernt.</string>
     <string name="lib_teams_err_not_connected">Sync ist nicht verbunden</string>
     <string name="lib_teams_err_vault_locked">Tresor ist gesperrt</string>
-    <string name="lib_teams_err_no_recipient_key">Dieses Konto hat noch keinen Freigabeschlüssel veröffentlicht — bitte die eingeladene Person, Teams einmal zu öffnen</string>
+    <string name="lib_teams_err_no_recipient_key">Dieses Konto hat noch keinen Freigabeschlüssel veröffentlicht. Bitte die eingeladene Person, einmal „%1$s“ zu öffnen.</string>
     <string name="lib_teams_err_recipient_key_changed">Der Schlüssel dieses Kontos änderte sich, nachdem du den Fingerabdruck geprüft hast — es wurde nichts gesendet; lade erneut ein und prüfe den neuen</string>
     <string name="lib_teams_err_already_invited">Dieses Konto ist bereits Mitglied oder hat eine offene Einladung</string>
     <string name="lib_teams_err_no_such_account">Kein solches Konto auf dem Sync-Server</string>

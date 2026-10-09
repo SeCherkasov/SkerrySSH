@@ -63,7 +63,7 @@
     <string name="conn_save_changes">Save changes</string>
     <string name="conn_save_connection">Save connection</string>
     <string name="conn_create">Create</string>
-    <string name="conn_footer_encrypted">Encrypted · stays on this device</string>
+    <string name="conn_footer_encrypted">Encrypted in your vault</string>
 
     <string name="conn_auth_ask">Ask every time</string>
     <string name="conn_auth_password">Password</string>
@@ -119,7 +119,7 @@
 
     <string name="conn_import_action">Import from ssh_config</string>
     <string name="conn_import_title">Import from ssh_config</string>
-    <string name="conn_import_subtitle">Pick the hosts to add. Keys aren't imported — you set authentication when you connect.</string>
+    <string name="conn_import_subtitle">Choose host profiles to import. IdentityFile and CertificateFile are linked by path without copying their contents.</string>
     <string name="conn_import_select_all">Select all</string>
     <string name="conn_import_empty">No hosts found in this file.</string>
     <string name="conn_import_button">Import (%1$d)</string>
@@ -192,4 +192,8 @@
     <string name="conn_err_hostkey_jump">Jump host — %1$s</string>
     <string name="conn_jump_via_shell">Type ssh on the jump host</string>
     <string name="conn_jump_via_shell_desc">For a bastion that allows only a shell. Logs in as the jump host profile; the destination is reached with the jump host's keys. Terminal only.</string>
+    <string name="conn_name_example">e.g. %1$s</string>
+    <string name="conn_address_example">%1$s or %2$s</string>
+    <string name="conn_username_example">%1$s or username</string>
+    <string name="conn_container_default">first container</string>
 </resources>

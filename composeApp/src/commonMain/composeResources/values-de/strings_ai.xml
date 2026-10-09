@@ -16,7 +16,7 @@
     <string name="assistant_no_answer">Das Modell hat nichts zurückgegeben. Frag erneut oder füge mehr Kontext hinzu.</string>
     <string name="assistant_attached">gesendete Ausgaben: %1$d</string>
     <string name="assistant_copy">Kopieren</string>
-    <string name="assistant_copy_failed">Die System-Zwischenablage hat verweigert</string>
+    <string name="assistant_copy_failed">Die System-Zwischenablage ist nicht verfügbar</string>
     <string name="assistant_edit">Bearbeiten</string>
     <string name="shell_tip_assistant">Assistent</string>
     <string name="assistant_explain_action">Ausgabe erklären</string>

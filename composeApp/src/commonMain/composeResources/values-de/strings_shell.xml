@@ -33,11 +33,11 @@
     <string name="shell_corrupted_subtitle">Die Tresordatei kann nicht gelesen oder entschlüsselt werden. Setze sie zurück, um Skerry wieder zu verwenden.</string>
 
     <string name="shell_reset_skerry">Skerry zurücksetzen</string>
-    <string name="shell_reset_subtitle">Dauerhaft. Gespeicherte Passwörter, Schlüssel und Identitäten werden gelöscht. Keine Wiederherstellung.</string>
-    <string name="shell_reset_scope_secrets_title">Nur Secrets</string>
-    <string name="shell_reset_scope_secrets_subtitle">Host-Profile und known_hosts bleiben erhalten.</string>
-    <string name="shell_reset_scope_all_title">Alles löschen</string>
-    <string name="shell_reset_scope_all_subtitle">Entfernt auch Host-Profile, known_hosts und Einstellungen.</string>
+    <string name="shell_reset_subtitle">Löscht alle Tresordaten dauerhaft: Host-Profile, Zugangsdaten, Snippets, Runbooks, Tunnel und Papierkorb. Eine Wiederherstellung ist nicht möglich.</string>
+    <string name="shell_reset_scope_secrets_title">Tresor zurücksetzen</string>
+    <string name="shell_reset_scope_secrets_subtitle">Vertrauenswürdige Host-Schlüssel und Terminaleinstellungen bleiben erhalten.</string>
+    <string name="shell_reset_scope_all_title">Tresor und Geräteeinstellungen zurücksetzen</string>
+    <string name="shell_reset_scope_all_subtitle">Zusätzlich werden vertrauenswürdige Host-Schlüssel gelöscht sowie Terminal-, Sprach- und Sperreinstellungen zurückgesetzt.</string>
     <string name="shell_reset_confirm_placeholder">Gib %1$s zur Bestätigung ein</string>
     <string name="shell_reset_permanently">Dauerhaft zurücksetzen</string>
 
@@ -65,7 +65,7 @@
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">„%1$s“ löschen?</string>
-    <string name="shell_delete_host_body">Wird aus deinen Hosts entfernt. Gespeicherte Zugangsdaten bleiben in deinem Tresor. Das kann nicht rückgängig gemacht werden.</string>
+    <string name="shell_delete_host_body">Das gespeicherte Profil wird in den Papierkorb verschoben. Seine Zugangsdaten bleiben im Tresor.</string>
 
     <!-- Mobile host detail (MobileHostDetailView.kt) -->
     <string name="shell_host">Host</string>

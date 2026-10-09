@@ -30,7 +30,7 @@
     <string name="runbook_step_interactive">Интерактивный</string>
     <string name="runbook_save">Сохранить</string>
     <string name="runbook_delete">Удалить</string>
-    <string name="runbook_delete_title">Удалить раннбук</string>
+    <string name="runbook_delete_title">Удалить сценарий</string>
     <string name="runbook_delete_message">«%1$s» и история его прогонов будут удалены.</string>
     <string name="runbook_run">Запустить</string>
     <string name="runbook_run_needs_save">Сохраните изменённый сценарий, чтобы запустить его</string>
@@ -124,8 +124,8 @@
     <string name="runbook_history_last">последний прогон %1$s</string>
 
     <!-- Runbooks help dialog -->
-    <string name="runbook_help_title">Раннбуки</string>
-    <string name="runbook_help_intro">Раннбук — упорядоченная процедура, выполняемая в шелле одной сессии, шаг за шагом. Коды выхода решают, как продолжается прогон; значения ${{…}} собираются один раз на старте и общие для всех шагов.</string>
+    <string name="runbook_help_title">Сценарии</string>
+    <string name="runbook_help_intro">Сценарий — упорядоченная процедура, выполняемая в оболочке одной сессии, шаг за шагом. Коды выхода определяют ход выполнения; значения ${{…}} собираются один раз при запуске и используются во всех шагах.</string>
     <string name="runbook_help_flags">Параметры шага</string>
     <string name="runbook_help_flag_confirm">пауза перед шагом, пока вы его не подтвердите</string>
     <string name="runbook_help_flag_continue">ошибка фиксируется, прогон продолжается</string>

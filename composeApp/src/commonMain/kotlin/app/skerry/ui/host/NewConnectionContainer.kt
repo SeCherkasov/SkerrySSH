@@ -37,6 +37,7 @@ import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_container_default
 import app.skerry.ui.generated.resources.conn_container_browse
 import app.skerry.ui.generated.resources.conn_container_empty
 import app.skerry.ui.generated.resources.conn_container_hint
@@ -125,7 +126,7 @@ internal fun ContainerSection(
                 ModalTextField(form.containerNamespace, { form.containerNamespace = it }, "default")
             }
             Field(stringResource(Res.string.conn_field_pod_container), Modifier.weight(1f)) {
-                ModalTextField(form.containerPodContainer, { form.containerPodContainer = it }, "first container")
+                ModalTextField(form.containerPodContainer, { form.containerPodContainer = it }, stringResource(Res.string.conn_container_default))
             }
         }
     }

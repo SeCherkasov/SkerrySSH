@@ -45,14 +45,13 @@
     <string name="rd_no_session">No remote desktop open</string>
     <string name="rd_pick_to_connect">Pick a connection from the sidebar to open its desktop.</string>
     <string name="rd_no_desktops">No remote desktops yet</string>
-    <string name="rd_add_first">Add a VNC connection to see it here.</string>
+    <string name="rd_add_first">Add a VNC or RDP connection to see it here.</string>
     <string name="conn_title_new_desktop">New remote desktop</string>
     <string name="conn_title_edit_desktop">Edit remote desktop</string>
     <string name="conn_subtitle_new_desktop">Add a remote desktop. Its password is encrypted with your master password.</string>
     <string name="nav_tab_desktops">Desktops</string>
     <string name="rd_screen_title">Remote desktops</string>
     <string name="rd_panel_hide">Hide the panel</string>
-    <string name="rd_panel_show">Show the panel</string>
     <string name="rd_screenshot">Screenshot</string>
     <string name="rd_screenshot_saved">Saved to %1$s</string>
     <string name="rd_screenshot_failed">Could not write the file</string>
@@ -78,7 +77,7 @@
     <string name="rd_bar_unpin">Let the bar hide itself</string>
     <string name="rd_bar_hide">Hide the bar</string>
     <string name="rd_ctrl_alt_del_view_only">View only — input is not sent</string>
-    <string name="rd_clipboard_failed">The system clipboard refused</string>
+    <string name="rd_clipboard_failed">The system clipboard is unavailable</string>
     <string name="rd_surface">Remote desktop: %1$s. %2$s</string>
     <string name="rd_surface_release">%1$s releases the keyboard</string>
     <!-- Same funnel on the remote-desktop screen (issue #228) -->
@@ -92,7 +91,7 @@
     <string name="rdp_stage_mcs">MCS connection</string>
     <string name="rdp_stage_licensing">logon and licensing</string>
     <string name="rdp_stage_capabilities">capability exchange</string>
-    <string name="rdp_stage_finalization">session finalization</string>
+    <string name="rdp_stage_finalization">finishing connection setup</string>
     <string name="rdp_drop_closed">The server closed the connection.</string>
     <string name="rdp_drop_timeout">The server stopped responding.</string>
     <string name="rdp_drop_reset">The connection was reset.</string>

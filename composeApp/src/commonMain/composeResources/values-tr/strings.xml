@@ -2,7 +2,6 @@
     <!-- Appearance -->
     <string name="appearance_title">Görünüm</string>
     <string name="appearance_subtitle">Tema, arayüz dili ve kenar çubuğu.</string>
-    <string name="appearance_theme">Uygulama teması</string>
     <string name="appearance_rendering">Görüntü işleme</string>
     <string name="appearance_rendering_desc">Tüm uygulama için Skia arka ucu; H.264 kod çözme de onu izler. Başlangıçta okunur — yeniden başlatınca etkin olur.</string>
     <string name="render_backend_auto">Otomatik</string>

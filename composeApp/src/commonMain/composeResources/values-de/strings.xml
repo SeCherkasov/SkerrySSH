@@ -2,7 +2,6 @@
     <!-- Appearance / раздел оформления (desktop Settings → Appearance, mobile More → Appearance) -->
     <string name="appearance_title">Darstellung</string>
     <string name="appearance_subtitle">Theme, Oberflächensprache und die Seitenleiste.</string>
-    <string name="appearance_theme">App-Theme</string>
     <string name="appearance_rendering">Rendering</string>
     <string name="appearance_rendering_desc">Skia-Backend für die gesamte App; die H.264-Dekodierung folgt ihm. Beim Start gelesen — nach einem Neustart wirksam.</string>
     <string name="render_backend_auto">Automatisch</string>
@@ -100,7 +99,7 @@
     <string name="trust_accept">Akzeptieren und verbinden</string>
     <string name="trust_accept_new_cert">Neues Zertifikat akzeptieren</string>
     <string name="trust_reject">Ablehnen</string>
-    <string name="trust_cert_subject">Antragsteller</string>
+    <string name="trust_cert_subject">Zertifikatsinhaber</string>
     <string name="trust_cert_issuer">Aussteller</string>
     <string name="trust_cert_valid_until">Gültig bis</string>
     <string name="trust_cert_not_verified">Das System konnte dieses Zertifikat nicht verifizieren — eine unvollständige Kette oder eine unbekannte Zertifizierungsstelle. Bei Remote Desktop normal; beurteile es anhand des Fingerabdrucks.</string>

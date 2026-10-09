@@ -32,4 +32,7 @@ actual object LocalAppLocale {
         resources.updateConfiguration(configuration, resources.displayMetrics)
         return local.provides(locale.toLanguageTag())
     }
+
+    @Composable
+    actual fun ProvidePlatformLocalization(content: @Composable () -> Unit) = content()
 }

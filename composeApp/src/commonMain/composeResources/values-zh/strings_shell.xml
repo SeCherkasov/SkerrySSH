@@ -33,11 +33,11 @@
     <string name="shell_corrupted_subtitle">保险库文件无法读取或解密。需重置后才能再次使用 Skerry。</string>
 
     <string name="shell_reset_skerry">重置 Skerry</string>
-    <string name="shell_reset_subtitle">永久不可逆。已保存的密码、密钥和身份将被抹除，无法恢复。</string>
-    <string name="shell_reset_scope_secrets_title">仅密钥</string>
-    <string name="shell_reset_scope_secrets_subtitle">保留主机配置和已知主机。</string>
-    <string name="shell_reset_scope_all_title">抹除全部</string>
-    <string name="shell_reset_scope_all_subtitle">同时移除主机配置、已知主机和设置。</string>
+    <string name="shell_reset_subtitle">永久删除保险库中的所有数据：主机配置、凭据、代码片段、运行手册、隧道和回收站。无法恢复。</string>
+    <string name="shell_reset_scope_secrets_title">重置保险库</string>
+    <string name="shell_reset_scope_secrets_subtitle">保留已信任的主机密钥和终端设置。</string>
+    <string name="shell_reset_scope_all_title">重置保险库和设备设置</string>
+    <string name="shell_reset_scope_all_subtitle">同时清除已信任的主机密钥，并重置终端、语言和锁定设置。</string>
     <string name="shell_reset_confirm_placeholder">输入 %1$s 以确认</string>
     <string name="shell_reset_permanently">永久重置</string>
 
@@ -65,7 +65,7 @@
 
     <!-- 删除主机对话框 (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">删除“%1$s”？</string>
-    <string name="shell_delete_host_body">已从主机列表中移除。已存储的凭据仍保留在保险库中。此操作不可撤销。</string>
+    <string name="shell_delete_host_body">已保存的主机配置将移入回收站，其凭据仍保留在保险库中。</string>
 
     <!-- 移动端主机详情 (MobileHostDetailView.kt) -->
     <string name="shell_host">主机</string>

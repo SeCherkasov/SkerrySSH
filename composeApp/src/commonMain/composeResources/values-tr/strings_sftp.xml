@@ -19,7 +19,6 @@
 
     <!-- Pane labels -->
     <string name="sftp_pane_local">Yerel</string>
-    <string name="sftp_pane_remote">Uzak</string>
 
     <!-- Statuses / notices -->
     <string name="sftp_unavailable">SFTP kullanılamıyor</string>

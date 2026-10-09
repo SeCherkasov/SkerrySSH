@@ -45,14 +45,13 @@
     <string name="rd_no_session">没有打开的远程桌面</string>
     <string name="rd_pick_to_connect">在侧栏中选择一个连接以打开其桌面。</string>
     <string name="rd_no_desktops">还没有远程桌面</string>
-    <string name="rd_add_first">添加 VNC 连接后会显示在这里。</string>
+    <string name="rd_add_first">添加 VNC 或 RDP 连接后会显示在这里。</string>
     <string name="conn_title_new_desktop">新建远程桌面</string>
     <string name="conn_title_edit_desktop">编辑远程桌面</string>
     <string name="conn_subtitle_new_desktop">添加远程桌面。其密码将使用主密码加密。</string>
     <string name="nav_tab_desktops">桌面</string>
     <string name="rd_screen_title">远程桌面</string>
     <string name="rd_panel_hide">隐藏面板</string>
-    <string name="rd_panel_show">显示面板</string>
     <string name="rd_screenshot">屏幕截图</string>
     <string name="rd_screenshot_saved">已保存到 %1$s</string>
     <string name="rd_screenshot_failed">无法写入文件</string>
@@ -78,7 +77,7 @@
     <string name="rd_bar_unpin">取消固定操作栏</string>
     <string name="rd_bar_hide">隐藏操作栏</string>
     <string name="rd_ctrl_alt_del_view_only">仅查看 — 不发送输入</string>
-    <string name="rd_clipboard_failed">系统剪贴板拒绝访问</string>
+    <string name="rd_clipboard_failed">系统剪贴板不可用</string>
     <string name="rd_surface">远程桌面：%1$s。%2$s</string>
     <string name="rd_surface_release">%1$s 释放键盘</string>
     <string name="rd_keyboard_input">远程桌面输入</string>
@@ -91,7 +90,7 @@
     <string name="rdp_stage_mcs">MCS 连接</string>
     <string name="rdp_stage_licensing">登录与许可</string>
     <string name="rdp_stage_capabilities">能力交换</string>
-    <string name="rdp_stage_finalization">会话完成</string>
+    <string name="rdp_stage_finalization">完成连接初始化</string>
     <string name="rdp_drop_closed">服务器关闭了连接。</string>
     <string name="rdp_drop_timeout">服务器停止响应。</string>
     <string name="rdp_drop_reset">连接被重置。</string>

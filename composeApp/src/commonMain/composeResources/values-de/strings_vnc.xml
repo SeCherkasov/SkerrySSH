@@ -45,14 +45,13 @@
     <string name="rd_no_session">Kein Remote-Desktop geöffnet</string>
     <string name="rd_pick_to_connect">Wähle eine Verbindung aus der Seitenleiste, um ihren Desktop zu öffnen.</string>
     <string name="rd_no_desktops">Noch keine Remote-Desktops</string>
-    <string name="rd_add_first">Füge eine VNC-Verbindung hinzu, um sie hier zu sehen.</string>
+    <string name="rd_add_first">Füge eine VNC- oder RDP-Verbindung hinzu, um sie hier zu sehen.</string>
     <string name="conn_title_new_desktop">Neuer Remote-Desktop</string>
     <string name="conn_title_edit_desktop">Remote-Desktop bearbeiten</string>
     <string name="conn_subtitle_new_desktop">Füge einen Remote-Desktop hinzu. Sein Passwort wird mit deinem Master-Passwort verschlüsselt.</string>
     <string name="nav_tab_desktops">Desktops</string>
     <string name="rd_screen_title">Remote-Desktops</string>
     <string name="rd_panel_hide">Panel ausblenden</string>
-    <string name="rd_panel_show">Panel einblenden</string>
     <string name="rd_screenshot">Screenshot</string>
     <string name="rd_screenshot_saved">Gespeichert unter %1$s</string>
     <string name="rd_screenshot_failed">Datei konnte nicht geschrieben werden</string>
@@ -78,7 +77,7 @@
     <string name="rd_bar_unpin">Leiste darf sich ausblenden</string>
     <string name="rd_bar_hide">Leiste ausblenden</string>
     <string name="rd_ctrl_alt_del_view_only">Nur ansehen — Eingaben werden nicht gesendet</string>
-    <string name="rd_clipboard_failed">Die System-Zwischenablage hat abgelehnt</string>
+    <string name="rd_clipboard_failed">Die System-Zwischenablage ist nicht verfügbar</string>
     <string name="rd_surface">Remote-Desktop: %1$s. %2$s</string>
     <string name="rd_surface_release">%1$s gibt die Tastatur frei</string>
     <!-- Same funnel on the remote-desktop screen (issue #228) -->
@@ -92,7 +91,7 @@
     <string name="rdp_stage_mcs">MCS-Verbindung</string>
     <string name="rdp_stage_licensing">Anmeldung und Lizenzierung</string>
     <string name="rdp_stage_capabilities">Austausch der Fähigkeiten</string>
-    <string name="rdp_stage_finalization">Sitzungsabschluss</string>
+    <string name="rdp_stage_finalization">Verbindungsaufbau abschließen</string>
     <string name="rdp_drop_closed">Der Server hat die Verbindung geschlossen.</string>
     <string name="rdp_drop_timeout">Der Server antwortet nicht mehr.</string>
     <string name="rdp_drop_reset">Die Verbindung wurde zurückgesetzt.</string>

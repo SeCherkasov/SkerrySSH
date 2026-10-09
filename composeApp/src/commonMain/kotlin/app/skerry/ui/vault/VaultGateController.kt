@@ -84,10 +84,10 @@ enum class VaultGateState {
  * gate stays over a single [Vault]).
  */
 enum class ResetScope {
-    /** Erase only secrets (the vault file). Host profiles and known_hosts remain. */
+    /** Erase all vault records; retain trusted host keys and terminal settings outside the vault. */
     SecretsOnly,
 
-    /** Factory reset: vault + host profiles + known_hosts + local settings. */
+    /** Also erase trusted host keys and reset terminal, language and lock settings. */
     Everything,
 }
 

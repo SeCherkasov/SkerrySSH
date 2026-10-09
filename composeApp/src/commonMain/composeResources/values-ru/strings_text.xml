@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_context_cut">Вырезать</string>
+    <string name="text_context_copy">Копировать</string>
+    <string name="text_context_paste">Вставить</string>
+    <string name="text_context_select_all">Выбрать все</string>
+</resources>

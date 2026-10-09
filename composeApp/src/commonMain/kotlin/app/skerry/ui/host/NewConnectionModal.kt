@@ -74,6 +74,9 @@ import app.skerry.ui.generated.resources.conn_jump_via_shell
 import app.skerry.ui.generated.resources.conn_jump_via_shell_desc
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_name_example
+import app.skerry.ui.generated.resources.conn_address_example
+import app.skerry.ui.generated.resources.conn_username_example
 import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
@@ -238,12 +241,10 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
             Column(modalBody().padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
-                val namePlaceholder = if (section == HostSection.RemoteDesktops) "e.g. lab-desktop" else "e.g. prod-web-01"
+                val namePlaceholder = stringResource(Res.string.conn_name_example, if (section == HostSection.RemoteDesktops) "lab-desktop" else "prod-web-01")
                 Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, namePlaceholder) }
                 Spacer14()
-                // A section with a single protocol has nothing to pick: VNC is the only remote
-                // desktop today, and a one-segment switch would just be chrome. It comes back on
-                // its own once RDP lands beside it.
+                // Sections with a single protocol do not need a picker.
                 val protocols = remember(section) { connectionTypesIn(section) }
                 if (protocols.size > 1) {
                     Field(stringResource(Res.string.conn_field_protocol)) { ProtocolPicker(form, protocols) }
@@ -271,7 +272,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         if (serial) {
                             SerialDeviceField(form)
                         } else {
-                            ModalTextField(form.address, { form.address = it }, "192.168.1.45 or example.com", icon = "dns")
+                            ModalTextField(form.address, { form.address = it }, stringResource(Res.string.conn_address_example, "192.168.1.45", "example.com"), icon = "dns")
                         }
                     }
                     Field(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(110.dp)) {
@@ -288,7 +289,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 // terminal itself, Serial has no auth at all.
                 if (form.connectionType.usesSshAuth) {
                     Spacer14()
-                    Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
+                    Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, stringResource(Res.string.conn_username_example, "root"), icon = "person") }
                     // Through a jump host's shell nothing of this profile logs in: no picker to fill.
                     if (!form.typesSshOnJumpHost) {
                         Spacer14()

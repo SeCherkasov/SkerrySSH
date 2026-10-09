@@ -35,6 +35,7 @@ import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_container_default
 import app.skerry.ui.generated.resources.conn_container_browse
 import app.skerry.ui.generated.resources.conn_container_empty
 import app.skerry.ui.generated.resources.conn_container_hint
@@ -124,7 +125,7 @@ internal fun MobileContainerSection(
         }
         Spacer(Modifier.height(14.dp))
         MobileFormField(stringResource(Res.string.conn_field_pod_container)) {
-            MobileFormInput(form.containerPodContainer, { form.containerPodContainer = it }, "first container")
+            MobileFormInput(form.containerPodContainer, { form.containerPodContainer = it }, stringResource(Res.string.conn_container_default))
         }
     }
     Spacer(Modifier.height(14.dp))

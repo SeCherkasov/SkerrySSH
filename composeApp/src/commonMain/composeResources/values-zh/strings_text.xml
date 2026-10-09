@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_context_cut">剪切</string>
+    <string name="text_context_copy">复制</string>
+    <string name="text_context_paste">粘贴</string>
+    <string name="text_context_select_all">全选</string>
+</resources>

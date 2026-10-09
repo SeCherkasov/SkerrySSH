@@ -33,11 +33,11 @@
     <string name="shell_corrupted_subtitle">The vault file can't be read or decrypted. Reset it to use Skerry again.</string>
 
     <string name="shell_reset_skerry">Reset Skerry</string>
-    <string name="shell_reset_subtitle">Permanent. Saved passwords, keys and identities are erased. No recovery.</string>
-    <string name="shell_reset_scope_secrets_title">Secrets only</string>
-    <string name="shell_reset_scope_secrets_subtitle">Keep host profiles and known_hosts.</string>
-    <string name="shell_reset_scope_all_title">Erase everything</string>
-    <string name="shell_reset_scope_all_subtitle">Also remove host profiles, known_hosts and settings.</string>
+    <string name="shell_reset_subtitle">Permanently deletes all vault data: host profiles, credentials, snippets, runbooks, tunnels and trash. There is no recovery.</string>
+    <string name="shell_reset_scope_secrets_title">Reset vault</string>
+    <string name="shell_reset_scope_secrets_subtitle">Keep trusted host keys and terminal settings.</string>
+    <string name="shell_reset_scope_all_title">Reset vault and device settings</string>
+    <string name="shell_reset_scope_all_subtitle">Also forget trusted host keys and reset terminal, language and lock settings.</string>
     <string name="shell_reset_confirm_placeholder">Type %1$s to confirm</string>
     <string name="shell_reset_permanently">Reset permanently</string>
 
@@ -65,7 +65,7 @@
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">Delete “%1$s”?</string>
-    <string name="shell_delete_host_body">Removed from your hosts. Any stored credential stays in your vault. This can't be undone.</string>
+    <string name="shell_delete_host_body">The saved profile moves to Trash. Its stored credential stays in the vault.</string>
 
     <!-- Mobile host detail (MobileHostDetailView.kt) -->
     <string name="shell_host">Host</string>

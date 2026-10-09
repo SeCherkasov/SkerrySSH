@@ -28,8 +28,8 @@
     <string name="ports_via">через %1$s</string>
     <string name="ports_col_type">ТИП</string>
     <string name="ports_remove_confirm_title">Удалить «%1$s»?</string>
-    <string name="ports_remove_active_message">Туннель активен. Он будет отключён и удалён — отменить нельзя.</string>
-    <string name="ports_remove_inactive_message">Сохранённый туннель будет удалён. Отменить нельзя.</string>
+    <string name="ports_remove_active_message">Туннель будет отключён, а его сохранённый профиль переместится в корзину. Восстановление профиля не подключит туннель заново.</string>
+    <string name="ports_remove_inactive_message">Сохранённый туннель переместится в корзину.</string>
     <string name="ports_type_local">local</string>
     <string name="ports_type_remote">remote</string>
     <string name="ports_type_socks">SOCKS5</string>

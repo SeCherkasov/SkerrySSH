@@ -103,8 +103,13 @@
 
     <!-- Диалог удаления секрета. -->
     <string name="vault_delete_title">Удалить «%1$s»?</string>
-    <string name="vault_delete_detail_none">Секрет будет удалён из хранилища. Это действие необратимо.</string>
-    <string name="vault_delete_detail_bound">%1$d хостов потеряют эти учётные данные и запросят пароль при следующем подключении. Отменить нельзя.</string>
+    <string name="vault_delete_detail_none">Учётные данные переместятся в корзину.</string>
+    <plurals name="vault_delete_detail_bound">
+        <item quantity="one">%1$d хост потеряет эти учётные данные. Восстановление из корзины не восстановит привязку к хосту.</item>
+        <item quantity="few">%1$d хоста потеряют эти учётные данные. Восстановление из корзины не восстановит привязки к хостам.</item>
+        <item quantity="many">%1$d хостов потеряют эти учётные данные. Восстановление из корзины не восстановит привязки к хостам.</item>
+        <item quantity="other">%1$d хоста потеряют эти учётные данные. Восстановление из корзины не восстановит привязки к хостам.</item>
+    </plurals>
 
     <!-- Гейт мастер-пароля: создание / разблокировка / предложение биометрии / повреждение / сброс. -->
     <string name="vault_create_title">Создать мастер-пароль</string>
@@ -124,11 +129,11 @@
     <string name="vault_corrupted_title">Хранилище повреждено</string>
     <string name="vault_corrupted_subtitle">Файл хранилища не читается и не расшифровывается. Чтобы продолжить работу, сбросьте хранилище.</string>
     <string name="vault_reset_vault">Сбросить хранилище</string>
-    <string name="vault_reset_subtitle">Необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без возможности восстановления — мастер-пароль их не вернёт.</string>
-    <string name="vault_reset_scope_secrets_title">Только секреты</string>
-    <string name="vault_reset_scope_secrets_subtitle">Профили хостов и known_hosts останутся.</string>
-    <string name="vault_reset_scope_everything_title">Стереть всё</string>
-    <string name="vault_reset_scope_everything_subtitle">Также удалить профили хостов, known_hosts и настройки.</string>
+    <string name="vault_reset_subtitle">Безвозвратно удаляет все данные хранилища: профили хостов, учётные данные, сниппеты, сценарии, туннели и корзину. Восстановление невозможно.</string>
+    <string name="vault_reset_scope_secrets_title">Сбросить хранилище</string>
+    <string name="vault_reset_scope_secrets_subtitle">Сохранить доверенные ключи хостов и настройки терминала.</string>
+    <string name="vault_reset_scope_everything_title">Сбросить хранилище и настройки устройства</string>
+    <string name="vault_reset_scope_everything_subtitle">Также удалить доверенные ключи хостов и сбросить настройки терминала, языка и блокировки.</string>
     <string name="vault_reset_confirm_label">Впишите %1$s для подтверждения</string>
     <string name="vault_reset_confirm_button">Сбросить безвозвратно</string>
     <string name="vault_link_key_file">Связать файл ключа</string>
@@ -201,5 +206,5 @@
     <string name="vault_help_passwords">пароли хостов и учёток; копирования фиксируются в журнале использования</string>
     <string name="vault_help_certificates">SSH-сертификаты, импортированные из файлов, в паре с ключом</string>
     <string name="vault_help_snippets">В сниппетах</string>
-    <string name="vault_help_snippets_hint">сниппет или шаг раннбука ссылается на сохранённый пароль по имени записи; во всех превью он маскируется</string>
+    <string name="vault_help_snippets_hint">сниппет или шаг сценария ссылается на сохранённый пароль по имени записи; во всех превью он маскируется</string>
 </resources>

@@ -275,10 +275,10 @@
     <string name="settings_terminal_section_local_shell">Локальная оболочка</string>
     <string name="settings_local_shell_desc">Оболочка для сессий локального терминала. Пусто — системная оболочка по умолчанию.</string>
     <string name="settings_experimental_subtitle">Функции в испытании. По умолчанию выключены, могут измениться или исчезнуть.</string>
-    <string name="settings_trash_subtitle">Удалённые хосты, ключи, сниппеты и туннели.</string>
+    <string name="settings_trash_subtitle">Удалённые хосты, учётные данные, сниппеты и туннели.</string>
     <string name="settings_trash_title">Корзина</string>
     <string name="settings_trash_empty">Корзина пуста</string>
-    <string name="settings_trash_empty_hint">Удалённые хосты, ключи, сниппеты и туннели попадают сюда и стираются окончательно через 30 дней.</string>
+    <string name="settings_trash_empty_hint">Удалённые хосты, учётные данные, сниппеты и туннели попадают сюда и стираются окончательно через 30 дней.</string>
     <string name="settings_trash_restore">Восстановить</string>
     <string name="settings_trash_forget">Удалить навсегда</string>
     <string name="settings_trash_empty_all">Очистить корзину</string>
@@ -287,7 +287,7 @@
     <string name="settings_trash_confirm_forget">Удалить «%1$s» навсегда? Отменить будет нельзя.</string>
     <string name="settings_trash_confirm_empty">Очистить корзину? Всё её содержимое будет удалено навсегда.</string>
     <string name="settings_trash_kind_host">Хост</string>
-    <string name="settings_trash_kind_credential">Ключ</string>
+    <string name="settings_trash_kind_credential">Учётные данные</string>
     <string name="settings_trash_kind_snippet">Сниппет</string>
     <string name="settings_trash_kind_tunnel">Туннель</string>
     <string name="settings_trash_locked">Разблокируйте хранилище, чтобы увидеть корзину</string>

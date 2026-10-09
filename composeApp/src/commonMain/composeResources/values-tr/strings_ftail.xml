@@ -2,7 +2,7 @@
     <!-- SFTP / dosya aktarımı: @Composable dışı ertelenmiş dizeler (F tuşu paneli + denetleyici hataları) -->
 
     <!-- F tuşu paneli etiketleri (mc/Total Commander alt çubuğu) -->
-    <string name="ftail_fkey_rename">Adlandır</string>
+    <string name="ftail_fkey_rename">Yeniden adlandır</string>
     <string name="ftail_fkey_view">Görüntüle</string>
     <string name="ftail_fkey_edit">Düzenle</string>
     <string name="ftail_fkey_copy">Kopyala</string>
@@ -50,6 +50,5 @@
     <string name="ftail_size_pb">%1$d,%2$d PB</string>
 
     <!-- Aktarım şeridi: toplu sayaçlı dosya adı ve aktarılan/toplam -->
-    <string name="ftail_transfer_counter">%1$s (%2$d/%3$d)</string>
     <string name="ftail_transfer_progress">%1$s / %2$s</string>
 </resources>

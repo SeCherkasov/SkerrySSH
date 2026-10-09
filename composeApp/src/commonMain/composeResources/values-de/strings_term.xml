@@ -78,7 +78,6 @@
     <string name="mosh_err_bootstrap_no_output">mosh-server konnte nicht gestartet werden (keine Ausgabe). Prüfe, dass Mosh auf dem Server installiert und ausführbar ist.</string>
     <string name="term_record_start">Sitzung aufzeichnen</string>
     <string name="term_record_stop">Aufzeichnung stoppen und speichern</string>
-    <string name="term_record_active">Aufzeichnung läuft</string>
     <string name="term_record_truncated">Aufzeichnung gestoppt: Größenlimit erreicht</string>
     <string name="term_record_empty">Nichts aufgezeichnet</string>
     <string name="term_record_saved">Aufzeichnung gespeichert</string>
@@ -88,12 +87,7 @@
     <string name="term_player_invalid">Diese Datei ist keine asciicast-v2-Aufzeichnung</string>
     <string name="term_player_empty">Diese Aufzeichnung enthält nichts zum Abspielen</string>
     <string name="term_player_truncated">Aufzeichnung ist sehr lang — nur der erste Teil ist geladen</string>
-    <string name="term_player_play">Abspielen</string>
-    <string name="term_player_pause">Pause</string>
-    <string name="term_player_replay">Erneut abspielen</string>
-    <string name="term_player_close">Schließen</string>
     <string name="term_player_speed">%1$s×</string>
-    <string name="term_player_loading">Aufzeichnung wird geöffnet…</string>
     <string name="term_broadcast_title">Broadcast</string>
     <string name="term_broadcast_subtitle">Einen Befehl auf mehreren Sitzungen ausführen</string>
     <string name="term_broadcast_placeholder">Überall auszuführender Befehl…</string>
