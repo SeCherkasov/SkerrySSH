@@ -64,6 +64,37 @@ class TestPlan(SandboxCase):
         with patch.dict(os.environ, {"CI": "true"}):
             self.assertIn("build:server", {s.name for s in self.plan()})
 
+    def test_detached_pr_ci_preserves_head_branch_kind(self):
+        self.change("AGENTS.md", "# Updated instructions\n")
+        self.box.commit("instructions")
+        self.box.git("checkout", "--detach")
+        with patch.dict(os.environ, {"CI": "true", "GITHUB_EVENT_NAME": "pull_request",
+                                     "GITHUB_HEAD_REF": "refactor/instructions"}):
+            task = policy.classify(self.cwd)
+            self.assertEqual(task["kind"], "refactor")
+            self.assertEqual(task["branch"], "HEAD")
+            self.assertEqual([s.name for s in self.plan()], ["checks", "selftest"])
+
+    def test_detached_pr_ci_keeps_stricter_and_unknown_branch_kinds(self):
+        self.change("AGENTS.md", "# Updated instructions\n")
+        self.box.commit("instructions")
+        self.box.git("checkout", "--detach")
+        for head, expected in (("feat/example", "feature"), ("fix/example", "bug"),
+                               ("unknown/example", "feature"), ("", "feature")):
+            with self.subTest(head=head), patch.dict(
+                    os.environ, {"CI": "true", "GITHUB_EVENT_NAME": "pull_request",
+                                 "GITHUB_HEAD_REF": head}):
+                self.assertEqual(policy.classify(self.cwd)["kind"], expected)
+
+    def test_head_ref_does_not_override_local_or_push_branch_kind(self):
+        self.change("AGENTS.md", "# Updated instructions\n")
+        for ci, event in (("false", "pull_request"), ("true", "push"),
+                          ("true", "pull_request")):
+            with self.subTest(ci=ci, event=event), patch.dict(
+                    os.environ, {"CI": ci, "GITHUB_EVENT_NAME": event,
+                                 "GITHUB_HEAD_REF": "fix/unrelated"}):
+                self.assertEqual(policy.classify(self.cwd)["kind"], "refactor")
+
     def test_asset_and_wrapper_mode_changes_are_inputs(self):
         self.change("shared/src/commonMain/resources/logo.png", "asset")
         from harness import evidence
