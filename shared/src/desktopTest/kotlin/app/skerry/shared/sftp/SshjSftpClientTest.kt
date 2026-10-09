@@ -13,10 +13,7 @@ import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.PathComponents
 import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
-import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
 import org.apache.sshd.server.SshServer
-import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
-import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -61,15 +58,7 @@ class SshjSftpClientTest {
         // type must be Symlink, not Directory, consistent with the listing.
         Files.createSymbolicLink(root.resolve("sub-link"), root.resolve("sub"))
 
-        server = SshServer.setUpDefaultServer().apply {
-            host = "127.0.0.1"
-            port = 0
-            keyPairProvider = SimpleGeneratorHostKeyProvider()
-            setPasswordAuthenticator { user, password, _ -> user == USER && password == PASSWORD }
-            subsystemFactories = listOf(SftpSubsystemFactory())
-            fileSystemFactory = VirtualFileSystemFactory(root)
-            start()
-        }
+        server = startSftpTestServer(root, USER, PASSWORD)
     }
 
     @AfterTest
