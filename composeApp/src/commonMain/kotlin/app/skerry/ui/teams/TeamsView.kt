@@ -63,6 +63,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.rail_team
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create
 import app.skerry.ui.generated.resources.lib_teams_decline
@@ -430,7 +431,7 @@ internal fun TeamsErrorLine(
 internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.NotConnected -> stringResource(Res.string.lib_teams_err_not_connected)
     TeamsFailure.VaultLocked -> stringResource(Res.string.lib_teams_err_vault_locked)
-    TeamsFailure.NoRecipientKey -> stringResource(Res.string.lib_teams_err_no_recipient_key)
+    TeamsFailure.NoRecipientKey -> stringResource(Res.string.lib_teams_err_no_recipient_key, stringResource(Res.string.rail_team))
     TeamsFailure.RecipientKeyChanged -> stringResource(Res.string.lib_teams_err_recipient_key_changed)
     TeamsFailure.AlreadyInvited -> stringResource(Res.string.lib_teams_err_already_invited)
     TeamsFailure.NoSuchAccount -> stringResource(Res.string.lib_teams_err_no_such_account)

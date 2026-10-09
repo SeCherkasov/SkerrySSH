@@ -93,8 +93,11 @@
     <string name="vault_save">Kaydet</string>
 
     <string name="vault_delete_title">“%1$s” silinsin mi?</string>
-    <string name="vault_delete_detail_none">Kasanızdan kaldırılır. Bu işlem geri alınamaz.</string>
-    <string name="vault_delete_detail_bound">%1$d sunucu bu kimlik bilgisini kaybeder ve sonraki bağlantıda şifre ister. Geri alınamaz.</string>
+    <string name="vault_delete_detail_none">Bu kimlik bilgisi çöp kutusuna taşınır.</string>
+    <plurals name="vault_delete_detail_bound">
+        <item quantity="one">%1$d sunucu bu kimlik bilgisini kaybeder. Çöp kutusundan geri yüklemek kimlik bilgisinin sunucuya atanmasını geri getirmez.</item>
+        <item quantity="other">%1$d sunucu bu kimlik bilgisini kaybeder. Çöp kutusundan geri yüklemek kimlik bilgisinin sunuculara atanmasını geri getirmez.</item>
+    </plurals>
 
     <string name="vault_create_title">Ana şifre oluşturun</string>
     <string name="vault_create_subtitle">Yerel kasanızı şifreler. Şifre bu cihazda kalır ve kurtarılamaz — unutursanız verilerin şifresi çözülemez.</string>
@@ -113,11 +116,11 @@
     <string name="vault_corrupted_title">Kasa bozuk</string>
     <string name="vault_corrupted_subtitle">Kasa dosyası okunamıyor veya şifresi çözülemiyor. Uygulamayı kullanmaya devam etmek için kasayı sıfırlayın.</string>
     <string name="vault_reset_vault">Kasayı sıfırla</string>
-    <string name="vault_reset_subtitle">Geri alınamaz. Kayıtlı şifreler, anahtarlar ve kimlik bilgileri kurtarılamayacak şekilde silinir — ana şifre bunları geri getiremez.</string>
-    <string name="vault_reset_scope_secrets_title">Yalnızca gizli bilgiler</string>
-    <string name="vault_reset_scope_secrets_subtitle">Sunucu profilleri ve known_hosts korunur.</string>
-    <string name="vault_reset_scope_everything_title">Her şeyi sil</string>
-    <string name="vault_reset_scope_everything_subtitle">Sunucu profillerini, known_hosts dosyasını ve ayarları da sil.</string>
+    <string name="vault_reset_subtitle">Sunucu profilleri, kimlik bilgileri, kod parçacıkları, runbook kayıtları, tüneller ve çöp kutusu dahil tüm kasa verileri kalıcı olarak silinir. Kurtarılamaz.</string>
+    <string name="vault_reset_scope_secrets_title">Kasayı sıfırla</string>
+    <string name="vault_reset_scope_secrets_subtitle">Güvenilen sunucu anahtarlarını ve terminal ayarlarını koru.</string>
+    <string name="vault_reset_scope_everything_title">Kasayı ve cihaz ayarlarını sıfırla</string>
+    <string name="vault_reset_scope_everything_subtitle">Güvenilen sunucu anahtarlarını da sil; terminal, dil ve kilit ayarlarını sıfırla.</string>
     <string name="vault_reset_confirm_label">Onaylamak için %1$s yazın</string>
     <string name="vault_reset_confirm_button">Kalıcı olarak sıfırla</string>
     <string name="vault_link_key_file">Anahtar dosyası bağla</string>

@@ -103,8 +103,11 @@
 
     <!-- Delete secret dialog. -->
     <string name="vault_delete_title">„%1$s“ löschen?</string>
-    <string name="vault_delete_detail_none">Wird aus deinem Tresor entfernt. Dies kann nicht rückgängig gemacht werden.</string>
-    <string name="vault_delete_detail_bound">%1$d Hosts verlieren diese Zugangsdaten und fragen beim nächsten Verbinden nach einem Passwort. Kann nicht rückgängig gemacht werden.</string>
+    <string name="vault_delete_detail_none">Diese Zugangsdaten werden in den Papierkorb verschoben.</string>
+    <plurals name="vault_delete_detail_bound">
+        <item quantity="one">%1$d Host verliert diese Zugangsdaten. Eine Wiederherstellung aus dem Papierkorb stellt die Zuordnung zum Host nicht wieder her.</item>
+        <item quantity="other">%1$d Hosts verlieren diese Zugangsdaten. Eine Wiederherstellung aus dem Papierkorb stellt die Zuordnungen zu den Hosts nicht wieder her.</item>
+    </plurals>
 
     <!-- Master-password gate: create / unlock / biometric offer / corrupted / reset. -->
     <string name="vault_create_title">Master-Passwort erstellen</string>
@@ -124,11 +127,11 @@
     <string name="vault_corrupted_title">Tresor ist beschädigt</string>
     <string name="vault_corrupted_subtitle">Die Tresor-Datei kann nicht gelesen oder entschlüsselt werden. Setze den Tresor zurück, um die App weiter zu nutzen.</string>
     <string name="vault_reset_vault">Tresor zurücksetzen</string>
-    <string name="vault_reset_subtitle">Unumkehrbar. Gespeicherte Passwörter, Schlüssel und Zugangsdaten werden unwiederbringlich gelöscht — das Master-Passwort kann sie nicht zurückbringen.</string>
-    <string name="vault_reset_scope_secrets_title">Nur Geheimnisse</string>
-    <string name="vault_reset_scope_secrets_subtitle">Host-Profile und known_hosts bleiben erhalten.</string>
-    <string name="vault_reset_scope_everything_title">Alles löschen</string>
-    <string name="vault_reset_scope_everything_subtitle">Löscht zusätzlich Host-Profile, known_hosts und Einstellungen.</string>
+    <string name="vault_reset_subtitle">Löscht alle Tresordaten dauerhaft: Host-Profile, Zugangsdaten, Snippets, Runbooks, Tunnel und Papierkorb. Eine Wiederherstellung ist nicht möglich.</string>
+    <string name="vault_reset_scope_secrets_title">Tresor zurücksetzen</string>
+    <string name="vault_reset_scope_secrets_subtitle">Vertrauenswürdige Host-Schlüssel und Terminaleinstellungen bleiben erhalten.</string>
+    <string name="vault_reset_scope_everything_title">Tresor und Geräteeinstellungen zurücksetzen</string>
+    <string name="vault_reset_scope_everything_subtitle">Zusätzlich werden vertrauenswürdige Host-Schlüssel gelöscht sowie Terminal-, Sprach- und Sperreinstellungen zurückgesetzt.</string>
     <string name="vault_reset_confirm_label">Gib %1$s ein, um zu bestätigen</string>
     <string name="vault_reset_confirm_button">Endgültig zurücksetzen</string>
     <string name="vault_link_key_file">Schlüsseldatei verknüpfen</string>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_context_cut">Kes</string>
+    <string name="text_context_copy">Kopyala</string>
+    <string name="text_context_paste">Yapıştır</string>
+    <string name="text_context_select_all">Tümünü seç</string>
+</resources>

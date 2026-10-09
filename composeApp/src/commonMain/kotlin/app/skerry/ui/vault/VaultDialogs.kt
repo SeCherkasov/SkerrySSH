@@ -104,6 +104,7 @@ import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.vault.title
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.pluralStringResource
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.GhostButton
@@ -342,7 +343,7 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
         val detail = if (boundHostCount == 0) {
             stringResource(Res.string.vault_delete_detail_none)
         } else {
-            stringResource(Res.string.vault_delete_detail_bound, boundHostCount)
+            pluralStringResource(Res.plurals.vault_delete_detail_bound, boundHostCount, boundHostCount)
         }
         Txt(detail, color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {

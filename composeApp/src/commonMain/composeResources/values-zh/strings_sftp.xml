@@ -21,7 +21,6 @@
 
     <!-- Метки панелей -->
     <string name="sftp_pane_local">本地</string>
-    <string name="sftp_pane_remote">远程</string>
 
     <!-- Статусы / уведомления -->
     <string name="sftp_unavailable">SFTP 不可用</string>

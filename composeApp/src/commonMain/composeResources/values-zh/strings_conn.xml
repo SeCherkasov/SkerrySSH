@@ -28,10 +28,10 @@
     <string name="conn_policy_strict_desc">云端 AI 已关闭。数据不离开设备，仅使用本地模型。</string>
     <string name="conn_policy_strict_short">严格</string>
     <string name="conn_policy_balanced_title">均衡 — 允许云端</string>
-    <string name="conn_policy_balanced_desc">云端 AI 已开启。每个提示在发送前会剥离密钥。</string>
+    <string name="conn_policy_balanced_desc">云端 AI 已开启。每个提示在发送前会移除敏感信息。</string>
     <string name="conn_policy_balanced_short">均衡</string>
     <string name="conn_policy_permissive_title">宽松 — 开发/家庭实验室</string>
-    <string name="conn_policy_permissive_desc">启用云端 AI。提示原样发送，不剥离密钥。</string>
+    <string name="conn_policy_permissive_desc">启用云端 AI。提示原样发送，不移除敏感信息。</string>
     <string name="conn_policy_permissive_short">宽松</string>
     <string name="conn_policy_off_title">关闭 — 无 AI</string>
     <string name="conn_policy_off_desc">为此连接禁用 AI 功能。</string>
@@ -51,7 +51,7 @@
     <string name="conn_jump_error_title">跳板主机不可用</string>
     <string name="conn_jump_error_missing">此配置引用的跳板主机已不存在。请在配置设置中另选一个。</string>
     <string name="conn_jump_error_not_ssh">跳板主机不是 SSH 配置，无法建立隧道。</string>
-    <string name="conn_jump_error_no_credential">跳板主机没有保存的密钥。请先在其配置中添加密码或密钥。</string>
+    <string name="conn_jump_error_no_credential">跳板主机没有保存的凭据。请先在其配置中添加密码或密钥。</string>
     <string name="conn_jump_error_cycle">跳板主机引用形成循环。请在配置设置中修复链路。</string>
     <string name="conn_jump_error_ok">确定</string>
     <string name="conn_keepalive_off">关闭</string>
@@ -63,7 +63,7 @@
     <string name="conn_save_changes">保存更改</string>
     <string name="conn_save_connection">保存连接</string>
     <string name="conn_create">创建</string>
-    <string name="conn_footer_encrypted">已加密 · 仅存储在此设备</string>
+    <string name="conn_footer_encrypted">加密存储于保险库</string>
 
     <string name="conn_auth_ask">每次询问</string>
     <string name="conn_auth_password">密码</string>
@@ -119,7 +119,7 @@
 
     <string name="conn_import_action">从 ssh_config 导入</string>
     <string name="conn_import_title">从 ssh_config 导入</string>
-    <string name="conn_import_subtitle">选择要添加的主机。不会导入密钥——连接时再设置身份验证。</string>
+    <string name="conn_import_subtitle">选择要导入的主机配置。IdentityFile 和 CertificateFile 将按路径关联，不复制文件内容。</string>
     <string name="conn_import_select_all">全选</string>
     <string name="conn_import_empty">此文件中未找到主机。</string>
     <string name="conn_import_button">导入 (%1$d)</string>
@@ -192,4 +192,8 @@
     <string name="conn_err_hostkey_jump">跳板主机 — %1$s</string>
     <string name="conn_jump_via_shell">在跳板主机上输入 ssh</string>
     <string name="conn_jump_via_shell_desc">适用于只允许 shell 的堡垒机。按跳板主机配置登录，使用其密钥连接目标。仅终端。</string>
+    <string name="conn_name_example">例如 %1$s</string>
+    <string name="conn_address_example">%1$s 或 %2$s</string>
+    <string name="conn_username_example">%1$s 或用户名</string>
+    <string name="conn_container_default">第一个容器</string>
 </resources>

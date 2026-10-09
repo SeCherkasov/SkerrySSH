@@ -18,7 +18,7 @@ enum class UiLanguage(val id: String, val localeTag: String?, val displayName: S
     Russian("ru", "ru", "Русский"),
 
     /** Simplified Chinese. */
-    Chinese("zh", "zh", "简体中文"),
+    Chinese("zh", "zh-CN", "简体中文"),
 
     /** Turkish. */
     Turkish("tr", "tr", "Türkçe"),

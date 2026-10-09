@@ -45,14 +45,13 @@
     <string name="rd_no_session">Açık uzak masaüstü yok</string>
     <string name="rd_pick_to_connect">Masaüstünü açmak için kenar çubuğundan bir bağlantı seçin.</string>
     <string name="rd_no_desktops">Henüz uzak masaüstü yok</string>
-    <string name="rd_add_first">Burada görmek için bir VNC bağlantısı ekleyin.</string>
+    <string name="rd_add_first">Burada görmek için bir VNC veya RDP bağlantısı ekleyin.</string>
     <string name="conn_title_new_desktop">Yeni uzak masaüstü</string>
     <string name="conn_title_edit_desktop">Uzak masaüstünü düzenle</string>
     <string name="conn_subtitle_new_desktop">Uzak masaüstü ekleyin. Şifresi ana şifrenizle şifrelenir.</string>
     <string name="nav_tab_desktops">Masaüstleri</string>
     <string name="rd_screen_title">Uzak masaüstleri</string>
     <string name="rd_panel_hide">Paneli gizle</string>
-    <string name="rd_panel_show">Paneli göster</string>
     <string name="rd_screenshot">Ekran görüntüsü</string>
     <string name="rd_screenshot_saved">Kaydedildi: %1$s</string>
     <string name="rd_screenshot_failed">Dosya yazılamadı</string>
@@ -76,7 +75,7 @@
     <string name="rd_bar_unpin">Çubuk kendiliğinden gizlensin</string>
     <string name="rd_bar_hide">Çubuğu gizle</string>
     <string name="rd_ctrl_alt_del_view_only">Yalnızca görüntüleme — girdi gönderilmez</string>
-    <string name="rd_clipboard_failed">Sistem panosu reddetti</string>
+    <string name="rd_clipboard_failed">Sistem panosuna erişilemiyor</string>
     <string name="rd_surface">Uzak masaüstü: %1$s. %2$s</string>
     <string name="rd_surface_release">%1$s klavyeyi serbest bırakır</string>
     <string name="rd_keyboard_input">Uzak masaüstü girdisi</string>
@@ -89,7 +88,7 @@
     <string name="rdp_stage_mcs">MCS bağlantısı</string>
     <string name="rdp_stage_licensing">oturum açma ve lisanslama</string>
     <string name="rdp_stage_capabilities">yetenek alışverişi</string>
-    <string name="rdp_stage_finalization">oturumun tamamlanması</string>
+    <string name="rdp_stage_finalization">bağlantının tamamlanması</string>
     <string name="rdp_drop_closed">Sunucu bağlantıyı kapattı.</string>
     <string name="rdp_drop_timeout">Sunucu yanıt vermeyi bıraktı.</string>
     <string name="rdp_drop_reset">Bağlantı sıfırlandı.</string>

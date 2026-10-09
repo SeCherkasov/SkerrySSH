@@ -275,10 +275,10 @@
     <string name="settings_terminal_section_local_shell">Lokale Shell</string>
     <string name="settings_local_shell_desc">Shell für lokale Terminal-Sitzungen. Leer lassen, um deine Standard-Shell zu verwenden.</string>
     <string name="settings_experimental_subtitle">Funktionen im Test. Standardmäßig aus; sie können sich ändern oder wegfallen.</string>
-    <string name="settings_trash_subtitle">Gelöschte Hosts, Schlüssel, Snippets und Tunnel.</string>
+    <string name="settings_trash_subtitle">Gelöschte Hosts, Zugangsdaten, Snippets und Tunnel.</string>
     <string name="settings_trash_title">Papierkorb</string>
     <string name="settings_trash_empty">Der Papierkorb ist leer</string>
-    <string name="settings_trash_empty_hint">Gelöschte Hosts, Schlüssel, Snippets und Tunnel landen hier und werden nach 30 Tagen endgültig entfernt.</string>
+    <string name="settings_trash_empty_hint">Gelöschte Hosts, Zugangsdaten, Snippets und Tunnel landen hier und werden nach 30 Tagen endgültig entfernt.</string>
     <string name="settings_trash_restore">Wiederherstellen</string>
     <string name="settings_trash_forget">Endgültig löschen</string>
     <string name="settings_trash_empty_all">Papierkorb leeren</string>
@@ -287,7 +287,7 @@
     <string name="settings_trash_confirm_forget">„%1$s“ endgültig löschen? Das lässt sich nicht rückgängig machen.</string>
     <string name="settings_trash_confirm_empty">Papierkorb leeren? Alles darin wird endgültig gelöscht.</string>
     <string name="settings_trash_kind_host">Host</string>
-    <string name="settings_trash_kind_credential">Schlüssel</string>
+    <string name="settings_trash_kind_credential">Zugangsdaten</string>
     <string name="settings_trash_kind_snippet">Snippet</string>
     <string name="settings_trash_kind_tunnel">Tunnel</string>
     <string name="settings_trash_locked">Entsperre den Tresor, um den Papierkorb zu sehen</string>

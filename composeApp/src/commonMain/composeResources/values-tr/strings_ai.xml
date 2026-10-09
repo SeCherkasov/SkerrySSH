@@ -16,7 +16,7 @@
     <string name="assistant_no_answer">Model yanıt döndürmedi. Yeniden sorun veya daha fazla bağlam ekleyin.</string>
     <string name="assistant_attached">gönderilen çıktı: %1$d</string>
     <string name="assistant_copy">Kopyala</string>
-    <string name="assistant_copy_failed">Sistem panosu reddetti</string>
+    <string name="assistant_copy_failed">Sistem panosuna erişilemiyor</string>
     <string name="assistant_edit">Düzenle</string>
     <string name="shell_tip_assistant">Asistan</string>
     <string name="assistant_explain_action">Çıktıyı açıkla</string>

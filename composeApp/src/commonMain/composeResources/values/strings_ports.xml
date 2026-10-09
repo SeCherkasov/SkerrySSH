@@ -28,8 +28,8 @@
     <string name="ports_via">via %1$s</string>
     <string name="ports_col_type">TYPE</string>
     <string name="ports_remove_confirm_title">Remove “%1$s”?</string>
-    <string name="ports_remove_active_message">Active tunnel. It will be disconnected and deleted — can't be undone.</string>
-    <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
+    <string name="ports_remove_active_message">The tunnel disconnects and its saved profile moves to Trash. Restoring the profile does not reconnect it.</string>
+    <string name="ports_remove_inactive_message">This saved tunnel moves to Trash.</string>
     <string name="ports_type_local">local</string>
     <string name="ports_type_remote">remote</string>
     <string name="ports_type_socks">SOCKS5</string>

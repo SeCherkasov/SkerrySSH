@@ -236,7 +236,7 @@
     <string name="lib_teams_delete_message">Bu ekip herkes için silinsin mi? Paylaşılan kayıtlar eşitleme sunucusundan kaldırılır.</string>
     <string name="lib_teams_err_not_connected">Eşitleme bağlı değil</string>
     <string name="lib_teams_err_vault_locked">Kasa kilitli</string>
-    <string name="lib_teams_err_no_recipient_key">Bu hesap henüz bir paylaşım anahtarı yayımlamadı — davet edilen kişiden Ekipler'i bir kez açmasını isteyin</string>
+    <string name="lib_teams_err_no_recipient_key">Bu hesap henüz bir paylaşım anahtarı yayımlamadı. Davet edilen kişiden %1$s bölümünü bir kez açmasını isteyin.</string>
     <string name="lib_teams_err_recipient_key_changed">Parmak izini doğruladıktan sonra hesabın anahtarı değişti — hiçbir şey gönderilmedi, yeniden davet edin ve yenisini kontrol edin</string>
     <string name="lib_teams_err_already_invited">Bu hesap zaten üye ya da bekleyen bir daveti var</string>
     <string name="lib_teams_err_no_such_account">Eşitleme sunucusunda böyle bir hesap yok</string>

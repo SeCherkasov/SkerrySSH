@@ -271,10 +271,10 @@
     <string name="settings_terminal_section_local_shell">Yerel kabuk</string>
     <string name="settings_local_shell_desc">Yerel terminal oturumları için çalıştırılan kabuk. Varsayılan kabuğunuz için boş bırakın.</string>
     <string name="settings_experimental_subtitle">Test aşamasındaki özellikler. Varsayılan olarak kapalı; değişebilir veya kaldırılabilir.</string>
-    <string name="settings_trash_subtitle">Silinen sunucular, anahtarlar, kod parçacıkları ve tüneller.</string>
+    <string name="settings_trash_subtitle">Silinen sunucular, kimlik bilgileri, kod parçacıkları ve tüneller.</string>
     <string name="settings_trash_title">Çöp kutusu</string>
     <string name="settings_trash_empty">Çöp kutusu boş</string>
-    <string name="settings_trash_empty_hint">Silinen sunucular, anahtarlar, kod parçacıkları ve tüneller buraya gelir ve 30 gün sonra kalıcı olarak kaldırılır.</string>
+    <string name="settings_trash_empty_hint">Silinen sunucular, kimlik bilgileri, kod parçacıkları ve tüneller buraya gelir ve 30 gün sonra kalıcı olarak kaldırılır.</string>
     <string name="settings_trash_restore">Geri yükle</string>
     <string name="settings_trash_forget">Kalıcı olarak sil</string>
     <string name="settings_trash_empty_all">Çöp kutusunu boşalt</string>
@@ -283,7 +283,7 @@
     <string name="settings_trash_confirm_forget">“%1$s” kalıcı olarak silinsin mi? Bu işlem geri alınamaz.</string>
     <string name="settings_trash_confirm_empty">Çöp kutusu boşaltılsın mı? İçindeki her şey kalıcı olarak silinir.</string>
     <string name="settings_trash_kind_host">Sunucu</string>
-    <string name="settings_trash_kind_credential">Anahtar</string>
+    <string name="settings_trash_kind_credential">Kimlik bilgisi</string>
     <string name="settings_trash_kind_snippet">Kod parçacığı</string>
     <string name="settings_trash_kind_tunnel">Tünel</string>
     <string name="settings_trash_locked">Çöp kutusunu görmek için kasanın kilidini açın</string>

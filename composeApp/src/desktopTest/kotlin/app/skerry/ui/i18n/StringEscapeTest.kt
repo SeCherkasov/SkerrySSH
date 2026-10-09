@@ -75,7 +75,7 @@ class StringEscapeTest {
     @Test
     fun `no locale borrows another locale's quote marks`() {
         forEachLocale { locale, rendered ->
-            val forbidden = FOREIGN_QUOTES.getValue(locale)
+            val forbidden = FOREIGN_QUOTES.getValue(java.util.Locale.forLanguageTag(locale).language)
             val borrowed = rendered.filterValues { text -> text.any { it in forbidden } }
             assertEquals(emptyMap(), borrowed, "$locale: quoted with $forbidden")
         }

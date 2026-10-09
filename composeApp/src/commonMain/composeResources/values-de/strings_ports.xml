@@ -28,8 +28,8 @@
     <string name="ports_via">über %1$s</string>
     <string name="ports_col_type">TYP</string>
     <string name="ports_remove_confirm_title">„%1$s“ entfernen?</string>
-    <string name="ports_remove_active_message">Aktiver Tunnel. Er wird getrennt und gelöscht — nicht rückgängig zu machen.</string>
-    <string name="ports_remove_inactive_message">Dieser gespeicherte Tunnel wird gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="ports_remove_active_message">Der Tunnel wird getrennt und sein gespeichertes Profil in den Papierkorb verschoben. Das Wiederherstellen des Profils verbindet den Tunnel nicht erneut.</string>
+    <string name="ports_remove_inactive_message">Dieser gespeicherte Tunnel wird in den Papierkorb verschoben.</string>
     <string name="ports_type_local">lokal</string>
     <string name="ports_type_remote">remote</string>
     <string name="ports_type_socks">SOCKS5</string>

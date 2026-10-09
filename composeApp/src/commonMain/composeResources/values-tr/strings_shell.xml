@@ -33,11 +33,11 @@
     <string name="shell_corrupted_subtitle">Kasa dosyası okunamıyor veya şifresi çözülemiyor. Skerry'yi yeniden kullanmak için sıfırlayın.</string>
 
     <string name="shell_reset_skerry">Skerry'yi sıfırla</string>
-    <string name="shell_reset_subtitle">Kalıcıdır. Kayıtlı şifreler, anahtarlar ve kimlikler silinir. Kurtarma yok.</string>
-    <string name="shell_reset_scope_secrets_title">Yalnızca gizli bilgiler</string>
-    <string name="shell_reset_scope_secrets_subtitle">Sunucu profilleri ve known_hosts korunur.</string>
-    <string name="shell_reset_scope_all_title">Her şeyi sil</string>
-    <string name="shell_reset_scope_all_subtitle">Sunucu profilleri, known_hosts ve ayarlar da silinir.</string>
+    <string name="shell_reset_subtitle">Sunucu profilleri, kimlik bilgileri, kod parçacıkları, runbook kayıtları, tüneller ve çöp kutusu dahil tüm kasa verileri kalıcı olarak silinir. Kurtarılamaz.</string>
+    <string name="shell_reset_scope_secrets_title">Kasayı sıfırla</string>
+    <string name="shell_reset_scope_secrets_subtitle">Güvenilen sunucu anahtarlarını ve terminal ayarlarını koru.</string>
+    <string name="shell_reset_scope_all_title">Kasayı ve cihaz ayarlarını sıfırla</string>
+    <string name="shell_reset_scope_all_subtitle">Güvenilen sunucu anahtarlarını da sil; terminal, dil ve kilit ayarlarını sıfırla.</string>
     <string name="shell_reset_confirm_placeholder">Onaylamak için yazın: %1$s</string>
     <string name="shell_reset_permanently">Kalıcı olarak sıfırla</string>
 
@@ -65,7 +65,7 @@
 
     <!-- Delete host dialog -->
     <string name="shell_delete_host_title">“%1$s” silinsin mi?</string>
-    <string name="shell_delete_host_body">Sunucularınızdan kaldırılır. Kayıtlı kimlik bilgileri kasada kalır. Bu işlem geri alınamaz.</string>
+    <string name="shell_delete_host_body">Kayıtlı profil çöp kutusuna taşınır. Kimlik bilgileri kasada kalır.</string>
 
     <!-- Mobile host detail -->
     <string name="shell_host">Sunucu</string>

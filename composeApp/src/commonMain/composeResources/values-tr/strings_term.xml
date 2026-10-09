@@ -77,7 +77,6 @@
     <string name="mosh_err_bootstrap_no_output">mosh-server başlatılamadı (çıktı yok). Mosh'un sunucuda kurulu ve çalıştırılabilir olduğunu denetleyin.</string>
     <string name="term_record_start">Oturumu kaydet</string>
     <string name="term_record_stop">Durdur ve kaydı sakla</string>
-    <string name="term_record_active">Kaydediliyor</string>
     <string name="term_record_truncated">Kayıt durduruldu: boyut sınırına ulaşıldı</string>
     <string name="term_record_empty">Kaydedilecek bir şey yoktu</string>
     <string name="term_record_saved">Kayıt saklandı</string>
@@ -87,12 +86,7 @@
     <string name="term_player_invalid">Bu dosya bir asciicast v2 kaydı değil</string>
     <string name="term_player_empty">Bu kayıtta oynatılacak bir şey yok</string>
     <string name="term_player_truncated">Kayıt çok uzun — yalnızca ilk kısmı yüklendi</string>
-    <string name="term_player_play">Oynat</string>
-    <string name="term_player_pause">Duraklat</string>
-    <string name="term_player_replay">Yeniden oynat</string>
-    <string name="term_player_close">Kapat</string>
     <string name="term_player_speed">%1$s×</string>
-    <string name="term_player_loading">Kayıt açılıyor…</string>
     <string name="term_broadcast_title">Yayın</string>
     <string name="term_broadcast_subtitle">Tek komutu birden çok oturumda çalıştır</string>
     <string name="term_broadcast_placeholder">Her yerde çalıştırılacak komut…</string>

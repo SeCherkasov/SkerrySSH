@@ -21,7 +21,6 @@
 
     <!-- Pane labels -->
     <string name="sftp_pane_local">Lokal</string>
-    <string name="sftp_pane_remote">Remote</string>
 
     <!-- Statuses / notices -->
     <string name="sftp_unavailable">SFTP nicht verfügbar</string>

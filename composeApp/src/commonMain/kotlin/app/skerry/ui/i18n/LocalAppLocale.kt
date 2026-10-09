@@ -19,6 +19,10 @@ expect object LocalAppLocale {
     /** Apply [languageTag] (BCP-47) as the app locale; `null` reverts to the system locale. */
     @Composable
     infix fun provides(languageTag: String?): ProvidedValue<*>
+
+    /** Refresh platform control labels within the selected locale without recreating their state. */
+    @Composable
+    fun ProvidePlatformLocalization(content: @Composable () -> Unit)
 }
 
 /**
@@ -29,6 +33,6 @@ expect object LocalAppLocale {
 @Composable
 fun AppLocaleProvider(language: UiLanguage, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalAppLocale provides language.localeTag) {
-        content()
+        LocalAppLocale.ProvidePlatformLocalization(content)
     }
 }

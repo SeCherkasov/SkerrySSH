@@ -103,8 +103,11 @@
 
     <!-- Delete secret dialog. -->
     <string name="vault_delete_title">Delete “%1$s”?</string>
-    <string name="vault_delete_detail_none">This is removed from your vault. This can't be undone.</string>
-    <string name="vault_delete_detail_bound">%1$d hosts will lose this credential and ask for a password on next connect. Can't be undone.</string>
+    <string name="vault_delete_detail_none">This credential moves to Trash.</string>
+    <plurals name="vault_delete_detail_bound">
+        <item quantity="one">%1$d host will lose this credential. Restoring it from Trash does not restore the host binding.</item>
+        <item quantity="other">%1$d hosts will lose this credential. Restoring it from Trash does not restore the host bindings.</item>
+    </plurals>
 
     <!-- Master-password gate: create / unlock / biometric offer / corrupted / reset. -->
     <string name="vault_create_title">Create a master password</string>
@@ -124,11 +127,11 @@
     <string name="vault_corrupted_title">Vault is corrupted</string>
     <string name="vault_corrupted_subtitle">The vault file can't be read or decrypted. Reset the vault to keep using the app.</string>
     <string name="vault_reset_vault">Reset vault</string>
-    <string name="vault_reset_subtitle">Irreversible. Saved passwords, keys and credentials are erased beyond recovery — the master password can't bring them back.</string>
-    <string name="vault_reset_scope_secrets_title">Secrets only</string>
-    <string name="vault_reset_scope_secrets_subtitle">Host profiles and known_hosts are kept.</string>
-    <string name="vault_reset_scope_everything_title">Erase everything</string>
-    <string name="vault_reset_scope_everything_subtitle">Also delete host profiles, known_hosts and settings.</string>
+    <string name="vault_reset_subtitle">Permanently deletes all vault data: host profiles, credentials, snippets, runbooks, tunnels and trash. There is no recovery.</string>
+    <string name="vault_reset_scope_secrets_title">Reset vault</string>
+    <string name="vault_reset_scope_secrets_subtitle">Keep trusted host keys and terminal settings.</string>
+    <string name="vault_reset_scope_everything_title">Reset vault and device settings</string>
+    <string name="vault_reset_scope_everything_subtitle">Also forget trusted host keys and reset terminal, language and lock settings.</string>
     <string name="vault_reset_confirm_label">Type %1$s to confirm</string>
     <string name="vault_reset_confirm_button">Reset permanently</string>
     <string name="vault_link_key_file">Link key file</string>

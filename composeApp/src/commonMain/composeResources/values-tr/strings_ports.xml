@@ -28,8 +28,8 @@
     <string name="ports_via">%1$s üzerinden</string>
     <string name="ports_col_type">TÜR</string>
     <string name="ports_remove_confirm_title">“%1$s” kaldırılsın mı?</string>
-    <string name="ports_remove_active_message">Etkin tünel. Bağlantısı kesilip silinecek — geri alınamaz.</string>
-    <string name="ports_remove_inactive_message">Bu kayıtlı tünel silinir. Bu işlem geri alınamaz.</string>
+    <string name="ports_remove_active_message">Tünelin bağlantısı kesilir ve kayıtlı profili çöp kutusuna taşınır. Profili geri yüklemek tüneli yeniden bağlamaz.</string>
+    <string name="ports_remove_inactive_message">Bu kayıtlı tünel çöp kutusuna taşınır.</string>
     <string name="ports_type_local">yerel</string>
     <string name="ports_type_remote">uzak</string>
     <string name="ports_type_socks">SOCKS5</string>

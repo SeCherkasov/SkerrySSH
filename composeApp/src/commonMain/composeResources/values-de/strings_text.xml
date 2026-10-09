@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="text_context_cut">Ausschneiden</string>
+    <string name="text_context_copy">Kopieren</string>
+    <string name="text_context_paste">Einfügen</string>
+    <string name="text_context_select_all">Alles auswählen</string>
+</resources>
