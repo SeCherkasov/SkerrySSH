@@ -72,7 +72,12 @@ def classify(cwd=None):
     if os.environ.get("CI") == "true" and state.merge_base(cwd=cwd) == state.git(["rev-parse", "HEAD"], cwd)[1].strip():
         paths = sorted(state.worktree_entries(cwd))  # main CI verifies the full tree, not an empty self-diff
     code = [p for p in paths if harness_input(p) or product_input(p)]
-    named = BRANCH_KINDS.get(branch.split("/", 1)[0], "feature")
+    # GitHub checks out a merge commit detached from the typed PR branch.
+    kind_branch = branch
+    if (branch == "HEAD" and os.environ.get("CI") == "true"
+            and os.environ.get("GITHUB_EVENT_NAME") == "pull_request"):
+        kind_branch = os.environ.get("GITHUB_HEAD_REF", branch)
+    named = BRANCH_KINDS.get(kind_branch.split("/", 1)[0], "feature")
     kind = (named if named != "docs" else "feature") if code else "docs"
     declared = evidence.load(cwd).get("tasks", {}).get(branch, {}).get("kind")
     if declared in KINDS and KINDS.index(declared) >= KINDS.index(kind):

@@ -121,6 +121,69 @@ changes remain unreviewed and block delivery; a third round is the user's decisi
 
 Review schema and CLI examples are in [the harness README](../tools/harness/README.md).
 
+## GitHub descriptions
+
+This format applies to PRs and Issues created or edited by agents, including CLI/API publication.
+Use English, a specific title describing the behavior or problem, and the matching template under
+`.github`. The description must make sense to someone who has not read the task conversation.
+Read the latest user-approved reference before drafting: [PR #433](https://github.com/SeCherkasov/SkerrySSH/pull/433)
+and [PR #434](https://github.com/SeCherkasov/SkerrySSH/pull/434) establish the PR style;
+[Issue #435](https://github.com/SeCherkasov/SkerrySSH/issues/435) establishes the Issue style.
+Keep their structure unless the user explicitly replaces it.
+
+### Pull requests
+
+Use these headings in order:
+
+- `## What this does`: start with the user-visible improvement and a concrete before/after example.
+  Follow with a few behavior-focused bullets and relevant compatibility notes. Explain technical
+  changes through their effect on the user; do not open with class names or protocol internals.
+- `## Measured improvement` for performance changes: representative workload, conditions, baseline,
+  updated result and improvement in a compact table with consistent units. Distinguish emulated
+  conditions from real-device/network measurements.
+- `## How to verify`: numbered application steps with observable expected results. Distinguish
+  these suggested checks from checks actually completed. For docs/process work, describe the
+  corresponding review path rather than inventing application steps.
+- `## Verification`: actual checks/results, regression coverage, application testing and GitHub
+  checks as applicable. Mark pending checks as pending; update when results are available.
+- Finish with `Not verified live:` and the concrete untested platform/device/service behavior.
+  For changes with no applicable live behavior, state that explicitly rather than inventing a gap.
+
+Do not replace this format with generic Summary/Changes/Validation sections. Link related Issues;
+use `Closes #N` only when the complete Issue is resolved. Put detailed methods, additional controls
+or long logs in a labelled `<details>` block after the main sections.
+Add a separate risks/migration section only when it explains a material reviewer decision.
+
+Keep paragraphs and bullets short; scale detail to the change rather than padding sections.
+Omit chat chronology, abandoned experiments, reviewer tokens,
+agent dispatch and unrelated machine resource settings. Keep details needed to reproduce or assess
+the result in the optional evidence block, not in the opening paragraphs.
+
+### Issues
+
+Use `.github/ISSUE_TEMPLATE/bug_report.md` for defects: `## Summary`, `## Steps to reproduce`,
+`## Actual behavior`, `## Expected behavior`, `## Scope`, checkbox `## Acceptance`, and
+`## Relevant implementation` when code was inspected. Include version/platform details with the
+summary or reproduction steps, and a small redacted log or screenshot when useful. State when
+reproduction or the cause is unknown; distinguish symptoms, verified facts and hypotheses.
+
+Use `.github/ISSUE_TEMPLATE/feature_request.md` for feature or improvement work: `## Summary`,
+`## Scope`, checkbox `## Acceptance`, and `## Relevant implementation` when code was inspected.
+Explain the user scenario, intended behavior and observable completion conditions. Scope defines
+the affected platforms, boundaries and constraints. Acceptance checkboxes describe outcomes, not an
+agent activity list. Relevant implementation names existing entry points and verified behavior;
+do not present a suspected cause as established. Apply existing bug/enhancement and affected-area
+labels accurately. Do not create a tracking Issue unless the user authorizes it.
+
+### Publication check
+
+Before publication, remove template comments/placeholders and empty optional sections. Use real
+newlines, blank lines around headings/lists/tables, and fenced code blocks for logs. Write the body
+to a UTF-8 file and pass `--body-file` to `gh`; do not embed escaped multiline shell strings.
+After publication, read back the title/body and check the rendered Markdown in an available browser.
+Fix malformed tables, literal `\\n`, missing paragraphs or excessive unstructured prose before handoff.
+When scope changes, rewrite the title and body to match the final change.
+
 ## Product conventions
 
 - UI follows `docs/design/Skerry Tablet.html`; `Skerry Logo.html` defines the brand mark.
