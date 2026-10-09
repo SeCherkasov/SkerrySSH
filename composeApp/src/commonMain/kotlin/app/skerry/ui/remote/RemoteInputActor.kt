@@ -2,7 +2,6 @@ package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteKeyEvent
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.channels.Channel
@@ -34,6 +33,9 @@ internal class RemoteInputActor(private val session: RemoteDesktopSession) {
         input.trySend(write)
     }
 
+    /** Discard queued input as soon as the screen learns that the session ended. */
+    fun stop() = input.cancel()
+
     /** The drain loop; runs until the session scope is cancelled. */
     suspend fun run() {
         var pending: Write? = null
@@ -47,24 +49,24 @@ internal class RemoteInputActor(private val session: RemoteDesktopSession) {
                         // as a scroll that sometimes does nothing (issue #265). The mask the
                         // release repeats is not a new button state either, so the actor's own
                         // record of the held buttons is left alone.
-                        write { session.sendPointer(event.x, event.y, event.mask) }
+                        session.sendPointer(event.x, event.y, event.mask)
                         null
                     } else if (event.mask == actorLastMask) {
                         sendCollapsedMove(event)
                     } else {
-                        write { session.sendPointer(event.x, event.y, event.mask) }
+                        session.sendPointer(event.x, event.y, event.mask)
                         // Wheel bits are edges, not state: the mask a later move repeats has none.
                         actorLastMask = event.mask and BUTTONS_ONLY
                         null
                     }
 
                 is KeyWrite -> {
-                    write { session.sendKey(event.event, event.down) }
+                    session.sendKey(event.event, event.down)
                     null
                 }
 
                 is LockWrite -> {
-                    write { session.syncLockKeys(event.keys.scroll, event.keys.num, event.keys.caps) }
+                    session.syncLockKeys(event.keys.scroll, event.keys.num, event.keys.caps)
                     null
                 }
             }
@@ -97,22 +99,8 @@ internal class RemoteInputActor(private val session: RemoteDesktopSession) {
             }
         }
         lastMoveAt = TimeSource.Monotonic.markNow()
-        write { session.sendPointer(move.x, move.y, move.mask) }
+        session.sendPointer(move.x, move.y, move.mask)
         return interrupt
-    }
-
-    /**
-     * Swallow-the-write discipline: every write races the read loop, so the socket can already be
-     * dead — the dropped session surfaces through the session close, and a failed input write has
-     * nothing to add to the imminent "Connection lost".
-     */
-    private suspend fun write(block: suspend () -> Unit) {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-        }
     }
 
     private companion object {

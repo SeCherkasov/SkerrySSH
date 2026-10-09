@@ -17,9 +17,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 
 /** State of a remote-desktop tab — the framebuffer sibling of `ConnectionUiState`. */
@@ -80,6 +82,8 @@ class RemoteDesktopController(
     private var connectJob: Job? = null
     private var sessionScope: CoroutineScope? = null
     private var session: RemoteDesktopSession? = null
+    private var retryConnect: (() -> Unit)? = null
+    private var connectGeneration = 0L
 
     /**
      * Open a session through [openSession]. Ignored if one is already live.
@@ -92,12 +96,40 @@ class RemoteDesktopController(
         quality: RemoteDesktopQuality = RemoteDesktopQuality.Auto,
         onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
         openSession: suspend () -> RemoteDesktopSession,
+    ) = connectSession(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, openSession = openSession)
+
+    private fun connectSession(
+        remoteResize: Boolean,
+        onRemoteResizeChanged: (Boolean) -> Unit,
+        quality: RemoteDesktopQuality,
+        onQualityChanged: (RemoteDesktopQuality) -> Unit,
+        clipboardShared: Boolean = true,
+        viewOnly: Boolean = false,
+        openSession: suspend () -> RemoteDesktopSession,
     ) {
-        if (uiState is RemoteDesktopUiState.Connected) return
+        if (uiState is RemoteDesktopUiState.Connected || connectJob?.isActive == true) return
+        retryConnect = {
+            val previous = uiState as? RemoteDesktopUiState.Disconnected
+            connectSession(
+                previous?.screen?.remoteResize ?: remoteResize,
+                onRemoteResizeChanged,
+                previous?.screen?.quality ?: quality,
+                onQualityChanged,
+                previous?.screen?.clipboardShared ?: clipboardShared,
+                previous?.screen?.viewOnly ?: viewOnly,
+                openSession,
+            )
+        }
+        val generation = ++connectGeneration
         uiState = RemoteDesktopUiState.Connecting
         connectJob = scope.launch {
             try {
                 val opened = openSession()
+                // A transport may finish non-cancellable setup after the tab has been closed.
+                if (!isActive || generation != connectGeneration) {
+                    withContext(NonCancellable) { runCatching { opened.close() } }
+                    return@launch
+                }
                 val sScope = newSessionScope()
                 session = opened
                 sessionScope = sScope
@@ -108,17 +140,27 @@ class RemoteDesktopController(
                     onRemoteResizeChanged = onRemoteResizeChanged,
                     qualityInitial = quality,
                     onQualityChanged = onQualityChanged,
+                    clipboardSharedInitial = clipboardShared,
+                    viewOnlyInitial = viewOnly,
                 )
                 uiState = RemoteDesktopUiState.Connected(screen)
                 watchForClose(screen, sScope)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (!isActive || generation != connectGeneration) return@launch
                 releaseSession()
                 // Typed reason for the UI; the wire text stays as diagnostics only.
                 val step = rdpConnectFailureOf(e)
                 uiState = RemoteDesktopUiState.Error(vncFailureOf(e), e.message.orEmpty(), step?.stage, step?.drop)
             }
+        }
+    }
+
+    /** Retry in this tab only on an explicit user action. Credentials are released by disconnect. */
+    fun reconnect() {
+        if (uiState is RemoteDesktopUiState.Disconnected || uiState is RemoteDesktopUiState.Error) {
+            retryConnect?.invoke()
         }
     }
 
@@ -132,7 +174,7 @@ class RemoteDesktopController(
             val closed = screen.close.filterNotNull().first()
             // Dispatch onto the main scope (like ConnectionController) so the transition doesn't race disconnect.
             scope.launch {
-                if (uiState is RemoteDesktopUiState.Connected) {
+                if ((uiState as? RemoteDesktopUiState.Connected)?.screen === screen && sessionScope === sScope) {
                     uiState = RemoteDesktopUiState.Disconnected(screen, closed.cleanExit, closed.reason)
                     releaseSession()
                 }
@@ -142,6 +184,8 @@ class RemoteDesktopController(
 
     /** Close the session (if any) and reset. */
     fun disconnect() {
+        connectGeneration++
+        retryConnect = null
         connectJob?.cancel()
         connectJob = null
         releaseSession()

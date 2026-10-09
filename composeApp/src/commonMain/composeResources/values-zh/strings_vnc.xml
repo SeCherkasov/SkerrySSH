@@ -97,4 +97,5 @@
     <string name="rdp_drop_reset">连接被重置。</string>
     <string name="rdp_drop_refused">连接被拒绝。</string>
     <string name="rdp_drop_unresolved">找不到主机。</string>
+    <string name="rd_reconnect">重新连接</string>
 </resources>

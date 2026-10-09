@@ -7,6 +7,8 @@ import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.rememberClipboardActions
 import app.skerry.ui.remote.rememberScreenshotAction
 import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteDesktopConnectionError
+import app.skerry.ui.remote.RemoteDesktopDisconnected
 import app.skerry.ui.remote.RemoteDesktopUiState
 import app.skerry.ui.remote.ReportOutputVisibility
 import androidx.compose.animation.AnimatedVisibility
@@ -61,15 +63,12 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vnc_connecting
-import app.skerry.ui.generated.resources.vnc_connection_lost
-import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.vnc.VncTouchSurface
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.style.TextAlign
 import app.skerry.ui.vnc.remoteDesktopAnnouncement
-import app.skerry.ui.vnc.remoteDesktopErrorText
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -119,14 +118,8 @@ fun MobileVncScreen(state: MobileDesignState) {
                 ReportOutputVisibility(ui.screen)
                 VncTouchSurface(ui.screen)
             }
-            is RemoteDesktopUiState.Error -> CenterText(remoteDesktopErrorText(ui), Skerry.colors.sunset)
-            is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
-                VncTouchSurface(ui.screen, interactive = false)
-                CenterText(
-                    stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
-                    Skerry.colors.sunset,
-                )
-            }
+            is RemoteDesktopUiState.Error -> RemoteDesktopConnectionError(ui, vnc::reconnect)
+            is RemoteDesktopUiState.Disconnected -> RemoteDesktopDisconnected(ui, vnc::reconnect)
             else -> CenterText(stringResource(Res.string.vnc_connecting), Skerry.colors.dim)
         }
 
