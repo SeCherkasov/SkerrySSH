@@ -61,3 +61,22 @@ Git history and test results outrank these defaults. Commit and push only when t
 
 State the change, verified evidence and live-platform gaps. UI work needs a concrete visual path.
 Keep reports short and technical. Code comments, commit messages and PR descriptions are in English.
+
+## PR and Issue descriptions
+
+- Follow the mandatory format in `docs/development-process.md` → **GitHub descriptions** and the
+  matching `.github` template before creating or editing a PR or Issue, including through the CLI.
+- Before drafting, read the latest user-approved reference: PR #433/#434 and Issue #435 establish
+  the current format. Preserve that format unless the user explicitly changes it.
+- PRs require `## What this does`, `## How to verify`, `## Verification` and a concrete
+  `Not verified live:` line; performance PRs add `## Measured improvement`. Do not substitute
+  generic Summary/Changes/Validation sections or open with implementation jargon.
+- Issues require `## Summary`, `## Scope` and checkbox `## Acceptance`; bugs add reproduction,
+  actual and expected behavior. Add `## Relevant implementation` only for inspected code.
+- Lead with the concrete problem and user-visible result. Use short paragraphs, bullets and real
+  Markdown headings; put lengthy methods or logs in a `<details>` block or a linked artifact.
+- Describe the final scope and actual evidence. Remove abandoned approaches, chat history,
+  agent workflow and unrelated local resource settings. Never present pending checks as passed.
+- Write multiline bodies to a UTF-8 file and use `--body-file`. Read the published title/body back
+  and inspect the rendered description when a browser is available; fix formatting before handoff.
+- Apply existing bug/enhancement and affected-area labels accurately when publishing Issues.
