@@ -7,7 +7,7 @@
 #   APP_DIR         jpackage app-image dir (…/compose/binaries/main/app/Skerry)
 #   APPIMAGE_DIR    where the assembled AppDir and the .AppImage land
 #   ICON_PNG        512x512 app icon
-#   ASSET_DIR       this directory (holds AppRun and skerry.desktop)
+#   ASSET_DIR       this directory (holds AppRun, skerry.desktop and AppStream metadata)
 #   VERSION         version string embedded in the output filename
 #   APPIMAGETOOL    optional path to appimagetool; downloaded to a cache if unset
 set -euo pipefail
@@ -43,7 +43,14 @@ mkdir -p "$APPDIR"
 cp -a "$APP_DIR/." "$APPDIR/"
 
 install -m 0755 "$ASSET_DIR/AppRun" "$APPDIR/AppRun"
-install -m 0644 "$ASSET_DIR/skerry.desktop" "$APPDIR/skerry.desktop"
+install -m 0644 "$ASSET_DIR/skerry.desktop" "$APPDIR/io.github.SeCherkasov.SkerrySSH.desktop"
+install -Dm 0644 "$ASSET_DIR/skerry.desktop" \
+  "$APPDIR/usr/share/applications/io.github.SeCherkasov.SkerrySSH.desktop"
+install -Dm 0644 "$ASSET_DIR/io.github.SeCherkasov.SkerrySSH.metainfo.xml" \
+  "$APPDIR/usr/share/metainfo/io.github.SeCherkasov.SkerrySSH.metainfo.xml"
+# appimagetool 1.9.1 discovers the legacy filename from the desktop file.
+ln -s io.github.SeCherkasov.SkerrySSH.metainfo.xml \
+  "$APPDIR/usr/share/metainfo/io.github.SeCherkasov.SkerrySSH.appdata.xml"
 
 # appimagetool needs the icon at the AppDir root (it derives .DirIcon from it); the hicolor
 # copy is what a desktop installs into its icon theme once the AppImage is integrated.
