@@ -316,6 +316,7 @@ class RdpSocketSession(
      * opens it if it can resize the session, and stays silent if it cannot.
      */
     private val display = DisplayControlChannel(
+        desktopScalePercent = settings.desktopScalePercent,
         send = { data -> dynamicChannels.sendTo(DisplayControlChannel.NAME, data) },
     )
 
@@ -330,7 +331,7 @@ class RdpSocketSession(
         // the channel uninvited is refused at the channel layer — the same attack-surface promise
         // as the codec switches. Display control is independent (it rides dynamicResize).
         if (settings.wantsGraphicsPipeline) dynamicChannels.register(GraphicsChannel.NAME, graphics)
-        dynamicChannels.register(DisplayControlChannel.NAME, display)
+        if (settings.dynamicResize) dynamicChannels.register(DisplayControlChannel.NAME, display)
         val clipboardChannelId = state.channels[RdpClientSettings.CHANNEL_CLIPBOARD]
         val dynamicChannelId = state.channels[RdpClientSettings.CHANNEL_DYNAMIC]
         val audioChannelId = state.channels[RdpClientSettings.CHANNEL_AUDIO]

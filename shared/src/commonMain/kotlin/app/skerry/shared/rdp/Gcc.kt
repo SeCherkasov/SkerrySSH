@@ -193,7 +193,11 @@ object Gcc {
         // zero-filled, when the display is unscaled: the server ignores a zeroed tail anyway, and
         // leaving the block byte-identical to what shipped before keeps a client that gains nothing
         // from the tail out of the blast radius of servers that read this optional area loosely.
-        val scale = RdpDisplayScale.of(settings.desktopWidth, settings.desktopHeight, settings.displayScale)
+        val scale = RdpDisplayScale.of(
+            settings.desktopWidth, settings.desktopHeight,
+            settings.desktopScalePercent?.div(100f) ?: settings.displayScale,
+            explicit = settings.desktopScalePercent != null,
+        )
         if (scale != RdpDisplayScale.NONE) {
             writer.u32le(scale.physicalWidthMm)
             writer.u32le(scale.physicalHeightMm)

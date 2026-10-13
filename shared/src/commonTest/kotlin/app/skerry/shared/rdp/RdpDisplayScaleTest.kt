@@ -9,6 +9,16 @@ import kotlin.test.assertTrue
 class RdpDisplayScaleTest {
 
     @Test
+    fun `every explicit whole percent survives conversion to the wire factor`() {
+        for (percent in RdpDisplayScale.MIN_FACTOR..RdpDisplayScale.MAX_FACTOR) {
+            val scale = RdpDisplayScale.of(800, 600, percent / 100f, explicit = true)
+            assertEquals(percent, scale.desktopScaleFactor, "manual $percent percent changed on the wire")
+            assertTrue(scale.physicalWidthMm in RdpDisplayScale.MIN_PHYSICAL_MM..RdpDisplayScale.MAX_PHYSICAL_MM)
+            assertTrue(scale.physicalHeightMm in RdpDisplayScale.MIN_PHYSICAL_MM..RdpDisplayScale.MAX_PHYSICAL_MM)
+        }
+    }
+
+    @Test
     fun `an unscaled display says nothing at all`() {
         assertEquals(RdpDisplayScale.NONE, RdpDisplayScale.of(1920, 1080, 1f))
     }

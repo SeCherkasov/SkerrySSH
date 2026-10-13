@@ -170,10 +170,10 @@
     <string name="conn_audio_device_default">系统默认</string>
     <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
     <string name="conn_field_image_quality">画质</string>
-    <string name="conn_image_quality_low_desc">无壁纸、主题、动画和光标效果。</string>
-    <string name="conn_image_quality_medium_desc">无壁纸、主题和动画。</string>
-    <string name="conn_image_quality_high_desc">完整桌面、字体平滑与桌面合成。</string>
-    <string name="conn_image_quality_note">在连接时生效，RDP 会将其固定为整个会话的设置。</string>
+    <string name="conn_image_quality_low_desc">关闭主题、动画和光标效果。</string>
+    <string name="conn_image_quality_medium_desc">关闭主题和动画。</string>
+    <string name="conn_image_quality_high_desc">启用字体平滑和桌面合成。</string>
+    <string name="conn_image_quality_note">在打开新会话时生效。</string>
     <string name="conn_field_display">显示</string>
     <string name="conn_rdp_gfx">图形管线 (MS-RDPEGFX)</string>
     <string name="conn_rdp_gfx_desc">关闭后回退到传统绘制路径。</string>
@@ -196,4 +196,12 @@
     <string name="conn_address_example">%1$s 或 %2$s</string>
     <string name="conn_username_example">%1$s 或用户名</string>
     <string name="conn_container_default">第一个容器</string>
+    <string name="conn_rdp_wallpaper">显示桌面壁纸</string>
+    <string name="conn_rdp_scale">Windows 缩放</string>
+    <string name="conn_rdp_scale_auto">自动（设备缩放）</string>
+    <string name="conn_rdp_scale_percent">%1$d%</string>
+    <string name="conn_rdp_resolution">分辨率</string>
+    <string name="conn_rdp_resolution_auto">自动（窗口大小）</string>
+    <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
+    <string name="conn_rdp_display_note">在新会话中生效。固定分辨率不会随窗口大小改变。</string>
 </resources>

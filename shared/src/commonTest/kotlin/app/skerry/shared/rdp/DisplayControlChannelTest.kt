@@ -36,6 +36,30 @@ class DisplayControlChannelTest {
     }
 
     @Test
+    fun `manual 100 percent survives resizing and a different local display density`() = runTest {
+        val fixedScale = DisplayControlChannel(desktopScalePercent = 100) { sent.add(it) }
+        fixedScale.onMessage(capsPdu())
+        fixedScale.requestResolution(2560, 1600, 2f)
+        fixedScale.requestResolution(800, 600, 3f)
+        for (pdu in sent) {
+            val fields = layout(pdu)
+            assertTrue(fields[PHYSICAL_WIDTH] > 0)
+            assertTrue(fields[PHYSICAL_WIDTH + 1] > 0)
+            assertEquals(100, fields[PHYSICAL_WIDTH + 3])
+            assertEquals(100, fields[PHYSICAL_WIDTH + 4])
+        }
+        assertEquals(2, sent.size)
+    }
+
+    @Test
+    fun `manual scale is not silently capped by the size of a smaller window`() = runTest {
+        val fixedScale = DisplayControlChannel(desktopScalePercent = 150) { sent.add(it) }
+        fixedScale.onMessage(capsPdu())
+        fixedScale.requestResolution(800, 600, 3f)
+        assertEquals(150, layout(sent.single())[PHYSICAL_WIDTH + 3])
+    }
+
+    @Test
     fun `the capability PDU is what announces that resizing is possible`() = runTest {
         assertTrue(channel.drainUpdates().isEmpty())
 

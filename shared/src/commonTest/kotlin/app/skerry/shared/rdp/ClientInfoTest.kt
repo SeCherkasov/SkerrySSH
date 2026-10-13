@@ -48,6 +48,18 @@ class ClientInfoTest {
         assertEquals(PERF_ENABLE_FONT_SMOOTHING or PERF_ENABLE_DESKTOP_COMPOSITION, flags)
     }
 
+    @Test
+    fun `wallpaper can be enabled without changing the other low quality flags`() {
+        val flags = performanceFlagsOf(ClientInfo.pdu(logon, quality = RdpImageQuality.Low, wallpaper = true))
+        assertEquals(RdpImageQuality.Low.performanceFlags and PERF_DISABLE_WALLPAPER.inv(), flags)
+    }
+
+    @Test
+    fun `wallpaper can be disabled while keeping font smoothing and composition`() {
+        val flags = performanceFlagsOf(ClientInfo.pdu(logon, quality = RdpImageQuality.High, wallpaper = false))
+        assertEquals(RdpImageQuality.High.performanceFlags or PERF_DISABLE_WALLPAPER, flags)
+    }
+
     /** TS_INFO_PACKET::flags, past the security header and the code page. */
     private fun flagsOf(pdu: ByteArray): Int = RdpReader(pdu).apply { skip(8) }.u32le()
 

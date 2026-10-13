@@ -34,22 +34,26 @@ data class RdpDisplayScale(
          * saying — an unscaled display, a nonsensical scale, or a physical size the server would
          * refuse.
          *
-         * The scale is capped so the desktop the remote side lays out never falls below
+         * Auto is capped so the desktop the remote side lays out never falls below
          * [MIN_LOGICAL_WIDTH]×[MIN_LOGICAL_HEIGHT]: a phone reports a density near 3, and a Windows
          * desktop of 780×360 logical pixels cannot hold the windows it is asked to show. Better a
          * smaller scale than a session no dialog fits in.
          */
-        fun of(widthPx: Int, heightPx: Int, scale: Float): RdpDisplayScale {
+        fun of(widthPx: Int, heightPx: Int, scale: Float, explicit: Boolean = false): RdpDisplayScale {
             if (widthPx <= 0 || heightPx <= 0 || !scale.isFinite()) return NONE
             val room = min(widthPx.toDouble() / MIN_LOGICAL_WIDTH, heightPx.toDouble() / MIN_LOGICAL_HEIGHT)
             // The protocol's ceiling is applied here, not to the factor alone: the millimetres below
             // are derived from the same number, and a size that disagrees with the factor it travels
             // with is a DPI neither side meant.
-            val capped = min(min(scale.toDouble(), room), MAX_FACTOR / 100.0)
-            if (capped < MIN_SCALE) return NONE
-            // Down to the whole percent the protocol carries, never up: rounding up would push the
-            // desktop back under the minimum the cap above just protected.
-            val factor = floor(capped * 100).toInt().coerceIn(MIN_FACTOR, MAX_FACTOR)
+            // Only Auto protects the minimum logical workspace. Manual choices must not silently
+            // change when the window gets smaller, and 100% must be distinguishable from unset.
+            val requested = if (explicit) scale.toDouble() else min(scale.toDouble(), room)
+            val capped = min(requested, MAX_FACTOR / 100.0)
+            if (capped < if (explicit) 1.0 else MIN_SCALE) return NONE
+            // Auto rounds down to preserve its workspace cap. An explicit choice is already a whole
+            // percent; round away floating-point error so 140 / 100f does not travel as 139%.
+            val factor = (if (explicit) (capped * 100).roundToInt() else floor(capped * 100).toInt())
+                .coerceIn(MIN_FACTOR, MAX_FACTOR)
             val applied = factor / 100.0
             // The size a screen of these pixels would have at the DPI this factor implies. It is a
             // derived number rather than a measured one, and it has to be: the platforms report a

@@ -38,6 +38,9 @@ class RdpConnectRequestTest {
         remoteFx = false,
         h264 = RdpH264Mode.Avc420,
         displayScale = 1.5f,
+        wallpaper = false,
+        desktopScalePercent = 150,
+        dynamicResize = false,
     )
 
     @Test
@@ -60,6 +63,9 @@ class RdpConnectRequestTest {
         assertFalse(target.graphicsPipeline)
         assertFalse(target.remoteFx)
         assertEquals(1.5f, target.displayScale)
+        assertEquals(false, target.wallpaper)
+        assertEquals(150, target.desktopScalePercent)
+        assertFalse(target.dynamicResize)
     }
 
     @Test
@@ -79,6 +85,9 @@ class RdpConnectRequestTest {
 
         assertEquals(2880 to 1800, dialled.target.desktopWidth to dialled.target.desktopHeight)
         assertEquals(1.5f, dialled.target.displayScale)
+        assertEquals(false, dialled.target.wallpaper)
+        assertEquals(150, dialled.target.desktopScalePercent)
+        assertFalse(dialled.target.dynamicResize)
         assertEquals("ann", dialled.credentials.username)
     }
 }

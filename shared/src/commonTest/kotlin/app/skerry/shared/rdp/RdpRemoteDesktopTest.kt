@@ -13,6 +13,31 @@ import kotlin.test.assertEquals
 class RdpRemoteDesktopTest {
 
     @Test
+    fun a_fixed_resolution_never_offers_or_sends_a_viewport_resize() = runTest {
+        val stream = MutableSharedFlow<RdpUpdate>(extraBufferCapacity = 4)
+        val session = FakeRdpSession(updates = stream)
+        val desktop = RdpRemoteDesktop(session, dynamicResize = false)
+        val seen = mutableListOf<RemoteDesktopUpdate>()
+        val collector = launch { desktop.updates.collect { seen.add(it) } }
+        runCurrent()
+        stream.emit(RdpUpdate.ResizeSupported)
+        stream.emit(RdpUpdate.Closed(true))
+        desktop.setDesktopSize(2560, 1600, 2f)
+        runCurrent()
+        collector.cancel()
+        assertEquals(false, desktop.capabilities.remoteResize)
+        assertEquals(emptyList(), session.calls)
+        assertEquals(listOf<RemoteDesktopUpdate>(RemoteDesktopUpdate.Closed(true)), seen)
+    }
+
+    @Test
+    fun a_manual_scale_survives_the_surface_reporting_device_density() = runTest {
+        val session = FakeRdpSession()
+        RdpRemoteDesktop(session, desktopScalePercent = 100).setDesktopSize(1920, 1080, 3f)
+        assertEquals(listOf("size(1920,1080,1.0)"), session.calls)
+    }
+
+    @Test
     fun a_dead_audio_device_reaches_the_ui_as_a_playback_failure() = runTest {
         // The one hop between the RDP session and what the screen state sees. Drop the arm and the
         // player, the channel and the screen state all still pass their own tests while the UI never

@@ -49,6 +49,9 @@ data class RdpConnectRequest(
      * [app.skerry.shared.rdp.RdpDisplayScale].
      */
     val displayScale: Float = 1f,
+    val wallpaper: Boolean? = null,
+    val desktopScalePercent: Int? = null,
+    val dynamicResize: Boolean = true,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")
@@ -71,6 +74,9 @@ fun RdpConnectRequest.toTarget(): RdpTarget = RdpTarget(
     desktopWidth = width,
     desktopHeight = height,
     displayScale = displayScale,
+    wallpaper = wallpaper,
+    desktopScalePercent = desktopScalePercent,
+    dynamicResize = dynamicResize,
     clientName = clientName,
     loadBalanceInfo = loadBalanceInfo,
     audioOutput = audioOutput,
@@ -98,4 +104,10 @@ fun RdpConnectRequest.toCredentials(): RdpCredentials = RdpCredentials(
  * field was missed on: nothing about a per-graph lambda is worth re-deciding three times.
  */
 fun rdpSessionFactory(transport: RdpTransport): suspend (RdpConnectRequest) -> RemoteDesktopSession =
-    { request -> RdpRemoteDesktop(transport.connect(request.toTarget(), request.toCredentials())) }
+    { request ->
+        RdpRemoteDesktop(
+            transport.connect(request.toTarget(), request.toCredentials()),
+            dynamicResize = request.dynamicResize,
+            desktopScalePercent = request.desktopScalePercent,
+        )
+    }

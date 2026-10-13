@@ -170,10 +170,10 @@
     <string name="conn_audio_device_default">System default</string>
     <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
     <string name="conn_field_image_quality">Image quality</string>
-    <string name="conn_image_quality_low_desc">No wallpaper, themes, animations or cursor effects.</string>
-    <string name="conn_image_quality_medium_desc">No wallpaper, themes or animations.</string>
-    <string name="conn_image_quality_high_desc">Full desktop, font smoothing and composition.</string>
-    <string name="conn_image_quality_note">Applied when the session connects; RDP fixes it for the whole session.</string>
+    <string name="conn_image_quality_low_desc">Themes, animations and cursor effects disabled.</string>
+    <string name="conn_image_quality_medium_desc">Themes and animations disabled.</string>
+    <string name="conn_image_quality_high_desc">Font smoothing and composition enabled.</string>
+    <string name="conn_image_quality_note">Applied when opening a new session.</string>
     <string name="conn_field_display">Display</string>
     <string name="conn_rdp_gfx">Graphics pipeline (MS-RDPEGFX)</string>
     <string name="conn_rdp_gfx_desc">Off falls back to the legacy drawing path.</string>
@@ -196,4 +196,12 @@
     <string name="conn_address_example">%1$s or %2$s</string>
     <string name="conn_username_example">%1$s or username</string>
     <string name="conn_container_default">first container</string>
+    <string name="conn_rdp_wallpaper">Show desktop wallpaper</string>
+    <string name="conn_rdp_scale">Windows scale</string>
+    <string name="conn_rdp_scale_auto">Auto (device scale)</string>
+    <string name="conn_rdp_scale_percent">%1$d%</string>
+    <string name="conn_rdp_resolution">Resolution</string>
+    <string name="conn_rdp_resolution_auto">Auto (window size)</string>
+    <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
+    <string name="conn_rdp_display_note">Applied to a new session. A fixed resolution does not follow the window.</string>
 </resources>

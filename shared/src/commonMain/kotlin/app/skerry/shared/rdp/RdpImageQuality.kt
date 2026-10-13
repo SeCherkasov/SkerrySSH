@@ -36,6 +36,13 @@ enum class RdpImageQuality {
             High -> PERF_ENABLE_FONT_SMOOTHING or PERF_ENABLE_DESKTOP_COMPOSITION
         }
 
+    /** Change only wallpaper; the quality preset still owns the other decoration flags. */
+    fun performanceFlags(wallpaper: Boolean?): Int = when (wallpaper) {
+        null -> performanceFlags
+        true -> performanceFlags and PERF_DISABLE_WALLPAPER.inv()
+        false -> performanceFlags or PERF_DISABLE_WALLPAPER
+    }
+
     companion object {
         /** MS-RDPBCGR 2.2.1.11.1.1.1. */
         private const val PERF_DISABLE_WALLPAPER = 0x00000001

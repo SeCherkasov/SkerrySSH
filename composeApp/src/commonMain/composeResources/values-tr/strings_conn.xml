@@ -167,10 +167,10 @@
     <string name="conn_audio_output_device">Çıkış cihazı</string>
     <string name="conn_audio_device_default">Sistem varsayılanı</string>
     <string name="conn_field_image_quality">Görüntü kalitesi</string>
-    <string name="conn_image_quality_low_desc">Duvar kağıdı, tema, animasyon ve imleç efekti yok.</string>
-    <string name="conn_image_quality_medium_desc">Duvar kağıdı, tema ve animasyon yok.</string>
-    <string name="conn_image_quality_high_desc">Tam masaüstü, yazı tipi yumuşatma ve kompozisyon.</string>
-    <string name="conn_image_quality_note">Oturum bağlanırken uygulanır; RDP bunu tüm oturum boyunca sabitler.</string>
+    <string name="conn_image_quality_low_desc">Tema, animasyon ve imleç efektleri kapalı.</string>
+    <string name="conn_image_quality_medium_desc">Tema ve animasyonlar kapalı.</string>
+    <string name="conn_image_quality_high_desc">Yazı tipi yumuşatma ve kompozisyon açık.</string>
+    <string name="conn_image_quality_note">Yeni oturum açıldığında uygulanır.</string>
     <string name="conn_field_display">Ekran</string>
     <string name="conn_rdp_gfx">Grafik hattı (MS-RDPEGFX)</string>
     <string name="conn_rdp_gfx_desc">Kapalıyken eski çizim yoluna geri dönülür.</string>
@@ -192,4 +192,12 @@
     <string name="conn_address_example">%1$s veya %2$s</string>
     <string name="conn_username_example">%1$s veya kullanıcı adı</string>
     <string name="conn_container_default">ilk konteyner</string>
+    <string name="conn_rdp_wallpaper">Masaüstü duvar kağıdını göster</string>
+    <string name="conn_rdp_scale">Windows ölçeği</string>
+    <string name="conn_rdp_scale_auto">Otomatik (cihaz ölçeği)</string>
+    <string name="conn_rdp_scale_percent">%1$d%</string>
+    <string name="conn_rdp_resolution">Çözünürlük</string>
+    <string name="conn_rdp_resolution_auto">Otomatik (pencere boyutu)</string>
+    <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
+    <string name="conn_rdp_display_note">Yeni oturumda uygulanır. Sabit çözünürlük pencere boyutuyla değişmez.</string>
 </resources>

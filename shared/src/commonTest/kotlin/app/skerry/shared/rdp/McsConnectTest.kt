@@ -154,6 +154,17 @@ class McsConnectTest {
     }
 
     @Test
+    fun `explicit 100 percent sends a scale tail instead of inheriting Windows DPI`() {
+        val core = Gcc.clientUserData(settings.copy(desktopScalePercent = 100, displayScale = 2f)).blockAt(0xC001)
+        core.skip(core.remaining - 18)
+        assertTrue(core.u32le() > 0, "physical width must make the scale valid")
+        assertTrue(core.u32le() > 0, "physical height must make the scale valid")
+        assertEquals(0, core.u16le())
+        assertEquals(100, core.u32le())
+        assertEquals(100, core.u32le())
+    }
+
+    @Test
     fun `client security data offers no legacy encryption when the transport is TLS`() {
         val security = Gcc.clientUserData(settings).blockAt(0xC002)
 

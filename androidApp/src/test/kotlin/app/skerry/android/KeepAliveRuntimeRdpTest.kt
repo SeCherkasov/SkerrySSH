@@ -81,11 +81,17 @@ class KeepAliveRuntimeRdpTest {
                 height = 2340,
                 clientName = "Skerry",
                 displayScale = 3f,
+                wallpaper = true,
+                desktopScalePercent = 100,
+                dynamicResize = false,
             ),
         )
 
         val target = assertNotNull(rdp.target, "the keep-alive graph opened no RDP session at all")
         assertEquals(3f, target.displayScale, "the display scaling never left the phone")
+        assertEquals(true, target.wallpaper)
+        assertEquals(100, target.desktopScalePercent)
+        assertEquals(false, target.dynamicResize)
         assertEquals(1080 to 2340, target.desktopWidth to target.desktopHeight)
         assertEquals(3390, target.port)
         assertEquals("ann", rdp.credentials?.username)

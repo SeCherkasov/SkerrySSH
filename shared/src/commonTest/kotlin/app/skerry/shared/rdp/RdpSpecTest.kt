@@ -15,6 +15,30 @@ class RdpSpecTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
+    fun `old profiles keep quality-dependent wallpaper and automatic display settings`() {
+        val spec = json.decodeFromString(RdpSpec.serializer(), """{"quality":"High"}""")
+        assertEquals(null, spec.wallpaper)
+        assertEquals(null, spec.requestedScalePercent)
+        assertEquals(null, spec.fixedResolution)
+    }
+
+    @Test
+    fun `untrusted display settings cannot request invalid dimensions or scaling`() {
+        val spec = json.decodeFromString(RdpSpec.serializer(),
+            """{"desktopScalePercent":2147483647,"resolution":{"width":2147483647,"height":-1}}""")
+        assertEquals(null, spec.requestedScalePercent)
+        assertEquals(null, spec.fixedResolution)
+        assertEquals(RdpResolution(1366, 768), RdpSpec(resolution = RdpResolution(1367, 768)).fixedResolution)
+    }
+
+    @Test
+    fun `explicit display settings cannot be dropped as an empty spec`() {
+        assertFalse(RdpSpec(wallpaper = false).isEmpty)
+        assertFalse(RdpSpec(desktopScalePercent = 100).isEmpty)
+        assertFalse(RdpSpec(resolution = RdpResolution(1920, 1080)).isEmpty)
+    }
+
+    @Test
     fun `a profile saved before the quality setting keeps the picture it had`() {
         val stored = """{"loadBalanceInfo":"tsv://x","audioOutput":true}"""
 
