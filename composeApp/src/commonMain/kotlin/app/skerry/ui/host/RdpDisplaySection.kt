@@ -3,6 +3,7 @@ package app.skerry.ui.host
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -10,7 +11,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.rdp.RdpH264Mode
+import app.skerry.shared.rdp.RdpResolution
 import app.skerry.ui.design.DropdownField
+import app.skerry.ui.design.FormField
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -24,6 +27,13 @@ import app.skerry.ui.generated.resources.conn_rdp_h264_desc
 import app.skerry.ui.generated.resources.conn_rdp_h264_off
 import app.skerry.ui.generated.resources.conn_rdp_remotefx
 import app.skerry.ui.generated.resources.conn_rdp_remotefx_desc
+import app.skerry.ui.generated.resources.conn_rdp_scale
+import app.skerry.ui.generated.resources.conn_rdp_scale_auto
+import app.skerry.ui.generated.resources.conn_rdp_scale_percent
+import app.skerry.ui.generated.resources.conn_rdp_resolution
+import app.skerry.ui.generated.resources.conn_rdp_resolution_auto
+import app.skerry.ui.generated.resources.conn_rdp_resolution_pixels
+import app.skerry.ui.generated.resources.conn_rdp_display_note
 
 /**
  * Graphics-path settings of an RDP profile (F-28/F-32): the MS-RDPEGFX pipeline, RemoteFX on the
@@ -35,6 +45,31 @@ import app.skerry.ui.generated.resources.conn_rdp_remotefx_desc
 @Composable
 fun RdpDisplaySection(form: NewConnectionFormState) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val scales = remember(form.rdpScalePercent) { (SCALE_OPTIONS + form.rdpScalePercent).distinct() }
+        FormField(stringResource(Res.string.conn_rdp_scale), top = 0.dp) {
+            DropdownField(
+                value = form.rdpScalePercent,
+                options = scales,
+                label = { percent ->
+                    if (percent == null) stringResource(Res.string.conn_rdp_scale_auto)
+                    else stringResource(Res.string.conn_rdp_scale_percent, percent)
+                },
+                onPick = { form.rdpScalePercent = it },
+            )
+        }
+        val resolutions = remember(form.rdpResolution) { (RESOLUTION_OPTIONS + form.rdpResolution).distinct() }
+        FormField(stringResource(Res.string.conn_rdp_resolution), top = 0.dp) {
+            DropdownField(
+                value = form.rdpResolution,
+                options = resolutions,
+                label = { resolution ->
+                    if (resolution == null) stringResource(Res.string.conn_rdp_resolution_auto)
+                    else stringResource(Res.string.conn_rdp_resolution_pixels, resolution.width, resolution.height)
+                },
+                onPick = { form.rdpResolution = it },
+            )
+        }
+        Txt(stringResource(Res.string.conn_rdp_display_note), color = Skerry.colors.dim, size = 11.sp)
         ToggleRow(
             label = stringResource(Res.string.conn_rdp_gfx),
             on = form.rdpGraphicsPipeline,
@@ -73,6 +108,12 @@ fun RdpDisplaySection(form: NewConnectionFormState) {
         }
     }
 }
+
+private val SCALE_OPTIONS: List<Int?> = listOf(null, 100, 125, 150, 175, 200, 250, 300, 400, 500)
+private val RESOLUTION_OPTIONS: List<RdpResolution?> = listOf(
+    null, RdpResolution(1280, 720), RdpResolution(1600, 900), RdpResolution(1920, 1080),
+    RdpResolution(2560, 1440), RdpResolution(3840, 2160),
+)
 
 /** AVC profile names are wire vocabulary, not copy; only Auto and Off are words to translate. */
 @Composable

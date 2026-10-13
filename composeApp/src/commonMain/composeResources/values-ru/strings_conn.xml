@@ -170,10 +170,10 @@
     <string name="conn_audio_device_default">Системное по умолчанию</string>
     <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
     <string name="conn_field_image_quality">Качество изображения</string>
-    <string name="conn_image_quality_low_desc">Без обоев, тем, анимаций и эффектов курсора.</string>
-    <string name="conn_image_quality_medium_desc">Без обоев, тем и анимаций.</string>
-    <string name="conn_image_quality_high_desc">Полный рабочий стол, сглаживание шрифтов и композиция.</string>
-    <string name="conn_image_quality_note">Применяется при подключении: RDP фиксирует это на всю сессию.</string>
+    <string name="conn_image_quality_low_desc">Темы, анимации и эффекты курсора отключены.</string>
+    <string name="conn_image_quality_medium_desc">Темы и анимации отключены.</string>
+    <string name="conn_image_quality_high_desc">Сглаживание шрифтов и композиция включены.</string>
+    <string name="conn_image_quality_note">Применяется при открытии новой сессии.</string>
     <string name="conn_field_display">Дисплей</string>
     <string name="conn_rdp_gfx">Графический конвейер (MS-RDPEGFX)</string>
     <string name="conn_rdp_gfx_desc">Выключен — сессия рисует по легаси-пути.</string>
@@ -196,4 +196,12 @@
     <string name="conn_address_example">%1$s или %2$s</string>
     <string name="conn_username_example">%1$s или имя пользователя</string>
     <string name="conn_container_default">первый контейнер</string>
+    <string name="conn_rdp_wallpaper">Показывать обои рабочего стола</string>
+    <string name="conn_rdp_scale">Масштаб Windows</string>
+    <string name="conn_rdp_scale_auto">Авто (масштаб устройства)</string>
+    <string name="conn_rdp_scale_percent">%1$d%</string>
+    <string name="conn_rdp_resolution">Разрешение</string>
+    <string name="conn_rdp_resolution_auto">Авто (размер окна)</string>
+    <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
+    <string name="conn_rdp_display_note">Применяется к новой сессии. Фиксированное разрешение не меняется вместе с окном.</string>
 </resources>

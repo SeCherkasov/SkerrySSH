@@ -9,6 +9,44 @@ import kotlin.test.assertTrue
 
 class RdpFileImportTest {
 
+    @Test
+    fun `display settings from an rdp file reach the stored profile`() {
+        val entry = checkNotNull(read("""
+            full address:s:windows
+            disable wallpaper:i:0
+            desktopscalefactor:i:100
+            desktopwidth:i:1920
+            desktopheight:i:1080
+        """.trimIndent()).host)
+        val spec = checkNotNull(RdpFileImport.toHost(entry, "h").rdp)
+        assertEquals(true, spec.wallpaper)
+        assertEquals(100, spec.requestedScalePercent)
+        assertEquals(RdpResolution(1920, 1080), spec.fixedResolution)
+    }
+
+    @Test
+    fun `dynamic resolution in an rdp file keeps following the viewport`() {
+        val entry = checkNotNull(read("""
+            full address:s:windows
+            dynamic resolution:i:1
+            desktopwidth:i:1920
+            desktopheight:i:1080
+        """.trimIndent()).host)
+        assertNull(entry.resolution)
+    }
+
+    @Test
+    fun `invalid imported display settings fall back without allocating a desktop`() {
+        val entry = checkNotNull(read("""
+            full address:s:windows
+            desktopscalefactor:i:-100
+            desktopwidth:i:2147483647
+            desktopheight:i:2147483647
+        """.trimIndent()).host)
+        assertNull(entry.resolution)
+        assertNull(entry.desktopScalePercent)
+    }
+
     private fun read(text: String, fileName: String = "prod.rdp") = RdpFileImport.read(text, fileName)
 
     @Test

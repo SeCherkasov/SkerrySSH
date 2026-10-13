@@ -85,6 +85,8 @@ data class RdpTarget(
      * desktop half the size of the client's own UI (see [RdpDisplayScale]).
      */
     val displayScale: Float = 1f,
+    val wallpaper: Boolean? = null,
+    val desktopScalePercent: Int? = null,
 ) {
     companion object {
         const val DEFAULT_PORT = 3389

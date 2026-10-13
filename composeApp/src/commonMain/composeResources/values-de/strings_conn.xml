@@ -170,10 +170,10 @@
     <string name="conn_audio_device_default">Systemstandard</string>
     <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
     <string name="conn_field_image_quality">Bildqualität</string>
-    <string name="conn_image_quality_low_desc">Kein Hintergrundbild, keine Themes, Animationen oder Cursor-Effekte.</string>
-    <string name="conn_image_quality_medium_desc">Kein Hintergrundbild, keine Themes oder Animationen.</string>
-    <string name="conn_image_quality_high_desc">Vollständiger Desktop, Schriftglättung und Komposition.</string>
-    <string name="conn_image_quality_note">Wird beim Verbinden der Sitzung angewendet; RDP legt es für die gesamte Sitzung fest.</string>
+    <string name="conn_image_quality_low_desc">Themes, Animationen und Cursor-Effekte deaktiviert.</string>
+    <string name="conn_image_quality_medium_desc">Themes und Animationen deaktiviert.</string>
+    <string name="conn_image_quality_high_desc">Schriftglättung und Komposition aktiviert.</string>
+    <string name="conn_image_quality_note">Gilt beim Öffnen einer neuen Sitzung.</string>
     <string name="conn_field_display">Anzeige</string>
     <string name="conn_rdp_gfx">Grafik-Pipeline (MS-RDPEGFX)</string>
     <string name="conn_rdp_gfx_desc">Aus fällt auf den Legacy-Zeichenpfad zurück.</string>
@@ -196,4 +196,12 @@
     <string name="conn_address_example">%1$s oder %2$s</string>
     <string name="conn_username_example">%1$s oder Benutzername</string>
     <string name="conn_container_default">erster Container</string>
+    <string name="conn_rdp_wallpaper">Desktop-Hintergrundbild anzeigen</string>
+    <string name="conn_rdp_scale">Windows-Skalierung</string>
+    <string name="conn_rdp_scale_auto">Automatisch (Geräteskalierung)</string>
+    <string name="conn_rdp_scale_percent">%1$d%</string>
+    <string name="conn_rdp_resolution">Auflösung</string>
+    <string name="conn_rdp_resolution_auto">Automatisch (Fenstergröße)</string>
+    <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
+    <string name="conn_rdp_display_note">Gilt für eine neue Sitzung. Eine feste Auflösung folgt nicht der Fenstergröße.</string>
 </resources>

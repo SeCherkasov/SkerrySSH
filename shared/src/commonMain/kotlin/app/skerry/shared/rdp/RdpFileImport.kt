@@ -16,6 +16,9 @@ data class RdpFileHost(
     val loadBalanceInfo: String,
     /** `audiomode:i:0` — the file asks for the session's sound to play on this machine. */
     val audioOutput: Boolean = false,
+    val wallpaper: Boolean? = null,
+    val desktopScalePercent: Int? = null,
+    val resolution: RdpResolution? = null,
 )
 
 /**
@@ -49,9 +52,9 @@ enum class RdpImportWarning {
  * [app.skerry.shared.ssh.SshConfigImport]: the UI picks the file and persists the result.
  *
  * Scope is deliberately what a connection needs: the address (with its port), who logs on and the
- * farm's routing token. Everything else in such a file — device redirection, display settings, RD
- * Gateway, the publisher signature — is either decided elsewhere in Skerry or not implemented, and
- * the ones that would change where the session lands are reported as warnings rather than ignored.
+ * farm's routing token, audio output and the supported wallpaper, scale and resolution choices.
+ * Other settings — device redirection, RD Gateway, the publisher signature — are either decided
+ * elsewhere in Skerry or not implemented. The ones that would change where the session lands are reported as warnings rather than ignored.
  *
  * Credentials are never taken from the file: `.rdp` files carry a password only as a DPAPI blob
  * (`password 51:b:`) that is bound to the Windows user who saved it, so there is nothing to import
@@ -108,9 +111,20 @@ object RdpFileImport {
                 // setting the same way, but a profile that starts opening a sound device nobody
                 // asked for is the wrong surprise on an import.
                 audioOutput = file.int("audiomode") == AUDIO_MODE_PLAY_LOCALLY,
+                wallpaper = file.bool("disable wallpaper")?.not(),
+                desktopScalePercent = file.int("desktopscalefactor")
+                    ?.takeIf { it in RdpDisplayScale.MIN_FACTOR..RdpDisplayScale.MAX_FACTOR },
+                resolution = readResolution(file),
             ),
             warnings,
         )
+    }
+
+    private fun readResolution(file: RdpFile): RdpResolution? {
+        if (file.bool("dynamic resolution") == true) return null
+        val width = file.int("desktopwidth") ?: return null
+        val height = file.int("desktopheight") ?: return null
+        return RdpResolution(width, height).takeIf { it.isValid }
     }
 
     /** Builds the profile to persist, with the caller's [id]. */
@@ -123,9 +137,13 @@ object RdpFileImport {
         credentialId = null,
         connectionType = ConnectionType.RDP,
         // The same default a profile created through the form gets (F-06): a new remote desktop
-        // follows the window, whichever door it came in through.
+        // follows the window unless the imported RDP resolution explicitly fixes its size.
         vncResizeToWindow = true,
-        rdp = RdpSpec(loadBalanceInfo = entry.loadBalanceInfo, audioOutput = entry.audioOutput)
+        rdp = RdpSpec(
+            loadBalanceInfo = entry.loadBalanceInfo, audioOutput = entry.audioOutput,
+            wallpaper = entry.wallpaper, desktopScalePercent = entry.desktopScalePercent,
+            resolution = entry.resolution,
+        )
             .takeIf { !it.isEmpty },
     )
 

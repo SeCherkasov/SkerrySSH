@@ -57,6 +57,7 @@ class RdpConnectionSequence(
                     logon,
                     audioPlayback = settings.channels.contains(RdpClientSettings.CHANNEL_AUDIO),
                     quality = settings.imageQuality,
+                    wallpaper = settings.wallpaper,
                 ),
             ),
         )

@@ -38,12 +38,33 @@ data class RdpSpec(
     val graphicsPipeline: Boolean = true,
     val remoteFx: Boolean = true,
     val h264: RdpH264Mode = RdpH264Mode.Auto,
+    /** Null preserves the quality preset's wallpaper choice for older profiles. */
+    val wallpaper: Boolean? = null,
+    /** Null follows the local display; an explicit 100 must also be sent to Windows. */
+    val desktopScalePercent: Int? = null,
+    /** Null follows the viewport; a fixed resolution is never overwritten by window resizing. */
+    val resolution: RdpResolution? = null,
 ) {
+    val requestedScalePercent: Int?
+        get() = desktopScalePercent?.takeIf { it in RdpDisplayScale.MIN_FACTOR..RdpDisplayScale.MAX_FACTOR }
+
+    val fixedResolution: RdpResolution?
+        get() = resolution?.takeIf { it.isValid }?.let { it.copy(width = it.width and 1.inv()) }
+
     /** Whether anything here is worth storing; an all-default spec is dropped to `null`. */
     val isEmpty: Boolean
         get() = loadBalanceInfo.isBlank() && !audioOutput && audioOutputDeviceId.isBlank() &&
             clipboard && quality == RdpImageQuality.DEFAULT &&
-            graphicsPipeline && remoteFx && h264 == RdpH264Mode.Auto
+            graphicsPipeline && remoteFx && h264 == RdpH264Mode.Auto &&
+            wallpaper == null && desktopScalePercent == null && resolution == null
+}
+
+/** Physical pixels stored in a profile or imported from an untrusted .rdp file. */
+@Serializable
+data class RdpResolution(val width: Int, val height: Int) {
+    val isValid: Boolean
+        get() = width in RdpClientSettings.MIN_DIMENSION..RdpClientSettings.MAX_DIMENSION &&
+            height in RdpClientSettings.MIN_DIMENSION..RdpClientSettings.MAX_DIMENSION
 }
 
 /**

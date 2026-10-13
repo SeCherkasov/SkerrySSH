@@ -35,7 +35,9 @@ fun Host.toRdpRequest(
     clientName: String,
     fallback: IntSize,
 ): RdpConnectRequest {
-    val desktop = rdpDesktopSize(viewport.size, fallback)
+    val fixed = rdp?.fixedResolution
+    val desktop = fixed?.let { IntSize(it.width, it.height) } ?: rdpDesktopSize(viewport.size, fallback)
+    val scalePercent = rdp?.requestedScalePercent
     return RdpConnectRequest(
         host = address,
         port = port,
@@ -53,7 +55,10 @@ fun Host.toRdpRequest(
         graphicsPipeline = rdp?.graphicsPipeline != false,
         remoteFx = rdp?.remoteFx != false,
         h264 = rdp?.h264 ?: RdpH264Mode.Auto,
-        displayScale = viewport.scale,
+        displayScale = scalePercent?.div(100f) ?: viewport.scale,
+        wallpaper = rdp?.wallpaper,
+        desktopScalePercent = scalePercent,
+        dynamicResize = fixed == null,
     )
 }
 

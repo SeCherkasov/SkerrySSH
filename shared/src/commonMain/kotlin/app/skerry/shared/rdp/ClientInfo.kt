@@ -58,6 +58,7 @@ object ClientInfo {
         logon: RdpLogonInfo,
         audioPlayback: Boolean = false,
         quality: RdpImageQuality = RdpImageQuality.DEFAULT,
+        wallpaper: Boolean? = null,
     ): ByteArray {
         val writer = RdpWriter(512)
         RdpSecurityHeader.write(writer, RdpSecurityHeader.SEC_INFO_PKT)
@@ -88,7 +89,7 @@ object ClientInfo {
         writer.u16le(2).u16le(0) // cbClientDir + terminator
         writeTimeZone(writer)
         writer.u32le(0) // clientSessionId, ignored by the server
-        writer.u32le(quality.performanceFlags)
+        writer.u32le(quality.performanceFlags(wallpaper))
         writer.u16le(0) // cbAutoReconnectCookie
         return writer.toByteArray()
     }

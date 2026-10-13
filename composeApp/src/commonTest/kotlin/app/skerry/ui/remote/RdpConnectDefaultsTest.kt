@@ -5,6 +5,8 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.rdp.RdpImageQuality
+import app.skerry.shared.rdp.RdpResolution
+import app.skerry.shared.rdp.clientSettings
 import app.skerry.shared.ssh.ConnectionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,6 +19,35 @@ import kotlin.test.assertTrue
  * US (F-16).
  */
 class RdpConnectDefaultsTest {
+
+    @Test
+    fun manual_display_choices_reach_the_real_transport_settings() {
+        val host = Host(id = "h", label = "Windows", address = "host", port = 3389, username = "user",
+            connectionType = ConnectionType.RDP,
+            rdp = RdpSpec(wallpaper = true, desktopScalePercent = 100, resolution = RdpResolution(1920, 1080)))
+        val request = host.toRdpRequest("secret", RemoteViewport(IntSize(2560, 1600), 2f), "Skerry", FALLBACK)
+        assertEquals(1920 to 1080, request.width to request.height)
+        assertEquals(1f, request.displayScale)
+        assertEquals(100, request.desktopScalePercent)
+        assertEquals(true, request.wallpaper)
+        assertFalse(request.dynamicResize)
+        val settings = request.toTarget().clientSettings(selectedProtocol = 2, audioOpened = false)
+        assertEquals(true, settings.wallpaper)
+        assertEquals(100, settings.desktopScalePercent)
+        assertFalse(settings.dynamicResize)
+        assertEquals(1920 to 1080, settings.desktopWidth to settings.desktopHeight)
+    }
+
+    @Test
+    fun invalid_synced_display_choices_fall_back_to_the_measured_viewport() {
+        val host = Host(id = "h", label = "Windows", address = "host", port = 3389, username = "user",
+            rdp = RdpSpec(desktopScalePercent = -1, resolution = RdpResolution(Int.MAX_VALUE, 0)))
+        val request = host.toRdpRequest("secret", RemoteViewport(IntSize(2560, 1600), 2f), "Skerry", FALLBACK)
+        assertEquals(2560 to 1600, request.width to request.height)
+        assertEquals(2f, request.displayScale)
+        assertEquals(null, request.desktopScalePercent)
+        assertTrue(request.dynamicResize)
+    }
 
     @Test
     fun the_requested_desktop_is_the_viewport_rounded_and_clamped() {

@@ -9,7 +9,7 @@ import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.graphics.RemoteKeyEvent
 import app.skerry.shared.graphics.RemoteRect
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 
 /**
  * Presents an [RdpSession] as a [RemoteDesktopSession].
@@ -26,6 +26,8 @@ class RdpRemoteDesktop(
      * does not keep displaying the address that was dialled.
      */
     override val title: String = session.connectedHost,
+    private val dynamicResize: Boolean = true,
+    private val desktopScalePercent: Int? = null,
 ) : RemoteDesktopSession {
 
     // Written from the UI's single input actor; the mask-to-transition translation needs no lock
@@ -41,7 +43,7 @@ class RdpRemoteDesktop(
         // cursor is always drawn by the client, so neither control would do anything. Resizing is a
         // channel of its own, and the UI waits for the server to open it before offering the toggle.
         adjustableQuality = false,
-        remoteResize = true,
+        remoteResize = dynamicResize,
         cursorHandover = false,
         // Both were settled by the connection request: a session that did not ask for sound has no
         // device to mute, and one that did not ask for the clipboard has no channel to share.
@@ -49,13 +51,13 @@ class RdpRemoteDesktop(
         clipboard = session.clipboardAvailable,
     )
 
-    override val updates: Flow<RemoteDesktopUpdate> = session.updates.map { update ->
+    override val updates: Flow<RemoteDesktopUpdate> = session.updates.mapNotNull { update ->
         when (update) {
             // RdpRect IS RemoteRect (see RdpUpdate.kt) — the list crosses as-is, no per-frame copy.
             is RdpUpdate.Region -> RemoteDesktopUpdate.Region(update.rects)
 
             is RdpUpdate.Resize -> RemoteDesktopUpdate.Resize(update.width, update.height)
-            is RdpUpdate.ResizeSupported -> RemoteDesktopUpdate.RemoteResizeSupported
+            is RdpUpdate.ResizeSupported -> RemoteDesktopUpdate.RemoteResizeSupported.takeIf { dynamicResize }
             is RdpUpdate.PointerShape -> mappedShape(update)
 
             is RdpUpdate.PointerPosition -> RemoteDesktopUpdate.CursorPosition(update.x, update.y)
@@ -146,8 +148,9 @@ class RdpRemoteDesktop(
      * server that never opened one — the session then keeps the size it connected with and the view
      * scales to fit.
      */
-    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) =
-        session.setDesktopSize(width, height, scale)
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) {
+        if (dynamicResize) session.setDesktopSize(width, height, desktopScalePercent?.div(100f) ?: scale)
+    }
 
     /** The RDP cursor is always the client's to draw; there is nothing to hand over. */
     override suspend fun setLocalCursor(enabled: Boolean) = Unit

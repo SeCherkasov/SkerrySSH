@@ -38,6 +38,9 @@ data class RdpClientSettings(
      * half the size of its own UI. See [RdpDisplayScale].
      */
     val displayScale: Float = 1f,
+    val wallpaper: Boolean? = null,
+    val desktopScalePercent: Int? = null,
+    val dynamicResize: Boolean = true,
 ) {
     init {
         require(desktopWidth in MIN_DIMENSION..MAX_DIMENSION) { "desktop width out of range" }
@@ -90,6 +93,9 @@ fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpCl
         h264 = h264,
         imageQuality = imageQuality,
         displayScale = displayScale,
+        wallpaper = wallpaper,
+        desktopScalePercent = desktopScalePercent,
+        dynamicResize = dynamicResize,
         channels = buildList {
             if (clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)
             if (audioOpened) add(RdpClientSettings.CHANNEL_AUDIO)

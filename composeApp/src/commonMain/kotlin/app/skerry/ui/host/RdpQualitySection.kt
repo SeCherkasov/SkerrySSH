@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.rdp.RdpImageQuality
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.Res
@@ -17,6 +18,7 @@ import app.skerry.ui.generated.resources.conn_image_quality_high_desc
 import app.skerry.ui.generated.resources.conn_image_quality_low_desc
 import app.skerry.ui.generated.resources.conn_image_quality_medium_desc
 import app.skerry.ui.generated.resources.conn_image_quality_note
+import app.skerry.ui.generated.resources.conn_rdp_wallpaper
 import app.skerry.ui.generated.resources.vnc_quality_high
 import app.skerry.ui.generated.resources.vnc_quality_low
 import app.skerry.ui.generated.resources.vnc_quality_medium
@@ -45,6 +47,11 @@ fun RdpQualitySection(form: NewConnectionFormState) {
             size = 11.sp,
             lineHeight = 15.sp,
             modifier = Modifier.padding(top = 6.dp),
+        )
+        ToggleRow(
+            label = stringResource(Res.string.conn_rdp_wallpaper),
+            on = form.rdpWallpaper,
+            onToggle = { form.rdpWallpaper = !form.rdpWallpaper },
         )
         Txt(
             stringResource(Res.string.conn_image_quality_note),

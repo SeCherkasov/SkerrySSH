@@ -13,6 +13,7 @@ import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageQuality
 import app.skerry.shared.rdp.RdpSpec
+import app.skerry.shared.rdp.RdpResolution
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
 import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.tag.orderTagsProdFirst
@@ -162,6 +163,12 @@ class NewConnectionFormState {
      * settles the picture at connect time (see [app.skerry.shared.rdp.RdpImageQuality]).
      */
     var rdpQuality: RdpImageQuality by mutableStateOf(RdpImageQuality.DEFAULT)
+    private var rdpWallpaperOverride: Boolean? by mutableStateOf(null)
+    var rdpWallpaper: Boolean
+        get() = rdpWallpaperOverride ?: (rdpQuality == RdpImageQuality.High)
+        set(value) { rdpWallpaperOverride = value }
+    var rdpScalePercent: Int? by mutableStateOf(null)
+    var rdpResolution: RdpResolution? by mutableStateOf(null)
 
     /**
      * The farm routing token of an imported `.rdp` profile. Not editable — no user types one — but
@@ -361,6 +368,9 @@ class NewConnectionFormState {
         audioOutputDeviceId = if (rdpAudioOutput) rdpAudioDeviceId else "",
         clipboard = rdpClipboard,
         quality = rdpQuality,
+        wallpaper = rdpWallpaperOverride,
+        desktopScalePercent = rdpScalePercent,
+        resolution = rdpResolution,
         graphicsPipeline = rdpGraphicsPipeline,
         remoteFx = rdpRemoteFx,
         h264 = rdpH264,
@@ -414,6 +424,9 @@ class NewConnectionFormState {
                 rdpAudioDeviceId = spec.audioOutputDeviceId
                 rdpClipboard = spec.clipboard
                 rdpQuality = spec.quality
+                rdpWallpaperOverride = spec.wallpaper
+                rdpScalePercent = spec.requestedScalePercent
+                rdpResolution = spec.fixedResolution
                 rdpGraphicsPipeline = spec.graphicsPipeline
                 rdpRemoteFx = spec.remoteFx
                 rdpH264 = spec.h264

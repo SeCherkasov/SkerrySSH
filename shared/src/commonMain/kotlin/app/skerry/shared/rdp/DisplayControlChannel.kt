@@ -19,7 +19,10 @@ import kotlin.math.sqrt
  * server considers invalid is not answered at all, and the session would sit at the old size with no
  * sign of why.
  */
-class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : DynamicChannelHandler {
+class DisplayControlChannel(
+    private val desktopScalePercent: Int? = null,
+    private val send: suspend (ByteArray) -> Unit,
+) : DynamicChannelHandler {
 
     /**
      * The server's limits, and whether they have arrived. Written by the read loop, read by whoever
@@ -68,7 +71,11 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
         // Scaling is derived from the size actually asked for, not the one requested: [fit] may have
         // shrunk it, and millimetres computed for the larger one would state a DPI this layout does
         // not have.
-        send(monitorLayout(size.first, size.second, RdpDisplayScale.of(size.first, size.second, scale)))
+        val displayScale = RdpDisplayScale.of(
+            size.first, size.second, desktopScalePercent?.div(100f) ?: scale,
+            explicit = desktopScalePercent != null,
+        )
+        send(monitorLayout(size.first, size.second, displayScale))
         return true
     }
 
