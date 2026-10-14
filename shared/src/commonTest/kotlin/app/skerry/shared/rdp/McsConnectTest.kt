@@ -174,6 +174,17 @@ class McsConnectTest {
         assertEquals(0, security.u32le()) // extEncryptionMethods
     }
 
+    @Test
+    fun `client core requests the selected depth without the 32 bit flag for lower depths`() {
+        for (depth in listOf(16, 24, 32)) {
+            val core = Gcc.clientUserData(settings.copy(colorDepth = depth)).blockAt(0xC001)
+            core.skip(136)
+            assertEquals(if (depth == 32) 24 else depth, core.u16le())
+            assertEquals(0x0F, core.u16le(), "all decodable fallbacks remain advertised")
+            assertEquals(depth == 32, core.u16le() and 2 != 0)
+        }
+    }
+
     private fun ByteArray.indexOfBlock(needle: ByteArray): Int {
         outer@ for (start in 0..size - needle.size) {
             for (i in needle.indices) if (this[start + i] != needle[i]) continue@outer

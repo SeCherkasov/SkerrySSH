@@ -204,4 +204,12 @@
     <string name="conn_rdp_resolution_auto">Automatisch (Fenstergröße)</string>
     <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
     <string name="conn_rdp_display_note">Gilt für eine neue Sitzung. Eine feste Auflösung folgt nicht der Fenstergröße.</string>
+    <string name="conn_rdp_color_depth">Farbtiefe</string>
+    <string name="conn_rdp_color_depth_auto">Automatisch (32 Bit)</string>
+    <string name="conn_rdp_color_depth_bits">%1$d Bit</string>
+    <string name="conn_rdp_color_depth_note">16/24-Bit-Anfragen verwenden kompatible Grafik. Windows 8 und neuer können immer 32-Bit-Farben verwenden.</string>
+    <string name="conn_rdp_background">Bildhintergrund</string>
+    <string name="conn_rdp_background_hint">Schwarz (Standard) oder #RRGGBB</string>
+    <string name="conn_rdp_background_note">Farbe um das entfernte Bild in Skerry. Der Windows-Desktop bleibt unverändert.</string>
+    <string name="conn_rdp_background_invalid">Sechs hexadezimale Ziffern eingeben, etwa #112233, oder für Schwarz leer lassen.</string>
 </resources>

@@ -420,7 +420,8 @@ class SessionsController(
         onQualityChanged: (app.skerry.shared.graphics.RemoteDesktopQuality) -> Unit = {},
     ): String? {
         val open = openRdpSession ?: return null
-        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged, quality, onQualityChanged) {
+        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged, quality, onQualityChanged,
+            backgroundRgb = request.backgroundRgb) {
             open(request)
         }
     }
@@ -434,6 +435,7 @@ class SessionsController(
         onRemoteResizeChanged: (Boolean) -> Unit = {},
         quality: app.skerry.shared.graphics.RemoteDesktopQuality = app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
         onQualityChanged: (app.skerry.shared.graphics.RemoteDesktopQuality) -> Unit = {},
+        backgroundRgb: Int? = null,
         openSession: suspend () -> RemoteDesktopSession,
     ): String? {
         val controller = vncControllerFactory?.invoke() ?: return null
@@ -442,7 +444,7 @@ class SessionsController(
         val tab = openTab(session)
         tab.setView(SessionView.Vnc)
         reportHostSession(hostId)
-        controller.connect(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, openSession)
+        controller.connect(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, backgroundRgb, openSession)
         return tab.id
     }
 

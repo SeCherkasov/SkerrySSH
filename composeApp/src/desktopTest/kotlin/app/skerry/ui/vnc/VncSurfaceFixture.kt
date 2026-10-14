@@ -51,6 +51,7 @@ internal fun withVncSurface(
     remoteResizeSupported: Boolean = false,
     surface: @Composable (RemoteDesktopScreenState) -> Unit = { VncSurface(it) },
     beside: @Composable () -> Unit = {},
+    backgroundRgb: Int? = null,
     body: ComposeUiTest.(FakeRemoteDesktop, RemoteDesktopScreenState) -> Unit,
 ) {
     val scope = CoroutineScope(Dispatchers.Unconfined)
@@ -58,7 +59,11 @@ internal fun withVncSurface(
     val updates = MutableSharedFlow<RemoteDesktopUpdate>(replay = 1)
     if (remoteResizeSupported) updates.tryEmit(RemoteDesktopUpdate.RemoteResizeSupported)
     val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(100, 100), updates = updates)
-    val screen = RemoteDesktopScreenState(session, scope)
+    if (backgroundRgb != null) {
+        session.framebuffer.fillRect(0, 0, 100, 100, 0xFF00FF00.toInt())
+        updates.tryEmit(RemoteDesktopUpdate.Region(listOf(app.skerry.shared.graphics.RemoteRect(0, 0, 100, 100))))
+    }
+    val screen = RemoteDesktopScreenState(session, scope, backgroundRgb = backgroundRgb)
     try {
         runComposeUiTest {
             setContent {

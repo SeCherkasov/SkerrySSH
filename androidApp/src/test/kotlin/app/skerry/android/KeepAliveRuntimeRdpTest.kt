@@ -84,6 +84,8 @@ class KeepAliveRuntimeRdpTest {
                 wallpaper = true,
                 desktopScalePercent = 100,
                 dynamicResize = false,
+                colorDepth = 16,
+                backgroundRgb = 0x112233,
             ),
         )
 
@@ -92,6 +94,7 @@ class KeepAliveRuntimeRdpTest {
         assertEquals(true, target.wallpaper)
         assertEquals(100, target.desktopScalePercent)
         assertEquals(false, target.dynamicResize)
+        assertEquals(16, target.colorDepth)
         assertEquals(1080 to 2340, target.desktopWidth to target.desktopHeight)
         assertEquals(3390, target.port)
         assertEquals("ann", rdp.credentials?.username)

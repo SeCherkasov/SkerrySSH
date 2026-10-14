@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import app.skerry.shared.host.Host
@@ -21,6 +22,9 @@ import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.runMobileShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_rdp_color_depth
+import app.skerry.ui.generated.resources.conn_rdp_color_depth_bits
+import app.skerry.ui.generated.resources.conn_rdp_background
 import app.skerry.ui.generated.resources.conn_rdp_scale
 import app.skerry.ui.generated.resources.conn_rdp_resolution
 import app.skerry.ui.generated.resources.conn_rdp_wallpaper
@@ -72,6 +76,12 @@ class RdpDisplayFormTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("1280 × 720").fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("1280 × 720").performClick()
         waitForIdle()
+        onNodeWithContentDescription(string(Res.string.conn_rdp_color_depth), substring = true,
+            useUnmergedTree = true).performScrollTo().performClick()
+        onNodeWithText(string(Res.string.conn_rdp_color_depth_bits, 24)).performClick()
+        onNodeWithContentDescription(string(Res.string.conn_rdp_background), substring = true,
+            useUnmergedTree = true).performScrollTo().performTextReplacement("#112233")
+        waitForIdle()
         capture(platform + "-display")
     }
 
@@ -81,6 +91,8 @@ class RdpDisplayFormTest {
         assertEquals(false, spec.wallpaper)
         assertEquals(100, spec.desktopScalePercent)
         assertEquals(RdpResolution(1280, 720), spec.resolution)
+        assertEquals(24, spec.colorDepth)
+        assertEquals(0x112233, spec.backgroundRgb)
     }
 
     private fun rdpHost(host: Host): Host = host.copy(

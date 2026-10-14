@@ -41,6 +41,8 @@ class RdpConnectRequestTest {
         wallpaper = false,
         desktopScalePercent = 150,
         dynamicResize = false,
+        colorDepth = 16,
+        backgroundRgb = 0x112233,
     )
 
     @Test
@@ -66,6 +68,7 @@ class RdpConnectRequestTest {
         assertEquals(false, target.wallpaper)
         assertEquals(150, target.desktopScalePercent)
         assertFalse(target.dynamicResize)
+        assertEquals(16, target.colorDepth)
     }
 
     @Test
@@ -88,6 +91,7 @@ class RdpConnectRequestTest {
         assertEquals(false, dialled.target.wallpaper)
         assertEquals(150, dialled.target.desktopScalePercent)
         assertFalse(dialled.target.dynamicResize)
+        assertEquals(16, dialled.target.colorDepth)
         assertEquals("ann", dialled.credentials.username)
     }
 }

@@ -52,6 +52,9 @@ data class RdpConnectRequest(
     val wallpaper: Boolean? = null,
     val desktopScalePercent: Int? = null,
     val dynamicResize: Boolean = true,
+    val colorDepth: Int = 32,
+    /** Local presentation only; deliberately absent from [toTarget]. */
+    val backgroundRgb: Int? = null,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")
@@ -77,6 +80,7 @@ fun RdpConnectRequest.toTarget(): RdpTarget = RdpTarget(
     wallpaper = wallpaper,
     desktopScalePercent = desktopScalePercent,
     dynamicResize = dynamicResize,
+    colorDepth = colorDepth,
     clientName = clientName,
     loadBalanceInfo = loadBalanceInfo,
     audioOutput = audioOutput,

@@ -169,6 +169,13 @@ class NewConnectionFormState {
         set(value) { rdpWallpaperOverride = value }
     var rdpScalePercent: Int? by mutableStateOf(null)
     var rdpResolution: RdpResolution? by mutableStateOf(null)
+    var rdpColorDepth: Int? by mutableStateOf(null)
+    var rdpBackgroundHex: String by mutableStateOf("")
+    val rdpBackgroundRgb: Int?
+        get() = rdpBackgroundHex.trim().removePrefix("#").takeIf { value -> value.length == 6 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' } }
+            ?.toIntOrNull(16)?.takeIf { it in 0..0xFFFFFF }
+    val rdpBackgroundInvalid: Boolean
+        get() = rdpBackgroundHex.isNotBlank() && rdpBackgroundRgb == null
 
     /**
      * The farm routing token of an imported `.rdp` profile. Not editable — no user types one — but
@@ -284,7 +291,7 @@ class NewConnectionFormState {
                 ConnectionType.VNC -> base && authValid
                 // RDP logs on as a Windows user, so it needs a name (optionally `DOMAIN\user`) and
                 // a password — the same requirements as SSH, without the SSH-only key material.
-                ConnectionType.RDP -> base && username.isNotBlank() && authValid
+                ConnectionType.RDP -> base && username.isNotBlank() && authValid && !rdpBackgroundInvalid
                 // Local shell: no address (blank = default shell), no port, no auth — only a name.
                 ConnectionType.LOCAL -> name.isNotBlank()
             }
@@ -371,6 +378,8 @@ class NewConnectionFormState {
         wallpaper = rdpWallpaperOverride,
         desktopScalePercent = rdpScalePercent,
         resolution = rdpResolution,
+        colorDepth = rdpColorDepth,
+        backgroundRgb = rdpBackgroundRgb,
         graphicsPipeline = rdpGraphicsPipeline,
         remoteFx = rdpRemoteFx,
         h264 = rdpH264,
@@ -427,6 +436,8 @@ class NewConnectionFormState {
                 rdpWallpaperOverride = spec.wallpaper
                 rdpScalePercent = spec.requestedScalePercent
                 rdpResolution = spec.fixedResolution
+                rdpColorDepth = spec.colorDepth?.takeIf { it in app.skerry.shared.rdp.RdpClientSettings.COLOR_DEPTHS }
+                rdpBackgroundHex = spec.localBackgroundRgb?.let { "#" + it.toString(16).padStart(6, '0') }.orEmpty()
                 rdpGraphicsPipeline = spec.graphicsPipeline
                 rdpRemoteFx = spec.remoteFx
                 rdpH264 = spec.h264

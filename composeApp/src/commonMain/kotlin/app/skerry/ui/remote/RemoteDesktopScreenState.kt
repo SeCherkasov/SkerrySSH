@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -52,7 +53,12 @@ class RemoteDesktopScreenState(
     private val onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
     clipboardSharedInitial: Boolean = true,
     private val viewOnlyInitial: Boolean = false,
+    backgroundRgb: Int? = null,
 ) {
+    /** Canvas fill only: framebuffer pixels and server wallpaper remain untouched. */
+    val backgroundColor: Color = backgroundRgb?.takeIf { it in 0..0xFFFFFF }
+        ?.let { Color(it or (255 shl 24)) } ?: Color.Black
+
     private val image = FramebufferImage(
         session.framebuffer.width.coerceAtLeast(1),
         session.framebuffer.height.coerceAtLeast(1),

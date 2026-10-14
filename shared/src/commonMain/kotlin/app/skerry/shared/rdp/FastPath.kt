@@ -278,7 +278,7 @@ object BitmapUpdate {
         // [bitmapCodecLabel], which mirrors this dispatch for the diagnostics overlay).
         return when {
             flags and BITMAP_COMPRESSION != 0 && bytesPerPixel == 4 ->
-                PlanarCodec.decode(data, width, height)
+                bottomUpToTopDown(PlanarCodec.decode(data, width, height), width, height)
 
             flags and BITMAP_COMPRESSION != 0 ->
                 InterleavedRle.decode(data, width, height, bytesPerPixel, palette)

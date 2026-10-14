@@ -87,6 +87,7 @@ data class RdpTarget(
     val displayScale: Float = 1f,
     val wallpaper: Boolean? = null,
     val desktopScalePercent: Int? = null,
+    val colorDepth: Int = 32,
 ) {
     companion object {
         const val DEFAULT_PORT = 3389

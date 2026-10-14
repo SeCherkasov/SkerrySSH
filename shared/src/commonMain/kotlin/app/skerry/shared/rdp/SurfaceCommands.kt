@@ -106,7 +106,9 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
         CODEC_ID_NONE -> DecodedImage.whole(uncompressed(data, width, height, bitsPerPixel), width, height)
         ClientCapabilities.CODEC_ID_REMOTEFX -> remoteFx?.decode(data, width, height)
         // Always on: NSCodec is advertised unconditionally (F-33), so it must decode unconditionally.
-        ClientCapabilities.CODEC_ID_NSCODEC -> DecodedImage.whole(NsCodec.decode(RdpReader(data), width, height), width, height)
+        ClientCapabilities.CODEC_ID_NSCODEC -> DecodedImage.whole(
+            bottomUpToTopDown(NsCodec.decode(RdpReader(data), width, height), width, height), width, height,
+        )
         else -> null
     }
 
@@ -116,8 +118,7 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
     private var scratch = IntArray(0)
 
     /**
-     * Raw pixels of a surface command. Unlike a legacy bitmap update these arrive top-down, which is
-     * the one difference that makes a picture come out upside down if it is missed. Decoded with
+     * Raw pixels of a legacy surface command arrive bottom-up, like bitmap updates. Decoded with
      * direct byte indexing — this is exactly the path of a host with no codec negotiated, where a
      * reader call per byte made every full-screen paint a few million virtual calls (F-35).
      *
@@ -156,7 +157,7 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
         // Short wire data reads as unset, as it always has — and the scratch must not leak the
         // previous command's pixels into this one.
         out.fill(0, available, count)
-        return out
+        return bottomUpToTopDown(out, width, height)
     }
 
     private companion object {

@@ -19,6 +19,7 @@ data class RdpFileHost(
     val wallpaper: Boolean? = null,
     val desktopScalePercent: Int? = null,
     val resolution: RdpResolution? = null,
+    val colorDepth: Int? = null,
 )
 
 /**
@@ -115,6 +116,7 @@ object RdpFileImport {
                 desktopScalePercent = file.int("desktopscalefactor")
                     ?.takeIf { it in RdpDisplayScale.MIN_FACTOR..RdpDisplayScale.MAX_FACTOR },
                 resolution = readResolution(file),
+                colorDepth = file.int("session bpp")?.takeIf { it in RdpClientSettings.COLOR_DEPTHS },
             ),
             warnings,
         )
@@ -142,7 +144,7 @@ object RdpFileImport {
         rdp = RdpSpec(
             loadBalanceInfo = entry.loadBalanceInfo, audioOutput = entry.audioOutput,
             wallpaper = entry.wallpaper, desktopScalePercent = entry.desktopScalePercent,
-            resolution = entry.resolution,
+            resolution = entry.resolution, colorDepth = entry.colorDepth,
         )
             .takeIf { !it.isEmpty },
     )

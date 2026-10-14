@@ -69,7 +69,7 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
     // The surface is measured in physical pixels; the density is what the remote side needs to know
     // how large one of them is (see [RemoteDesktopScreenState.onViewportSize]).
     val displayScale = LocalDensity.current.density
-    var mod = modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
+    var mod = modifier.fillMaxSize().clipToBounds().background(screen.backgroundColor).onSizeChanged {
         canvasSize = it
         screen.onViewportSize(RemoteViewport(it, displayScale))
     }

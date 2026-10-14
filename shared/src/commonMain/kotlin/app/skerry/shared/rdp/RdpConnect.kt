@@ -76,6 +76,7 @@ class RdpConnectionSequence(
                     height = capabilities.desktopHeight,
                     remoteFx = settings.wantsRemoteFx && capabilities.supportedCodecs.contains(RdpCodecId.RemoteFx),
                     keyboardLayout = settings.keyboardLayout,
+                    bitsPerPixel = capabilities.preferredBitsPerPixel,
                 ),
             ),
         )
@@ -103,6 +104,7 @@ class RdpConnectionSequence(
                     height = capabilities.desktopHeight,
                     remoteFx = settings.wantsRemoteFx && capabilities.supportedCodecs.contains(RdpCodecId.RemoteFx),
                     keyboardLayout = settings.keyboardLayout,
+                    bitsPerPixel = capabilities.preferredBitsPerPixel,
                 ),
             ),
         )

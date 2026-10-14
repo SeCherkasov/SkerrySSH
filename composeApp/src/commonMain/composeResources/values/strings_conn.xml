@@ -204,4 +204,12 @@
     <string name="conn_rdp_resolution_auto">Auto (window size)</string>
     <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
     <string name="conn_rdp_display_note">Applied to a new session. A fixed resolution does not follow the window.</string>
+    <string name="conn_rdp_color_depth">Color depth</string>
+    <string name="conn_rdp_color_depth_auto">Auto (32-bit)</string>
+    <string name="conn_rdp_color_depth_bits">%1$d-bit</string>
+    <string name="conn_rdp_color_depth_note">16/24-bit requests use compatible graphics. Windows 8 and later may always use 32-bit color.</string>
+    <string name="conn_rdp_background">Image background</string>
+    <string name="conn_rdp_background_hint">Black (default), or #RRGGBB</string>
+    <string name="conn_rdp_background_note">Color around the remote image in Skerry. Does not change the Windows desktop.</string>
+    <string name="conn_rdp_background_invalid">Enter six hexadecimal digits, for example #112233, or leave empty for black.</string>
 </resources>

@@ -28,6 +28,19 @@ class RdpClientSettingsTest {
     )
 
     @Test
+    fun `lower color depth selects compatible graphics without dropping resize or audio`() {
+        for (bits in listOf(16, 24, 32)) {
+            val settings = RdpTarget(host = "host", desktopWidth = 1280, desktopHeight = 720,
+                colorDepth = bits, audioOutput = true).clientSettings(RdpSecurityProtocol.HYBRID, audioOpened = true)
+            assertEquals(bits, settings.colorDepth)
+            assertEquals(bits == 32, settings.wantsGraphicsPipeline)
+            assertEquals(bits == 32, settings.wantsRemoteFx)
+            assertTrue(RdpClientSettings.CHANNEL_DYNAMIC in settings.channels)
+            assertTrue(RdpClientSettings.CHANNEL_AUDIO in settings.channels)
+        }
+    }
+
+    @Test
     fun `every option of the profile reaches the settings`() {
         val settings = target.clientSettings(RdpSecurityProtocol.HYBRID, audioOpened = false)
 
