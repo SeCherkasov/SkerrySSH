@@ -79,6 +79,8 @@ class RdpConnectDefaultsTest {
                 graphicsPipeline = false,
                 remoteFx = false,
                 h264 = RdpH264Mode.Avc420,
+                colorDepth = 24,
+                backgroundRgb = 0x112233,
             ),
         )
 
@@ -103,6 +105,8 @@ class RdpConnectDefaultsTest {
         assertFalse(request.graphicsPipeline)
         assertFalse(request.remoteFx)
         assertEquals(RdpH264Mode.Avc420, request.h264)
+        assertEquals(24, request.colorDepth)
+        assertEquals(0x112233, request.backgroundRgb)
         // The viewport's scaling, not a default: without it the session is drawn at 96 dpi.
         assertEquals(1.5f, request.displayScale)
     }

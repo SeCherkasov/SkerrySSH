@@ -59,6 +59,8 @@ fun Host.toRdpRequest(
         wallpaper = rdp?.wallpaper,
         desktopScalePercent = scalePercent,
         dynamicResize = fixed == null,
+        colorDepth = rdp?.requestedColorDepth ?: 32,
+        backgroundRgb = rdp?.localBackgroundRgb,
     )
 }
 

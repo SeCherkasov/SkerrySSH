@@ -156,7 +156,7 @@ class GraphicsTest {
     }
 
     @Test
-    fun `uncompressed surface bits land top-down, and missing pixels stay black`() {
+    fun `uncompressed surface bits land bottom-up, and missing pixels stay black`() {
         val framebuffer = RemoteFramebuffer(4, 4)
         val body = RdpWriter(48).apply {
             u16le(0x0001) // SET_SURFACE_BITS
@@ -164,7 +164,7 @@ class GraphicsTest {
             u8(32).u8(0).u8(0).u8(0) // bpp, flags, reserved, codecId: uncompressed
             u16le(2).u16le(2) // width, height
             u32le(12) // three of the four pixels are on the wire
-            u8(0xEF).u8(0xCD).u8(0xAB).u8(0) // B,G,R,X of the first (top-left) pixel
+            u8(0xEF).u8(0xCD).u8(0xAB).u8(0) // B,G,R,X of the first (bottom-left) pixel
             u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
             u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
         }.toByteArray()
@@ -173,10 +173,10 @@ class GraphicsTest {
 
         val region = updates.single() as RdpUpdate.Region
         assertEquals(listOf(RdpRect(1, 1, 2, 2)), region.rects)
-        assertEquals(0xFFABCDEF.toInt(), framebuffer.pixels[1 * 4 + 1], "first wire pixel is the TOP row")
-        assertEquals(WHITE, framebuffer.pixels[1 * 4 + 2])
-        assertEquals(WHITE, framebuffer.pixels[2 * 4 + 1])
-        assertEquals(0, framebuffer.pixels[2 * 4 + 2], "the missing fourth pixel reads as unset")
+        assertEquals(0xFFABCDEF.toInt(), framebuffer.pixels[2 * 4 + 1], "first wire pixel is the BOTTOM row")
+        assertEquals(WHITE, framebuffer.pixels[2 * 4 + 2])
+        assertEquals(WHITE, framebuffer.pixels[1 * 4 + 1])
+        assertEquals(0, framebuffer.pixels[1 * 4 + 2], "the missing fourth pixel reads as unset")
     }
 
     @Test
@@ -472,7 +472,7 @@ class GraphicsTest {
     }
 
     @Test
-    fun `surface bits paint uncompressed pixels top-down and report the frame`() {
+    fun `surface bits paint uncompressed pixels bottom-up and report the frame`() {
         val framebuffer = RemoteFramebuffer(4, 4)
         val body = RdpWriter(64).apply {
             u16le(0x0004) // FRAME_MARKER
@@ -486,7 +486,7 @@ class GraphicsTest {
             u8(0) // codecId: uncompressed
             u16le(2).u16le(2)
             u32le(16)
-            // Top-down BGRA: first row red, second white.
+            // Bottom-up BGRA: first wire row red, second white.
             u8(0).u8(0).u8(0xFF).u8(0xFF)
             u8(0).u8(0).u8(0xFF).u8(0xFF)
             u8(0xFF).u8(0xFF).u8(0xFF).u8(0xFF)
@@ -496,8 +496,8 @@ class GraphicsTest {
         val updates = SurfaceDecoder().decode(RdpReader(body), framebuffer)
 
         assertEquals(RdpUpdate.Frame(42, begin = true), updates.first())
-        assertEquals(RED, framebuffer.pixels[0])
-        assertEquals(WHITE, framebuffer.pixels[framebuffer.width])
+        assertEquals(WHITE, framebuffer.pixels[0])
+        assertEquals(RED, framebuffer.pixels[framebuffer.width])
     }
 
     @Test

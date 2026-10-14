@@ -204,4 +204,12 @@
     <string name="conn_rdp_resolution_auto">Авто (размер окна)</string>
     <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
     <string name="conn_rdp_display_note">Применяется к новой сессии. Фиксированное разрешение не меняется вместе с окном.</string>
+    <string name="conn_rdp_color_depth">Глубина цвета</string>
+    <string name="conn_rdp_color_depth_auto">Авто (32 бита)</string>
+    <string name="conn_rdp_color_depth_bits">%1$d бит</string>
+    <string name="conn_rdp_color_depth_note">Для 16/24 бит используется совместимая графика. Windows 8 и новее могут всегда использовать 32 бита.</string>
+    <string name="conn_rdp_background">Подложка изображения</string>
+    <string name="conn_rdp_background_hint">Чёрная (по умолчанию) или #RRGGBB</string>
+    <string name="conn_rdp_background_note">Цвет вокруг удалённого изображения в Skerry. Рабочий стол Windows не меняется.</string>
+    <string name="conn_rdp_background_invalid">Введите шесть шестнадцатеричных цифр, например #112233, или оставьте поле пустым для чёрного.</string>
 </resources>

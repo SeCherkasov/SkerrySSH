@@ -204,4 +204,12 @@
     <string name="conn_rdp_resolution_auto">自动（窗口大小）</string>
     <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
     <string name="conn_rdp_display_note">在新会话中生效。固定分辨率不会随窗口大小改变。</string>
+    <string name="conn_rdp_color_depth">色深</string>
+    <string name="conn_rdp_color_depth_auto">自动（32 位）</string>
+    <string name="conn_rdp_color_depth_bits">%1$d 位</string>
+    <string name="conn_rdp_color_depth_note">16/24 位请求使用兼容图形模式。Windows 8 及更高版本可能始终使用 32 位颜色。</string>
+    <string name="conn_rdp_background">图像背景</string>
+    <string name="conn_rdp_background_hint">黑色（默认）或 #RRGGBB</string>
+    <string name="conn_rdp_background_note">Skerry 中远程图像周围的颜色，不改变 Windows 桌面。</string>
+    <string name="conn_rdp_background_invalid">输入六位十六进制数字，例如 #112233，或留空以使用黑色。</string>
 </resources>

@@ -26,4 +26,22 @@ class RdpDisplayFormStateTest {
         assertEquals(false, checkNotNull(form.toDraft().rdp).wallpaper)
     }
 
+    @Test
+    fun `color choices survive editing and invalid hex cannot be saved`() {
+        val host = Host(id = "rdp", label = "Windows", address = "host", port = 3389,
+            username = "user", connectionType = ConnectionType.RDP,
+            rdp = RdpSpec(colorDepth = 16, backgroundRgb = 0x112233))
+        val form = NewConnectionFormState.fromHost(host)
+        assertEquals(16, form.rdpColorDepth)
+        assertEquals("#112233", form.rdpBackgroundHex)
+        assertEquals(host.rdp, form.toDraft(id = host.id).rdp)
+        form.rdpBackgroundHex = "#ABCDEF"
+        assertEquals(0xABCDEF, form.toDraft().rdp?.backgroundRgb)
+        for (hex in listOf("#12345G", "+12345", "#12345", "#11223344", "##112233")) {
+            form.rdpBackgroundHex = hex
+            assertEquals(false, form.canSave, hex)
+        }
+        form.rdpBackgroundHex = ""
+        assertEquals(null, form.toDraft().rdp?.backgroundRgb)
+    }
 }

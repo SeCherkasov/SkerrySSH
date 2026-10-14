@@ -71,6 +71,8 @@ object ClientCapabilities {
         height: Int,
         remoteFx: Boolean,
         keyboardLayout: Int = RdpClientSettings.KEYBOARD_LAYOUT_US,
+        /** The server's Demand Active depth, which can override the original client request. */
+        bitsPerPixel: Int = 32,
     ): ByteArray {
         val sets = RdpWriter(1024)
         var count = 0
@@ -80,7 +82,7 @@ object ClientCapabilities {
         }
 
         add(CapabilitySetType.GENERAL, generalCapabilities())
-        add(CapabilitySetType.BITMAP, bitmapCapabilities(width, height))
+        add(CapabilitySetType.BITMAP, bitmapCapabilities(width, height, bitsPerPixel))
         add(CapabilitySetType.ORDER, orderCapabilities())
         add(CapabilitySetType.BITMAP_CACHE, noBitmapCache())
         add(CapabilitySetType.COLOR_CACHE, RdpWriter(4).u16le(6).u16le(0).toByteArray())
@@ -100,7 +102,8 @@ object ClientCapabilities {
         )
         add(CapabilitySetType.SURFACE_COMMANDS, surfaceCommandsCapabilities())
         add(CapabilitySetType.FRAME_ACKNOWLEDGE, RdpWriter(4).u32le(MAX_UNACKNOWLEDGED_FRAMES).toByteArray())
-        add(CapabilitySetType.BITMAP_CODECS, bitmapCodecsCapabilities(remoteFx))
+        add(CapabilitySetType.BITMAP_CODECS,
+            if (bitsPerPixel == 32) bitmapCodecsCapabilities(remoteFx) else byteArrayOf(0))
 
         val capabilities = sets.toByteArray()
         val sourceDescriptor = SOURCE_DESCRIPTOR
@@ -143,8 +146,8 @@ object ClientCapabilities {
         u8(1) // suppressOutputSupport
     }.toByteArray()
 
-    private fun bitmapCapabilities(width: Int, height: Int): ByteArray = RdpWriter(24).apply {
-        u16le(32) // preferredBitsPerPixel
+    private fun bitmapCapabilities(width: Int, height: Int, bitsPerPixel: Int): ByteArray = RdpWriter(24).apply {
+        u16le(bitsPerPixel) // preferredBitsPerPixel
         u16le(1) // receive1BitPerPixel
         u16le(1) // receive4BitsPerPixel
         u16le(1) // receive8BitsPerPixel

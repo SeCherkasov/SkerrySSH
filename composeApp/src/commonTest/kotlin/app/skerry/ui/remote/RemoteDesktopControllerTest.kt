@@ -38,6 +38,23 @@ private fun rejectedOffer() = RdpCertificateOffer(
 class RemoteDesktopControllerTest {
 
     @Test
+    fun local_background_is_carried_into_the_screen_and_retry() = runTest {
+        val controller = RemoteDesktopController(this,
+            newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+        var attempt = 0
+        controller.connect(backgroundRgb = 0x112233) {
+            if (attempt++ == 0) error("refused")
+            FakeRemoteDesktop()
+        }
+        advanceUntilIdle()
+        controller.reconnect()
+        advanceUntilIdle()
+        val state = controller.uiState as RemoteDesktopUiState.Connected
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF112233), state.screen.backgroundColor)
+        controller.disconnect()
+    }
+
+    @Test
     fun connect_transitions_to_connected_with_a_screen() = runTest {
         val session = FakeRemoteDesktop()
         val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })

@@ -25,6 +25,17 @@ class RdpConnectTest {
     private val logon = RdpLogonInfo(domain = "CORP", username = "elton")
 
     @Test
+    fun `confirmation follows server depth even when it overrides the requested depth`() = runTest {
+        for (bits in listOf(16, 24, 32)) {
+            val server = ModelServer(serverDepth = bits)
+            val state = RdpConnectionSequence(server.source, server.sink, settings.copy(colorDepth = 16),
+                logon, FakeLicenseCrypto).run()
+            assertEquals(bits, state.capabilities.preferredBitsPerPixel)
+            assertEquals(bits, server.confirmedDepth)
+        }
+    }
+
+    @Test
     fun `a full sequence yields the session state the server dictated`() = runTest {
         val server = ModelServer()
 
@@ -216,6 +227,7 @@ class RdpConnectTest {
         private val disconnectAfterAttachUser: Boolean = false,
         private val redirectTo: String? = null,
         private val redirectIsInformational: Boolean = false,
+        private val serverDepth: Int = 32,
     ) {
         private val outgoing = ArrayDeque<Byte>()
         private var joinedChannels = 0
@@ -228,6 +240,8 @@ class RdpConnectTest {
         /** Codec GUIDs of the Confirm Active's Bitmap Codecs set, as byte lists. */
         val confirmedCodecGuids = mutableListOf<List<Byte>>()
         var sawFontList = false
+            private set
+        var confirmedDepth = 0
             private set
         var confirmedShareId = 0
             private set
@@ -348,6 +362,9 @@ class RdpConnectTest {
                         body.u8() // codecId
                         body.skip(body.u16le())
                     }
+                } else if (type == CapabilitySetType.BITMAP) {
+                    confirmedDepth = body.u16le()
+                    body.skip(length - 6)
                 } else {
                     body.skip(length - 4)
                 }
@@ -483,7 +500,7 @@ class RdpConnectTest {
         private fun demandActive(): ByteArray {
             val capabilities = RdpWriter(256).apply {
                 u16le(CapabilitySetType.BITMAP).u16le(28)
-                u16le(32) // preferredBitsPerPixel
+                u16le(serverDepth) // preferredBitsPerPixel
                 u16le(1).u16le(1).u16le(1)
                 u16le(1024).u16le(768)
                 u16le(0)

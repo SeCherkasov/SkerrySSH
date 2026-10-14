@@ -200,4 +200,12 @@
     <string name="conn_rdp_resolution_auto">Otomatik (pencere boyutu)</string>
     <string name="conn_rdp_resolution_pixels">%1$d × %2$d</string>
     <string name="conn_rdp_display_note">Yeni oturumda uygulanır. Sabit çözünürlük pencere boyutuyla değişmez.</string>
+    <string name="conn_rdp_color_depth">Renk derinliği</string>
+    <string name="conn_rdp_color_depth_auto">Otomatik (32 bit)</string>
+    <string name="conn_rdp_color_depth_bits">%1$d bit</string>
+    <string name="conn_rdp_color_depth_note">16/24 bit istekleri uyumlu grafik kullanır. Windows 8 ve sonrası her zaman 32 bit renk kullanabilir.</string>
+    <string name="conn_rdp_background">Görüntü arka planı</string>
+    <string name="conn_rdp_background_hint">Siyah (varsayılan) veya #RRGGBB</string>
+    <string name="conn_rdp_background_note">Skerry'de uzak görüntünün çevresindeki renk. Windows masaüstünü değiştirmez.</string>
+    <string name="conn_rdp_background_invalid">Örneğin #112233 gibi altı onaltılık basamak girin veya siyah için boş bırakın.</string>
 </resources>

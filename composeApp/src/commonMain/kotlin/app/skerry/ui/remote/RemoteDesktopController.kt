@@ -95,8 +95,9 @@ class RemoteDesktopController(
         onRemoteResizeChanged: (Boolean) -> Unit = {},
         quality: RemoteDesktopQuality = RemoteDesktopQuality.Auto,
         onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
+        backgroundRgb: Int? = null,
         openSession: suspend () -> RemoteDesktopSession,
-    ) = connectSession(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, openSession = openSession)
+    ) = connectSession(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, backgroundRgb = backgroundRgb, openSession = openSession)
 
     private fun connectSession(
         remoteResize: Boolean,
@@ -105,6 +106,7 @@ class RemoteDesktopController(
         onQualityChanged: (RemoteDesktopQuality) -> Unit,
         clipboardShared: Boolean = true,
         viewOnly: Boolean = false,
+        backgroundRgb: Int? = null,
         openSession: suspend () -> RemoteDesktopSession,
     ) {
         if (uiState is RemoteDesktopUiState.Connected || connectJob?.isActive == true) return
@@ -117,6 +119,7 @@ class RemoteDesktopController(
                 onQualityChanged,
                 previous?.screen?.clipboardShared ?: clipboardShared,
                 previous?.screen?.viewOnly ?: viewOnly,
+                backgroundRgb,
                 openSession,
             )
         }
@@ -142,6 +145,7 @@ class RemoteDesktopController(
                     onQualityChanged = onQualityChanged,
                     clipboardSharedInitial = clipboardShared,
                     viewOnlyInitial = viewOnly,
+                    backgroundRgb = backgroundRgb,
                 )
                 uiState = RemoteDesktopUiState.Connected(screen)
                 watchForClose(screen, sScope)

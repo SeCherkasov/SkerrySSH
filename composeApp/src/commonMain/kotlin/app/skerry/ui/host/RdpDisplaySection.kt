@@ -69,6 +69,7 @@ fun RdpDisplaySection(form: NewConnectionFormState) {
                 onPick = { form.rdpResolution = it },
             )
         }
+        RdpColorSection(form)
         Txt(stringResource(Res.string.conn_rdp_display_note), color = Skerry.colors.dim, size = 11.sp)
         ToggleRow(
             label = stringResource(Res.string.conn_rdp_gfx),

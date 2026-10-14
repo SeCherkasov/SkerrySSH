@@ -179,10 +179,11 @@ object Gcc {
         writer.u16le(COLOR_8BPP) // postBeta2ColorDepth
         writer.u16le(1) // clientProductId
         writer.u32le(0) // serialNumber
-        writer.u16le(HIGH_COLOR_24BPP)
+        writer.u16le(if (settings.colorDepth == 32) HIGH_COLOR_24BPP else settings.colorDepth)
         writer.u16le(SUPPORT_24BPP or SUPPORT_16BPP or SUPPORT_15BPP or SUPPORT_32BPP)
-        var earlyCapabilityFlags = EARLY_SUPPORT_ERRINFO_PDU or EARLY_WANT_32BPP_SESSION
-        if (settings.wantsGraphicsPipeline) earlyCapabilityFlags = earlyCapabilityFlags or EARLY_SUPPORT_DYNVC_GFX
+        var earlyCapabilityFlags = EARLY_SUPPORT_ERRINFO_PDU
+        if (settings.colorDepth == 32) earlyCapabilityFlags = earlyCapabilityFlags or EARLY_WANT_32BPP_SESSION
+        if (settings.wantsGraphicsPipeline && settings.colorDepth == 32) earlyCapabilityFlags = earlyCapabilityFlags or EARLY_SUPPORT_DYNVC_GFX
         writer.u16le(earlyCapabilityFlags)
         writer.zeros(PRODUCT_ID_BYTES) // clientDigProductId
         writer.u8(0) // connectionType, ignored without RNS_UD_CS_VALID_CONNECTION_TYPE

@@ -73,6 +73,32 @@ class ClientCapabilitiesTest {
         }.toByteArray()
     }
 
+    @Test
+    fun `confirm active acknowledges negotiated depth and omits 32 bit codecs for lower depth`() {
+        for (bits in listOf(16, 24, 32)) {
+            val reader = RdpReader(ClientCapabilities.confirmActive(0, 1007, 1024, 768,
+                remoteFx = true, bitsPerPixel = bits))
+            RdpShare.readControlHeader(reader)
+            reader.u32le()
+            reader.u16le()
+            val sourceLength = reader.u16le()
+            reader.u16le()
+            reader.skip(sourceLength)
+            val count = reader.u16le()
+            reader.u16le()
+            var actualDepth = 0
+            var codecs = -1
+            repeat(count) {
+                val type = reader.u16le()
+                val body = reader.slice(reader.u16le() - 4)
+                if (type == CapabilitySetType.BITMAP) actualDepth = body.u16le()
+                if (type == CapabilitySetType.BITMAP_CODECS) codecs = body.u8()
+            }
+            assertEquals(bits, actualDepth)
+            assertEquals(if (bits == 32) 2 else 0, codecs)
+        }
+    }
+
     /** Declared length of every capability set the client confirms, by type. */
     private fun capabilitySetLengths(remoteFx: Boolean): Map<Int, Int> {
         val pdu = ClientCapabilities.confirmActive(

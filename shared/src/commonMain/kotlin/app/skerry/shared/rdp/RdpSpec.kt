@@ -44,7 +44,17 @@ data class RdpSpec(
     val desktopScalePercent: Int? = null,
     /** Null follows the viewport; a fixed resolution is never overwritten by window resizing. */
     val resolution: RdpResolution? = null,
+    /** Null preserves the default 32-bit request. A server can negotiate another supported depth. */
+    val colorDepth: Int? = null,
+    /** Opaque RGB for the local canvas around the image; never a Windows desktop setting. */
+    val backgroundRgb: Int? = null,
 ) {
+    val requestedColorDepth: Int
+        get() = colorDepth?.takeIf { it in RdpClientSettings.COLOR_DEPTHS } ?: 32
+
+    val localBackgroundRgb: Int?
+        get() = backgroundRgb?.takeIf { it in 0..0xFFFFFF }
+
     val requestedScalePercent: Int?
         get() = desktopScalePercent?.takeIf { it in RdpDisplayScale.MIN_FACTOR..RdpDisplayScale.MAX_FACTOR }
 
@@ -56,7 +66,8 @@ data class RdpSpec(
         get() = loadBalanceInfo.isBlank() && !audioOutput && audioOutputDeviceId.isBlank() &&
             clipboard && quality == RdpImageQuality.DEFAULT &&
             graphicsPipeline && remoteFx && h264 == RdpH264Mode.Auto &&
-            wallpaper == null && desktopScalePercent == null && resolution == null
+            wallpaper == null && desktopScalePercent == null && resolution == null &&
+            colorDepth == null && backgroundRgb == null
 }
 
 /** Physical pixels stored in a profile or imported from an untrusted .rdp file. */

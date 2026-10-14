@@ -41,8 +41,10 @@ data class RdpClientSettings(
     val wallpaper: Boolean? = null,
     val desktopScalePercent: Int? = null,
     val dynamicResize: Boolean = true,
+    val colorDepth: Int = 32,
 ) {
     init {
+        require(colorDepth in COLOR_DEPTHS) { "unsupported color depth" }
         require(desktopWidth in MIN_DIMENSION..MAX_DIMENSION) { "desktop width out of range" }
         require(desktopHeight in MIN_DIMENSION..MAX_DIMENSION) { "desktop height out of range" }
         require(channels.size <= MAX_CHANNELS) { "at most $MAX_CHANNELS virtual channels" }
@@ -50,6 +52,8 @@ data class RdpClientSettings(
     }
 
     companion object {
+        val COLOR_DEPTHS: List<Int> = listOf(16, 24, 32)
+
         const val KEYBOARD_LAYOUT_US = 0x409
         const val KEYBOARD_TYPE_IBM_ENHANCED = 4
 
@@ -80,28 +84,31 @@ data class RdpClientSettings(
  * Lives here rather than inside the transport because it is a field-by-field copy of everything the
  * profile can decide — the one place where a forgotten line would ship a default nobody chose.
  */
-fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpClientSettings =
-    RdpClientSettings(
+fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpClientSettings {
+    val wantsGraphicsPipeline = graphicsPipeline && colorDepth == 32
+    return RdpClientSettings(
         desktopWidth = desktopWidth,
         desktopHeight = desktopHeight,
         clientName = clientName,
         selectedProtocol = selectedProtocol,
         keyboardLayout = keyboardLayout,
         redirectedSessionId = redirectedSessionId,
-        wantsGraphicsPipeline = graphicsPipeline,
-        wantsRemoteFx = remoteFx,
+        wantsGraphicsPipeline = wantsGraphicsPipeline,
+        wantsRemoteFx = remoteFx && colorDepth == 32,
         h264 = h264,
         imageQuality = imageQuality,
         displayScale = displayScale,
         wallpaper = wallpaper,
         desktopScalePercent = desktopScalePercent,
         dynamicResize = dynamicResize,
+        colorDepth = colorDepth,
         channels = buildList {
             if (clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)
             if (audioOpened) add(RdpClientSettings.CHANNEL_AUDIO)
             // The dynamic channel carries the graphics pipeline, the display control channel and the
             // audio a modern host prefers to send that way; without it the server has no way to open
             // any of them, which is the point of leaving it out.
-            if (graphicsPipeline || dynamicResize || audioOpened) add(RdpClientSettings.CHANNEL_DYNAMIC)
+            if (wantsGraphicsPipeline || dynamicResize || audioOpened) add(RdpClientSettings.CHANNEL_DYNAMIC)
         },
     )
+}
