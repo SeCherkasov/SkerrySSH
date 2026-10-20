@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: полный цикл изменения"
+  short_description: "Фичи и исправления от постановки до готового diff"
+  default_prompt: "Используй $skerry-change-workflow для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

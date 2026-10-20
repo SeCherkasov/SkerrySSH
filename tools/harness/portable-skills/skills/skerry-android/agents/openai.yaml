@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: Android и жизненный цикл"
+  short_description: "Android lifecycle, keepalive, IME и platform adapters"
+  default_prompt: "Используй $skerry-android для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

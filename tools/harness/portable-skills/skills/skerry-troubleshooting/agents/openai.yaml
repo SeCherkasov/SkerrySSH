@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: диагностика проблем разработки"
+  short_description: "Диагностика JDK, Gradle, gate, сети и native runtime"
+  default_prompt: "Используй $skerry-troubleshooting для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

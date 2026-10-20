@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: начало работы и выбор маршрута"
+  short_description: "Начало работы, контракты и выбор нужного скилла"
+  default_prompt: "Используй $skerry-start для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

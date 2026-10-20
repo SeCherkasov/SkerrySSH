@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: RDP и VNC"
+  short_description: "RDP/VNC, graphics, input, clipboard и reconnect"
+  default_prompt: "Используй $skerry-remote-desktop для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

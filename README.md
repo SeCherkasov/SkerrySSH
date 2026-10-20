@@ -201,6 +201,10 @@ Server-only builds do not need the Android SDK. Configure `SKERRY_JWT_SECRET` as
 
 [Contributing](CONTRIBUTING.md) · [Development & verification](docs/development-process.md) · [Dependency versions](gradle/libs.versions.toml) · [Issues & feature requests](https://github.com/SeCherkasov/SkerrySSH/issues/new/choose)
 
+[Portable development skills](tools/harness/portable-skills/README.md) provide 20 Russian-language
+Codex guides to the architecture, new-machine setup, development and verification workflows.
+The kit includes an installer, environment diagnostics and a bounded Linux command runner.
+
 ## License
 
 Clients: **[GPL-3.0](LICENSE)**. Sync server: **[AGPL-3.0](server/LICENSE)**.

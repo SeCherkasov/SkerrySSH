@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: сервер, API и база данных"
+  short_description: "Ktor server, API, SQL, admin и контейнеры"
+  default_prompt: "Используй $skerry-server для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: архитектура и навигация по коду"
+  short_description: "Архитектура, зависимости модулей и точки входа"
+  default_prompt: "Используй $skerry-architecture для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

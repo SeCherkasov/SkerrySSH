@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: vault, секреты и границы доверия"
+  short_description: "Vault, credentials, trust и untrusted input"
+  default_prompt: "Используй $skerry-vault-security для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

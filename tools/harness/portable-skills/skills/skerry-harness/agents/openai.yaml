@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: harness, receipts и review gate"
+  short_description: "Harness v2, receipts, reviews и delivery guards"
+  default_prompt: "Используй $skerry-harness для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: GitHub и выпуск релизов"
+  short_description: "Issue/PR, native packages, draft и server releases"
+  default_prompt: "Используй $skerry-release-github для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

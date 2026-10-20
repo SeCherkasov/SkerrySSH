@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: Kotlin и конкурентность"
+  short_description: "Kotlin, cancellation, гонки и жизненный цикл ресурсов"
+  default_prompt: "Используй $skerry-kotlin-concurrency для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

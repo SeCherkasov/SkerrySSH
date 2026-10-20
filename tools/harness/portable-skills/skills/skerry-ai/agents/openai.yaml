@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: AI policies и локальные модели"
+  short_description: "AI routing, redaction, streaming и isolated llama.cpp"
+  default_prompt: "Используй $skerry-ai для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

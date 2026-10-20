@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: настройка нового ПК"
+  short_description: "Новый ПК, toolchain, SDK и безопасный запуск сборок"
+  default_prompt: "Используй $skerry-new-machine для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

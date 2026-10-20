@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: исполнители и независимое review"
+  short_description: "Видимые исполнители, review profiles и GLM/OpenCode"
+  default_prompt: "Используй $skerry-agent-orchestration для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

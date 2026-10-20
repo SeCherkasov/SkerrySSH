@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: терминал и shell integration"
+  short_description: "VT-терминал, ввод, rendering и shell integration"
+  default_prompt: "Используй $skerry-terminal для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

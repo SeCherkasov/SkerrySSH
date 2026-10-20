@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: UI, локализация и доступность"
+  short_description: "Compose UI, дизайн, пять языков и доступность"
+  default_prompt: "Используй $skerry-ui для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

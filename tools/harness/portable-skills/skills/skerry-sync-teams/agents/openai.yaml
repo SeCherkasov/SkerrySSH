@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: синхронизация и команды"
+  short_description: "Sync, pairing, team scopes и encrypted sharing"
+  default_prompt: "Используй $skerry-sync-teams для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

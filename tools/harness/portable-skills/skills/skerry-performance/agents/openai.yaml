@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: производительность и нагрузочные проверки"
+  short_description: "Измерения latency, CPU, RAM, startup и throughput"
+  default_prompt: "Используй $skerry-performance для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

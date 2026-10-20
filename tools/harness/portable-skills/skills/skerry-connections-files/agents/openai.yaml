@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: подключения, файлы и операции"
+  short_description: "SSH, SFTP, tunnels, runbooks и другие транспорты"
+  default_prompt: "Используй $skerry-connections-files для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."

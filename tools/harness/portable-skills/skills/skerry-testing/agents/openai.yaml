@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skerry: тестирование и доказательства"
+  short_description: "Тесты, RED, UI harness и границы доказательств"
+  default_prompt: "Используй $skerry-testing для соответствующей задачи в текущем checkout Skerry; сначала сверь актуальные инструкции и исходники."
