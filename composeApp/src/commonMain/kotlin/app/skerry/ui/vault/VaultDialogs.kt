@@ -54,7 +54,6 @@ import app.skerry.shared.text.capNotes
 import app.skerry.ui.design.FormField
 import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
-import app.skerry.shared.vault.SshKeyType
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.shtail_group_label
 import app.skerry.ui.generated.resources.Res
@@ -119,23 +118,6 @@ import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
-
-@Composable
-internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(SshKeyType.ED25519) }
-    val valid = name.isNotBlank()
-    VaultDialogScaffold(stringResource(Res.string.vault_dialog_generate_title), stringResource(Res.string.vault_dialog_generate_subtitle), onDismiss) {
-        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_key))
-        Txt(stringResource(Res.string.vault_field_algorithm), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SshKeyType.entries.forEach { option ->
-                Chip(option.label, active = option == type, modifier = Modifier.clickable { type = option })
-            }
-        }
-        DialogButtons(confirmLabel = stringResource(Res.string.vault_generate), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), type) })
-    }
-}
 
 @Composable
 internal fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, password: String) -> Unit) {
@@ -354,14 +336,14 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
 }
 
 @Composable
-internal fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     // System back/gesture closes the dialog (same as tapping the scrim). Intercepts back before the
     // shell's navigation on Android (dispatcher LIFO); BackHandler without a dispatcher is a no-op on desktop.
     PlatformBackHandler(onBack = onDismiss)
     Box(
         // The dialog centers in the visible area; it ends up above the keyboard on its own — on mobile the
         // root `safeDrawing` shrinks the area above the IME, and `Center` centers within what's left (no-op on desktop).
-        Modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -408,6 +390,7 @@ internal fun DialogField(
     keyboardType: KeyboardType? = null,
     /** See `ModalTextField`: select the prefilled value on focus so the next keystroke replaces it. */
     selectAllOnFocus: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val ui = LocalFonts.current.ui
     val monoFont = LocalFonts.current.mono
@@ -447,7 +430,7 @@ internal fun DialogField(
         BasicTextField(
             value = draft.textFieldValue(value),
             onValueChange = { draft.accept(it, value, onValueChange) },
-            modifier = Modifier.fillMaxWidth().fieldFocus(draft)
+            modifier = modifier.fillMaxWidth().fieldFocus(draft)
                 .fieldName(label)
                 .onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,

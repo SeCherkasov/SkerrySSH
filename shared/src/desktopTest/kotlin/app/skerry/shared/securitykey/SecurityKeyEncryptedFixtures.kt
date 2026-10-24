@@ -1,0 +1,26 @@
+package app.skerry.shared.securitykey
+
+// Synthetic OpenSSH ssh-keygen -p fixtures. Passphrase is test-only; no hardware secret exists.
+internal val ENCRYPTED_SK_ED25519 = """
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBZZvsAyl
+8VanrkrDoVSV07AAAAGAAAAAEAAABKAAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29t
+AAAAIFRKfyifq0cY+ah6S43MhbQ+xMzv0ogB8rztud02CiuYAAAABHNzaDoAAACAoKytvf
+r1HxUgHnaLBIZlgq9FcygYNlGtGgzw0p0DMjc1DR7+uZkSnOWtl9xq0ZcW6HM0i392idIZ
+gRKQK8ylt7ecj1i0/gzrfl195y1sf6iyb6/PqSrkDjeirqAczg0vcg1e3OgAtFH36jIPWR
+OMUwmTlySmCZZ3Q6BSsJxVYyc=
+-----END OPENSSH PRIVATE KEY-----
+""".trimIndent()
+
+internal val ENCRYPTED_SK_ECDSA = """
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABAae5U8mx
+Wij4b8tZhPOHeJAAAAGAAAAAEAAAB/AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3Bl
+bnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBN7hM5Yg+zN7akTDJImJm9kuqLYhOKZ9B8Qbcc
+qL0zniI3WfexPlqkc6B/2q9BiMsxEa7+s+81pv9kv3QQEJ5PsAAAAEc3NoOgAAAMAp042o
+R6OQmG2yrX3msW9gtDFRcFmaL2KbTyVIejYXPyqAXSoKn3YF56LBxnFfyWydxzKrBJ1/pN
+9ZOSPsC85pghAlMyfuhvgQHN8XsWG1iEUiJ31JEeAYOcVUWky+0zyqUy5Avn6zZhiAwZAs
+wWkweDrr2e3BtmbZZ0FlC4gnvbyPhdtWqOIWYtsAUNLWY9XUOKSyXpYXPyHvzyfN4NbsDy
+ujXNFBz1N26noyYo2wH/ve/rJuES+LAcwlmIiKJPI=
+-----END OPENSSH PRIVATE KEY-----
+""".trimIndent()

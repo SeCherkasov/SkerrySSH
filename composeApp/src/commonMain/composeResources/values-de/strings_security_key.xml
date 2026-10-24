@@ -1,0 +1,33 @@
+<resources>
+    <string name="settings_experimental_security_keys">FIDO2-Hardware-SSH-Schlüssel</string>
+    <string name="settings_experimental_security_keys_desc">Import, Erstellung und Nutzung von Hardware-SSH-Schlüsseln auf diesem Gerät erlauben. Erfordert einen kompatiblen USB- oder NFC-Schlüssel.</string>
+    <string name="security_key_pin_title">PIN des Sicherheitsschlüssels</string>
+    <string name="security_key_touch_title">Sicherheitsschlüssel berühren</string>
+    <string name="security_key_local_only">Nur lokaler Authentifikator. Ihre PIN wird nie an den SSH-Server gesendet.</string>
+    <string name="security_key_pin_retries">Verbleibende PIN-Versuche: %1$d</string>
+    <string name="security_key_touch_instruction">Schlüssel anschließen, fortfahren und bei Blinken berühren.</string>
+    <string name="security_key_continue">Weiter</string>
+    <string name="security_key_hardware">Hardware-Sicherheitsschlüssel</string>
+    <string name="security_key_application">Anwendung</string>
+    <string name="security_key_resident">Residenter Schlüssel</string>
+    <string name="security_key_uv">Benutzerverifizierung verlangen (PIN)</string>
+    <string name="security_key_username">Benutzername (optional)</string>
+    <string name="security_key_disabled">FIDO2-Hardware-SSH-Schlüssel unter Einstellungen → Experimentell aktivieren.</string>
+    <string name="security_key_metadata">Hardwaregebunden · Anwendung: %1$s · resident: %2$s</string>
+    <string name="security_key_yes">Ja</string>
+    <string name="security_key_no">Nein</string>
+    <string name="security_key_no_device">Kein Sicherheitsschlüssel gefunden. Kompatiblen Schlüssel anschließen.</string>
+    <string name="security_key_unavailable">Sicherheitsschlüssel auf diesem Gerät nicht verfügbar.</string>
+    <string name="security_key_permission">Zugriff auf den Sicherheitsschlüssel verweigert.</string>
+    <string name="security_key_detached">Schlüssel getrennt. Erneut anschließen und versuchen.</string>
+    <string name="security_key_cancelled">Schlüsselvorgang abgebrochen.</string>
+    <string name="security_key_timeout">Zeitüberschreitung. Erneut versuchen und Schlüssel berühren.</string>
+    <string name="security_key_pin_required">Lokale PIN des Sicherheitsschlüssels eingeben.</string>
+    <string name="security_key_pin_invalid">Falsche PIN des Sicherheitsschlüssels.</string>
+    <string name="security_key_pin_blocked">PIN gesperrt. Schlüssel mit seinem Verwaltungsprogramm entsperren.</string>
+    <string name="security_key_algorithm">Der Schlüssel unterstützt diesen Algorithmus nicht.</string>
+    <string name="security_key_invalid">Ungültiger Hardware-SSH-Schlüssel.</string>
+    <string name="security_key_verification">Schlüsselverifizierung fehlgeschlagen.</string>
+    <string name="security_key_error">Schlüsselvorgang fehlgeschlagen.</string>
+    <string name="security_key_application_invalid">Die Anwendung muss mit ssh: beginnen und darf höchstens 255 druckbare Zeichen enthalten.</string>
+</resources>

@@ -30,6 +30,10 @@ import app.skerry.shared.vault.securityMoment
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.generated.resources.security_key_metadata
+import app.skerry.ui.generated.resources.security_key_yes
+import app.skerry.ui.generated.resources.security_key_no
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_meta_rotated
 import app.skerry.ui.generated.resources.vault_meta_valid_until
@@ -140,6 +144,9 @@ fun secretMetaLine(
         )
         is CredentialSecret.PrivateKey -> listOfNotNull(
             keyInfo?.keyTypeLabel,
+            keyInfo?.securityKey?.let {
+                stringResource(Res.string.security_key_metadata, sanitizeServerText(it.application, maxChars = 512, allowNewlines = false), stringResource(if (it.resident) Res.string.security_key_yes else Res.string.security_key_no))
+            },
             keyInfo?.let { shortFingerprint(it.fingerprintSha256) },
         )
         is CredentialSecret.Password -> listOfNotNull(

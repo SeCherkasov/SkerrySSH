@@ -106,6 +106,7 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.vault.CertificateDetailBody
 import app.skerry.ui.vault.DeleteSecretDialog
 import app.skerry.ui.vault.DetailLabel
+import app.skerry.ui.vault.SecurityKeyMetadataBlock
 import app.skerry.ui.vault.GenerateKeyDialog
 import app.skerry.ui.vault.ImportKeyDialog
 import app.skerry.ui.vault.ImportKeyMode
@@ -280,6 +281,11 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
         if (showGenerate && generator != null) {
             GenerateKeyDialog(
                 onDismiss = { showGenerate = false },
+                onHardwareCreate = { name, key ->
+                    selectedId = credentials.save(CredentialDraft(label = name, kind = CredentialKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
+                    category = VaultCategoryKind.SSH_KEYS
+                    showGenerate = false
+                },
                 onCreate = { name, type ->
                     showGenerate = false
                     category = VaultCategoryKind.SSH_KEYS
@@ -665,6 +671,7 @@ private fun MobileSecretDetailSheet(
                     is CredentialSecret.Certificate -> CertificateDetailBody(certInfo, mono)
                     is CredentialSecret.PrivateKey -> {
                         DetailLabel(stringResource(Res.string.vault_label_public_key))
+                        keyInfo?.let { SecurityKeyMetadataBlock(it) }
                         // The fingerprint is a fact row above; here the sheet shows the key itself.
                         Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
                             Txt(keyInfo?.publicKeyOpenSsh ?: stringResource(Res.string.vault_key_unreadable), color = Skerry.colors.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)

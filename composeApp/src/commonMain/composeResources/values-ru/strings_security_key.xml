@@ -1,0 +1,33 @@
+<resources>
+    <string name="settings_experimental_security_keys">Аппаратные SSH-ключи FIDO2</string>
+    <string name="settings_experimental_security_keys_desc">Разрешить импорт, создание и использование аппаратных SSH-ключей на этом устройстве. Нужен совместимый USB- или NFC-ключ.</string>
+    <string name="security_key_pin_title">PIN аппаратного ключа</string>
+    <string name="security_key_touch_title">Коснитесь аппаратного ключа</string>
+    <string name="security_key_local_only">Только локальный аутентификатор. PIN не передаётся SSH-серверу.</string>
+    <string name="security_key_pin_retries">Осталось попыток PIN: %1$d</string>
+    <string name="security_key_touch_instruction">Подключите ключ, продолжите и коснитесь его, когда он начнёт мигать.</string>
+    <string name="security_key_continue">Продолжить</string>
+    <string name="security_key_hardware">Аппаратный ключ</string>
+    <string name="security_key_application">Приложение</string>
+    <string name="security_key_resident">Резидентный ключ</string>
+    <string name="security_key_uv">Требовать проверку пользователя (PIN)</string>
+    <string name="security_key_username">Имя пользователя (необязательно)</string>
+    <string name="security_key_disabled">Включите аппаратные SSH-ключи FIDO2 в Настройки → Экспериментальное.</string>
+    <string name="security_key_metadata">Аппаратный ключ · приложение: %1$s · резидентный: %2$s</string>
+    <string name="security_key_yes">Да</string>
+    <string name="security_key_no">Нет</string>
+    <string name="security_key_no_device">Аппаратный ключ не найден. Подключите совместимый ключ.</string>
+    <string name="security_key_unavailable">Аппаратные ключи недоступны на этом устройстве.</string>
+    <string name="security_key_permission">Доступ к аппаратному ключу запрещён.</string>
+    <string name="security_key_detached">Ключ отключён. Подключите его снова.</string>
+    <string name="security_key_cancelled">Операция с ключом отменена.</string>
+    <string name="security_key_timeout">Время ожидания истекло. Повторите и коснитесь ключа.</string>
+    <string name="security_key_pin_required">Введите локальный PIN аппаратного ключа.</string>
+    <string name="security_key_pin_invalid">Неверный PIN аппаратного ключа.</string>
+    <string name="security_key_pin_blocked">PIN заблокирован. Разблокируйте ключ утилитой производителя.</string>
+    <string name="security_key_algorithm">Ключ не поддерживает выбранный алгоритм.</string>
+    <string name="security_key_invalid">Некорректный аппаратный SSH-ключ.</string>
+    <string name="security_key_verification">Проверка аппаратного ключа не пройдена.</string>
+    <string name="security_key_error">Операция с аппаратным ключом не удалась.</string>
+    <string name="security_key_application_invalid">Приложение должно начинаться с ssh: и содержать не более 255 печатных символов.</string>
+</resources>

@@ -1,5 +1,12 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.securitykey.SecurityKeyService
+import app.skerry.shared.securitykey.SecurityKeyPrompter
+import app.skerry.shared.securitykey.SecurityKeyException
+import app.skerry.shared.securitykey.loadSecurityKeyProvider
+import app.skerry.shared.securitykey.SecurityKeyAccess
+import app.skerry.shared.securitykey.SecurityKeySignerContext
+import net.schmizz.sshj.userauth.method.AuthMethod
 import app.skerry.shared.vault.MAX_KDF_ROUNDS
 import app.skerry.shared.vault.kdfCostAcceptable
 import java.io.IOException
@@ -10,6 +17,8 @@ import java.security.Security
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlin.coroutines.cancellation.CancellationException
@@ -45,6 +54,9 @@ import net.schmizz.sshj.userauth.password.Resource
 class SshjTransport(
     private val hostKeyVerifier: HostKeyVerifier,
     private val keyFiles: KeyFileResolver? = null,
+    private val securityKeys: SecurityKeyService? = null,
+    private val securityKeyPrompt: SecurityKeyPrompter? = null,
+    private val securityKeysEnabled: () -> Boolean = { false },
     private val keyboardInteractiveResponder: KeyboardInteractiveResponder? = null,
 ) : SshTransport {
 
@@ -60,8 +72,9 @@ class SshjTransport(
         // inside the block, is what keeps a cancelled connect from leaving an authenticated session
         // live on the server (one per ProxyJump hop) for the rest of the process.
         val opened = mutableListOf<SSHClient>()
+        val requestContext = currentCoroutineContext()
         try {
-            return withContext(Dispatchers.IO) { connectChain(target, auth, opened) }
+            return withContext(Dispatchers.IO) { connectChain(target, auth, opened, requestContext) }
         } catch (e: CancellationException) {
             // The one this has to catch by hand: `withContext` throws it on the way out, after the
             // blocking chain has already produced a live, authenticated client.
@@ -88,7 +101,7 @@ class SshjTransport(
         }
     }
 
-    private fun connectChain(target: SshTarget, auth: SshAuth, opened: MutableList<SSHClient>): SshConnection {
+    private fun connectChain(target: SshTarget, auth: SshAuth, opened: MutableList<SSHClient>, requestContext: CoroutineContext): SshConnection {
         ensureCryptoProvider()
         // Capture the cipher negotiated at KEX (client->server) via an algorithms verifier: in
         // sshj 0.40 it's called synchronously on the IO thread inside connect() (after
@@ -98,13 +111,13 @@ class SshjTransport(
         // separate chain (addHostKeyVerifier). Hop clients don't get one — the info panel shows
         // the target session's cipher.
         val negotiatedCipher = AtomicReference<String?>(null)
-        val client = dial(target.host, target.port, target.jump, opened) { c ->
+        val client = dial(target.host, target.port, target.jump, opened, requestContext) { c ->
             c.transport.addAlgorithmsVerifier { negotiated ->
                 negotiatedCipher.set(negotiated.client2ServerCipherAlgorithm)
                 true
             }
         }
-        authenticate(client, target.username, auth, hop = false, host = target.host, port = target.port)
+        authenticate(client, auth, AuthenticationEndpoint(target.username, target.host, target.port, false, requestContext))
 
         // sshj returns the server ident without the prefix (`getServerVersion()` =
         // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
@@ -137,12 +150,13 @@ class SshjTransport(
         port: Int,
         jump: SshJump?,
         opened: MutableList<SSHClient>,
+        requestContext: CoroutineContext,
         hop: Boolean = false,
         configure: (SSHClient) -> Unit = {},
     ): SSHClient {
         val upstream = jump?.let { next ->
-            dial(next.host, next.port, next.jump, opened, hop = true)
-                .also { authenticate(it, next.username, next.auth, hop = true, host = next.host, port = next.port) }
+            dial(next.host, next.port, next.jump, opened, requestContext, hop = true)
+                .also { authenticate(it, next.auth, AuthenticationEndpoint(next.username, next.host, next.port, true, requestContext)) }
         }
         val client = SSHClient(sshjConfig())
         // TCP connect timeout (see the constant's doc). Protocol-level KEX/I-O timeout is
@@ -223,107 +237,65 @@ class SshjTransport(
     }
 
     /**
-     * Authenticate an already-connected [client] per [auth]; throws on failure (closing is the
-     * connect-level cleanup's job — see `opened` there). [hop] marks a ProxyJump hop so the user
+     * Authenticate an already-connected [client] per [requested]; throws on failure (closing is the
+     * connect-level cleanup's job — see `opened` there). The endpoint marks a ProxyJump hop so the user
      * can tell which side rejected the credentials (still no addresses/usernames in the text).
      */
-    private fun authenticate(
-        client: SSHClient,
-        username: String,
-        requested: SshAuth,
-        hop: Boolean,
-        host: String,
-        port: Int,
-    ) {
-        // Held so the failure below can tell "the user waved the prompt away" apart from "the server
-        // said no" — sshj reports both as the same UserAuthException.
-        var prompts: ResponderChallengeProvider? = null
-        // File-backed credentials are read here rather than when the profile was resolved: the point
-        // of them is that an external issuer keeps rewriting the file, so the read has to be as late
-        // as the connection itself. Throws (with the ref named) if the file isn't there.
-        val auth = when (requested) {
-            is SshAuth.KeyFile -> keyFiles?.resolve(requested)
-                ?: throw SshAuthenticationException("File-backed credentials are not available on this platform")
-            else -> requested
+    private fun authenticate(client: SSHClient, requested: SshAuth, endpoint: AuthenticationEndpoint) {
+        val auth = resolveAuth(requested)
+        val failure = AtomicReference<SecurityKeyException?>(null)
+        val signer = SecurityKeySignerContext(
+            SecurityKeyAccess(securityKeys, securityKeyPrompt, securityKeysEnabled), endpoint.label, failure, endpoint.context,
+        ) { runCatching { client.disconnect() } }
+        val prompts = keyboardInteractiveResponder?.let { responder ->
+            ResponderChallengeProvider(responder, endpoint.hop, (auth as? SshAuth.Password)?.secret, endpoint.label)
         }
         try {
-            // One ordered list rather than a single call: a server configured with
-            // `AuthenticationMethods publickey,keyboard-interactive` answers the first method with
-            // partial success, and sshj then moves on to the next one in the list (SSHClient.auth).
-            // That is what makes two-factor login work; with a single method it would stop at the
-            // partial success and report failure.
-            val methods = buildList {
-                when (auth) {
-                    is SshAuth.Password -> {
-                        add(AuthPassword(PasswordUtils.createOneOff(auth.secret.toCharArray())))
-                        // Without a responder, keep sshj's own fallback (what authPassword did here
-                        // before): it answers password-shaped prompts from the saved secret, which is
-                        // how PAM setups that only re-ask for the password work. With a responder,
-                        // ours supersedes it — it answers those same prompts from the secret and asks
-                        // the user about everything else.
-                        //
-                        // Its own finder, not the one above: createOneOff hands the password over
-                        // exactly once and blanks the array afterwards, so a shared finder would leave
-                        // the fallback answering with nothing the moment AuthPassword had run — which
-                        // is precisely the case this fallback exists for.
-                        if (keyboardInteractiveResponder == null) {
-                            add(
-                                AuthKeyboardInteractive(
-                                    PasswordResponseProvider(PasswordUtils.createOneOff(auth.secret.toCharArray())),
-                                ),
-                            )
-                        }
-                    }
-                    is SshAuth.PublicKey -> {
-                        // loadKeys treats the strings as key content (not a path); passphrase is a
-                        // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
-                        add(AuthPublickey(client.loadBoundedKeys(auth.privateKeyPem, auth.passphrase)))
-                    }
-                    is SshAuth.Certificate -> {
-                        // Cert auth: possession is proven by the private key from PEM, while the
-                        // server is shown the certificate itself (public part = parsed *-cert.pub).
-                        // sshj doesn't stitch these together from strings on its own (only from
-                        // sibling files), so we build the KeyProvider by hand: private from PEM,
-                        // public as Certificate, type as *_CERT.
-                        val keys = client.loadBoundedKeys(auth.privateKeyPem, auth.passphrase)
-                        add(AuthPublickey(certificateKeyProvider(keys, auth.certificate)))
-                    }
-                    // Nothing to offer up front: the whole exchange is the server asking and the
-                    // user answering, added below.
-                    SshAuth.Interactive -> Unit
-                    // Resolved into one of the branches above before the list is built.
-                    is SshAuth.KeyFile -> Unit
-                }
-                keyboardInteractiveResponder?.let { responder ->
-                    val provider = ResponderChallengeProvider(
-                        responder = responder,
-                        hop = hop,
-                        knownPassword = (auth as? SshAuth.Password)?.secret,
-                        endpoint = "$username@$host:$port",
-                    )
-                    prompts = provider
-                    add(AuthKeyboardInteractive(provider))
-                }
+            // Ordered methods preserve publickey partial-success followed by keyboard-interactive 2FA.
+            val methods = buildList<AuthMethod> {
+                addCredentialMethods(auth) { pem, passphrase -> loadAuthKey(client, pem, passphrase, signer) }
+                prompts?.let { add(AuthKeyboardInteractive(it)) }
             }
-            client.auth(username, methods)
+            client.auth(endpoint.username, methods)
         } catch (e: UserAuthException) {
-            // No username in the text: the message must not carry an identifier (logs/reports).
-            // A prompt the user waved away (or let expire) is reported as itself: otherwise the one
-            // failure the user caused reads as "your credentials are wrong", and they go hunting for
-            // a problem with the password instead of simply answering the next prompt.
-            throw SshAuthenticationException(
-                when (prompts?.outcome) {
-                    ResponderChallengeProvider.Outcome.Dismissed -> "Two-factor prompt was dismissed"
-                    ResponderChallengeProvider.Outcome.TimedOut -> "Two-factor prompt timed out"
-                    ResponderChallengeProvider.Outcome.Flooded -> "Server asked for too many answers at once"
-                    else -> if (hop) "Jump host rejected the credentials" else "Server rejected the credentials"
-                },
-                e,
-            )
+            failure.get()?.let { throw it }
+            throw SshAuthenticationException(authenticationFailureText(prompts?.outcome, endpoint.hop), e)
         } catch (e: IOException) {
+            failure.get()?.let { throw it }
             throw SshConnectionException("Connection dropped during authentication", e)
         }
     }
+
+    private fun resolveAuth(requested: SshAuth): SshAuth = when (requested) {
+        is SshAuth.KeyFile -> keyFiles?.resolve(requested)
+            ?: throw SshAuthenticationException("File-backed credentials are not available on this platform")
+        else -> requested
+    }
+
+    private fun loadAuthKey(client: SSHClient, pem: String, passphrase: String?, signer: SecurityKeySignerContext): KeyProvider {
+        if (pem.length > 262144 || !kdfCostAcceptable(pem)) throw SshAuthenticationException("Private key exceeds parsing limits")
+        return if (pem.trimStart().startsWith("-----BEGIN OPENSSH PRIVATE KEY-----")) {
+            loadSecurityKeyProvider(pem, passphrase, signer)
+        } else client.loadBoundedKeys(pem, passphrase)
+    }
+
+    private fun MutableList<AuthMethod>.addCredentialMethods(auth: SshAuth, load: (String, String?) -> KeyProvider) {
+        when (auth) {
+            is SshAuth.Password -> addPasswordMethods(auth)
+            is SshAuth.PublicKey -> add(AuthPublickey(load(auth.privateKeyPem, auth.passphrase)))
+            is SshAuth.Certificate -> add(AuthPublickey(certificateKeyProvider(load(auth.privateKeyPem, auth.passphrase), auth.certificate)))
+            SshAuth.Interactive, is SshAuth.KeyFile -> Unit
+        }
+    }
+
+    private fun MutableList<AuthMethod>.addPasswordMethods(auth: SshAuth.Password) {
+        add(AuthPassword(PasswordUtils.createOneOff(auth.secret.toCharArray())))
+        // Separate one-off finders preserve password fallback without reusing its already-wiped array.
+        if (keyboardInteractiveResponder == null) {
+            add(AuthKeyboardInteractive(PasswordResponseProvider(PasswordUtils.createOneOff(auth.secret.toCharArray()))))
+        }
+    }
+
 }
 
 /**
@@ -585,4 +557,17 @@ internal fun opensshFingerprint(key: PublicKey): String {
     val encoded = Buffer.PlainBuffer().putPublicKey(key).compactData
     val digest = MessageDigest.getInstance("SHA-256").digest(encoded)
     return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
+}
+
+private class AuthenticationEndpoint(
+    val username: String, val host: String, val port: Int, val hop: Boolean, val context: CoroutineContext,
+) {
+    val label: String get() = "$username@$host:$port"
+}
+
+private fun authenticationFailureText(outcome: ResponderChallengeProvider.Outcome?, hop: Boolean): String = when (outcome) {
+    ResponderChallengeProvider.Outcome.Dismissed -> "Two-factor prompt was dismissed"
+    ResponderChallengeProvider.Outcome.TimedOut -> "Two-factor prompt timed out"
+    ResponderChallengeProvider.Outcome.Flooded -> "Server asked for too many answers at once"
+    else -> if (hop) "Jump host rejected the credentials" else "Server rejected the credentials"
 }

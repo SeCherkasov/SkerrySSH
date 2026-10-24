@@ -1,0 +1,33 @@
+<resources>
+    <string name="settings_experimental_security_keys">FIDO2 donanım SSH anahtarları</string>
+    <string name="settings_experimental_security_keys_desc">Bu cihazda donanım SSH anahtarlarını içe aktarmayı, oluşturmayı ve kullanmayı etkinleştirir. Uyumlu USB veya NFC anahtarı gerekir.</string>
+    <string name="security_key_pin_title">Güvenlik anahtarı PIN kodu</string>
+    <string name="security_key_touch_title">Güvenlik anahtarına dokunun</string>
+    <string name="security_key_local_only">Yalnızca yerel doğrulayıcı. PIN kodunuz SSH sunucusuna gönderilmez.</string>
+    <string name="security_key_pin_retries">Kalan PIN denemesi: %1$d</string>
+    <string name="security_key_touch_instruction">Anahtarı bağlayın, devam edin ve yanıp söndüğünde dokunun.</string>
+    <string name="security_key_continue">Devam</string>
+    <string name="security_key_hardware">Donanım güvenlik anahtarı</string>
+    <string name="security_key_application">Uygulama</string>
+    <string name="security_key_resident">Yerleşik anahtar</string>
+    <string name="security_key_uv">Kullanıcı doğrulaması iste (PIN)</string>
+    <string name="security_key_username">Kullanıcı adı (isteğe bağlı)</string>
+    <string name="security_key_disabled">Ayarlar → Deneysel bölümünden FIDO2 donanım SSH anahtarlarını etkinleştirin.</string>
+    <string name="security_key_metadata">Donanım korumalı · uygulama: %1$s · yerleşik: %2$s</string>
+    <string name="security_key_yes">Evet</string>
+    <string name="security_key_no">Hayır</string>
+    <string name="security_key_no_device">Güvenlik anahtarı bulunamadı. Uyumlu bir anahtar bağlayın.</string>
+    <string name="security_key_unavailable">Bu cihazda güvenlik anahtarı kullanılamıyor.</string>
+    <string name="security_key_permission">Güvenlik anahtarı izni reddedildi.</string>
+    <string name="security_key_detached">Anahtar bağlantısı kesildi. Yeniden bağlayıp deneyin.</string>
+    <string name="security_key_cancelled">Güvenlik anahtarı işlemi iptal edildi.</string>
+    <string name="security_key_timeout">Anahtar zaman aşımına uğradı. Tekrar deneyip anahtara dokunun.</string>
+    <string name="security_key_pin_required">Yerel güvenlik anahtarı PIN kodunu girin.</string>
+    <string name="security_key_pin_invalid">Güvenlik anahtarı PIN kodu yanlış.</string>
+    <string name="security_key_pin_blocked">PIN engellendi. Anahtarın yönetim aracıyla kilidi açın.</string>
+    <string name="security_key_algorithm">Anahtar seçilen algoritmayı desteklemiyor.</string>
+    <string name="security_key_invalid">Geçersiz donanım SSH anahtarı.</string>
+    <string name="security_key_verification">Güvenlik anahtarı doğrulaması başarısız.</string>
+    <string name="security_key_error">Güvenlik anahtarı işlemi başarısız.</string>
+    <string name="security_key_application_invalid">Uygulama ssh: ile başlamalı ve en fazla 255 yazdırılabilir karakter içermelidir.</string>
+</resources>

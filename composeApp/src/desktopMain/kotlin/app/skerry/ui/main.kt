@@ -150,6 +150,7 @@ private fun deviceId(dir: Path): String {
 /** Settings → Terminal → typing ssh on a jump host; off unless this device turned it on. */
 private const val JUMP_SHELL_PREF = "experimental_jump_shell"
 private const val TRUSTED_DEVICE_PREF = "experimental_trusted_device"
+private const val SECURITY_KEYS_PREF = "experimental_security_keys"
 
 /** Terminal font size, px: falls back to default outside [TERMINAL_FONT_SIZE_RANGE]. */
 private fun readTerminalFontSize(prefs: FilePrefs): Int =
@@ -249,6 +250,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // controller; it is shared by every transport that authenticates, so a code asked for while
     // dialing a tunnel or probing a container prompts the same way a session does.
     val keyboardInteractive = KeyboardInteractivePromptController()
+    val securityKeyPrompts = app.skerry.ui.securitykey.SecurityKeyPromptController()
+    val securityKeys = app.skerry.shared.securitykey.DesktopSecurityKeyService()
     // Host identity the user has to vouch for: an SSH key or an RDP certificate nobody has recorded
     // yet, or one that changed. Asked from inside the handshake, which is why the verifiers get the
     // blocking view of it (`asDecider`) while the dialog answers from the UI.
@@ -273,6 +276,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         ) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
+        securityKeys = securityKeys,
+        securityKeyPrompt = securityKeyPrompts,
+        securityKeysEnabled = { prefs.bool(SECURITY_KEYS_PREF, false) && vault.isUnlocked },
     )
     // One login per jump host for every session typed through its shell; the lock closes idle ones.
     val jumpHosts = app.skerry.shared.ssh.SharedConnectionPool(sshTransport)
@@ -291,6 +297,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         ) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
+        securityKeys = securityKeys,
+        securityKeyPrompt = securityKeyPrompts,
+        securityKeysEnabled = { prefs.bool(SECURITY_KEYS_PREF, false) && vault.isUnlocked },
     )
     val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
     val trustedCas = TrustedCaController(
@@ -405,6 +414,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         ) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
+        securityKeys = securityKeys,
+        securityKeyPrompt = securityKeyPrompts,
+        securityKeysEnabled = { prefs.bool(SECURITY_KEYS_PREF, false) && vault.isUnlocked },
     )
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault, trash),
@@ -546,7 +558,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // A share started or ended somewhere in the team: re-read the directory rather than wait for
     // the user to reopen the screen.
     teams.onSharesChanged = { sharedSessions.refresh() }
-    val deps = AppDependencies(transport = transport, jumpHosts = jumpHosts, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, biometrics = biometrics, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
+    val deps = AppDependencies(transport = transport, jumpHosts = jumpHosts, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, securityKeyService = securityKeys, securityKeyPrompts = securityKeyPrompts, certificateInspector = certificateInspector, secretFiles = secretFiles, biometrics = biometrics, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -648,6 +660,8 @@ fun main(args: Array<String>) {
               app.skerry.ui.theme.SkerryTheme(mode = currentThemeMode.value) {
                 app.skerry.ui.desktop.DesktopDesignApp(
                     keyboardInteractive = graph.keyboardInteractive,
+                    securityKeyService = graph.deps.securityKeyService,
+                    securityKeyPrompts = graph.deps.securityKeyPrompts,
                     hostTrust = graph.hostTrust,
                     sessionShare = graph.deps.sessionShare,
                     sharedSessions = graph.deps.sharedSessions,
@@ -714,6 +728,8 @@ fun main(args: Array<String>) {
                             onOfferSudoPasswordChange = { prefs.set("terminal_sudo_password", it) },
                             initialJumpViaShellOffered = prefs.bool(JUMP_SHELL_PREF, false),
                             onJumpViaShellOfferedChange = { prefs.set(JUMP_SHELL_PREF, it) },
+                            initialSecurityKeysEnabled = prefs.bool(SECURITY_KEYS_PREF, false),
+                            onSecurityKeysEnabledChange = { prefs.set(SECURITY_KEYS_PREF, it) },
                             initialTrustedDeviceOffered = prefs.bool(TRUSTED_DEVICE_PREF, false),
                             onTrustedDeviceOfferedChange = { prefs.set(TRUSTED_DEVICE_PREF, it) },
                             initialReportTeamSessions = prefs.bool("teams_report_sessions", true),

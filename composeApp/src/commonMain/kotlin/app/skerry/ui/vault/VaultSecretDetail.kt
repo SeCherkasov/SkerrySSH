@@ -177,6 +177,7 @@ internal fun LiveSecretDetail(
         when (secret) {
             is CredentialSecret.Certificate -> CertificateDetailBody(certInfo, mono)
             is CredentialSecret.PrivateKey -> {
+                keyInfo?.let { SecurityKeyMetadataBlock(it) }
                 DetailLabel(stringResource(Res.string.vault_label_public_key))
                 // The fingerprint itself is already a fact row above; what the panel adds here is the
                 // key the user actually has to paste somewhere.

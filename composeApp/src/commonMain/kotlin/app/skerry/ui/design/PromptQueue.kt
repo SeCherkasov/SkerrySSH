@@ -90,10 +90,13 @@ class PromptQueue<Q : Any, A>(
      * that has since been replaced, is dropped: a late click must not settle the next connection's
      * question.
      */
-    fun answer(id: Long?, value: A) {
-        val showing = slot.value ?: return
-        if (id == null || id != showing.id) return
-        showing.answer.complete(value)
+    fun answer(id: Long?, value: A) { offer(id, value) }
+
+    /** Returns false when the answer was stale or already supplied; secret owners can erase it. */
+    fun offer(id: Long?, value: A): Boolean {
+        val showing = slot.value ?: return false
+        if (id == null || id != showing.id) return false
+        return showing.answer.complete(value)
     }
 
     /**

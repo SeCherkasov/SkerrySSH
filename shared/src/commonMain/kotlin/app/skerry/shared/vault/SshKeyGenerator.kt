@@ -20,6 +20,7 @@ data class SshPublicKeyInfo(
     val publicKeyOpenSsh: String,
     val fingerprintSha256: String,
     val keyTypeLabel: String,
+    val securityKey: app.skerry.shared.securitykey.SecurityKeyMetadata? = null,
 )
 
 /**

@@ -112,6 +112,7 @@ kotlin {
                 // Native access to serial ports (SerialSystem actual). Desktop only —
                 // on Android, serial will go over USB-OTG as a separate implementation.
                 implementation(libs.jserialcomm)
+                implementation(libs.jna.core)
                 // Real PTY for the local-shell transport (LocalShell actual): job control, window
                 // size, raw mode on Linux/macOS/Windows. Bundles its own natives + JNA (compatible
                 // with the JNA already on the classpath). Desktop only — Android uses a native helper.
@@ -129,6 +130,8 @@ kotlin {
             implementation(libs.androidx.biometric)
             // USB-OTG serial: CDC-ACM/FTDI/CP210x/CH34x drivers on top of the USB Host API (SerialSystem actual).
             implementation(libs.usbserial)
+            implementation(libs.yubikit.android)
+            implementation(libs.yubikit.fido)
         }
         val desktopTest by getting {
             dependencies {

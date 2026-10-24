@@ -262,6 +262,22 @@ val generateThemeSources = tasks.register("generateThemeSources") {
 }
 kotlin.sourceSets.named("commonMain") { kotlin.srcDir(generateThemeSources) }
 
+// Package the FIDO transport with the application, including its static crypto/CBOR/zlib
+// dependencies and licenses. Source archives are pinned and verified by the packaging script;
+// normal compilation/tests stay offline and do not require a native C toolchain.
+val fido2Resources = layout.buildDirectory.dir("generated/fido2-app-resources")
+val prepareFido2Runtime = tasks.register<Exec>("prepareFido2Runtime") {
+    group = "compose desktop"
+    description = "Build the pinned desktop security-key runtime and verify its native dependencies"
+    val script = rootProject.file("tools/packaging/prepare_fido2.py")
+    inputs.file(script)
+    inputs.property("nativeHost", "${System.getProperty("os.name")}-${System.getProperty("os.arch")}")
+    inputs.file(rootProject.file("tools/packaging/fido2-sources.json"))
+    outputs.dir(fido2Resources)
+    val python = if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3"
+    commandLine(python, script.absolutePath, "--output", fido2Resources.get().asFile.absolutePath)
+}
+
 compose.desktop {
     application {
         mainClass = "app.skerry.ui.MainKt"
@@ -277,6 +293,9 @@ compose.desktop {
         }
 
         nativeDistributions {
+            // Deriving the resource provider from its producing task preserves Gradle's implicit
+            // dependency before Compose copies application resources into the installer/app-image.
+            appResourcesRootDir.set(layout.dir(prepareFido2Runtime.map { fido2Resources.get().asFile }))
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
             // jlink drops modules loaded reflectively (jdk.unsupported, java.naming, GSSAPI, …),
             // so the packaged app died on startup while `./gradlew run` worked. Bundle them all.
@@ -324,6 +343,13 @@ compose.desktop {
             isEnabled.set(false)
             configurationFiles.from(project.file("compose-desktop.pro"))
         }
+    }
+}
+
+tasks.withType<JavaExec>().configureEach {
+    if (name == "run") {
+        dependsOn(prepareFido2Runtime)
+        systemProperty("compose.application.resources.dir", fido2Resources.get().dir("common").asFile.absolutePath)
     }
 }
 

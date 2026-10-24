@@ -255,6 +255,11 @@ private fun LiveVaultView(credentials: CredentialManagerController, collapse: Fo
         if (showGenerate && generator != null) {
             GenerateKeyDialog(
                 onDismiss = { showGenerate = false },
+                onHardwareCreate = { name, key ->
+                    selectedId = credentials.save(CredentialDraft(label = name, kind = CredentialKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
+                    category = VaultCategoryKind.SSH_KEYS
+                    showGenerate = false
+                },
                 onCreate = { name, type ->
                     showGenerate = false
                     category = VaultCategoryKind.SSH_KEYS

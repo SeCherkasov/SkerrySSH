@@ -6,6 +6,7 @@ import app.skerry.ui.generated.resources.conn_test_err_auth
 import app.skerry.ui.generated.resources.conn_test_err_connection
 import app.skerry.ui.generated.resources.conn_test_err_host_key
 import app.skerry.ui.generated.resources.conn_test_incomplete
+import app.skerry.ui.securitykey.securityKeyFailureText
 import org.jetbrains.compose.resources.stringResource
 
 /** Localized reason for a failed "Test connection" check (modal footer). */
@@ -15,6 +16,7 @@ fun connectionTestFailureText(problem: ConnectionTestProblem): String = when (pr
     is ConnectionTestProblem.HostKeyRejected ->
         problem.refusal?.let { stringResource(hostKeyRefusalText(it)) }
             ?: stringResource(Res.string.conn_test_err_host_key)
+    is ConnectionTestProblem.SecurityKey -> stringResource(securityKeyFailureText(problem.reason))
     ConnectionTestProblem.ConnectionFailed -> stringResource(Res.string.conn_test_err_connection)
     ConnectionTestProblem.IncompleteForm -> stringResource(Res.string.conn_test_incomplete)
     is ConnectionTestProblem.Jump -> jumpProblemText(problem.problem)

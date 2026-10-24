@@ -231,6 +231,9 @@ fun MobileDesignApp(
     val effectiveTerminalTheme =
         if (state.customTerminalTheme) state.terminalTheme
         else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
+    androidx.compose.runtime.LaunchedEffect(state.securityKeysEnabled) {
+        if (!state.securityKeysEnabled) deps.securityKeyPrompts?.cancelPending()
+    }
     CompositionLocalProvider(
         app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
         app.skerry.ui.app.LocalHostTrust provides hostTrust,
@@ -256,6 +259,9 @@ fun MobileDesignApp(
         // Update notice: More → About push screen (toggle + release link).
         LocalUpdates provides updates,
         // SSH key inspector/generator + certificate inspector — Vault tab: fingerprints, generation, cert parsing.
+        app.skerry.ui.app.LocalSecurityKeyService provides deps.securityKeyService,
+        app.skerry.ui.app.LocalSecurityKeyPrompts provides deps.securityKeyPrompts,
+        app.skerry.ui.app.LocalSecurityKeysEnabled provides state.securityKeysEnabled,
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
         LocalSecretFileReader provides deps.secretFiles,
@@ -300,6 +306,7 @@ fun MobileDesignApp(
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
                     onBeforeLock = {
+                        deps.securityKeyPrompts?.cancelPending()
                         tearDownForLock(
                             deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive, hostTrust,
                             jumpHosts = deps.jumpHosts,
@@ -320,7 +327,9 @@ fun MobileDesignApp(
                     // Connecting here accepts the account's dataKey, so biometrics wraps the final key.
                     offerSyncForm = deps.sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
                     offerBiometricForm = { inFlight, onEnable, onSkip -> MobileBiometricOfferScreen(inFlight, onEnable, onSkip) },
-                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked, ai, updates) }
+                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked, ai, updates)
+                    deps.securityKeyPrompts?.let { app.skerry.ui.securitykey.SecurityKeyPromptHost(it) }
+                }
             } else {
                 MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked, ai = ai, updates = updates)
             }
