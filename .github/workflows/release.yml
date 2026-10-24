@@ -113,7 +113,7 @@ jobs:
         run: python3 -m unittest discover -s tools/packaging -p 'test_*.py'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Package deb + rpm
         # Version comes through env, not interpolated into the shell (injection-safe).
@@ -161,7 +161,7 @@ jobs:
           java-version: "21"
 
       - name: Select native build Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -182,7 +182,7 @@ jobs:
         run: choco install wixtoolset -y --no-progress
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Package msi + portable zip
         # packagePortableZip reuses the app-image createDistributable already builds for the
@@ -234,7 +234,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Install native packaging tools
         run: |
@@ -296,7 +296,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         # The action's default list includes `tools`, which cmdline-tools 20 no longer carries,
         # and sdkmanager fails the step on it.
         with:
@@ -328,7 +328,7 @@ jobs:
           echo "SKERRY_KEYSTORE_FILE=$RUNNER_TEMP/skerry-release.jks" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Assemble release APK
         # versionCode comes from gradle.properties as it stands there (see the note in that file);
