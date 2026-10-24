@@ -239,6 +239,21 @@ def verify(bundle: Path, sources: dict, system: str, arch: str) -> None:
     audit(bundle / record["library"], system)
 
 
+def fido_options(prefix: Path, system: str) -> list[str]:
+    flags = [
+        "-DBUILD_SHARED_LIBS=ON", "-DBUILD_STATIC_LIBS=OFF", "-DBUILD_TESTS=OFF",
+        "-DBUILD_EXAMPLES=OFF", "-DBUILD_TOOLS=OFF", "-DBUILD_MANPAGES=OFF",
+        "-DNFC_LINUX=OFF", "-DCMAKE_SKIP_RPATH=ON", f"-DCMAKE_PREFIX_PATH={prefix}",
+    ]
+    if system == "windows":
+        # Portable CRT calls are intentional; retain upstream /sdl, /W4 and /WX.
+        flags += ["-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS"]
+        for dependency in ("CBOR", "CRYPTO", "ZLIB"):
+            flags += [f"-D{dependency}_INCLUDE_DIRS={prefix / 'include'}", f"-D{dependency}_LIBRARY_DIRS={prefix / 'lib'}"]
+        flags += [f"-DCBOR_LIBRARIES={prefix / 'lib' / 'cbor.lib'}", f"-DCRYPTO_LIBRARIES={prefix / 'lib' / 'libcrypto.lib'};ws2_32;crypt32;advapi32;user32;bcrypt", f"-DZLIB_LIBRARIES={prefix / 'lib' / 'zs.lib'}"]
+    return flags
+
+
 def prepare(output: Path, work: Path, sources: dict, system: str, arch: str) -> Path:
     bundle = output / "common" / "fido2" / f"{system}-{arch}"
     for directory in ("openssl", "libcbor", "zlib", "libfido2", "install"):
@@ -259,16 +274,7 @@ def prepare(output: Path, work: Path, sources: dict, system: str, arch: str) -> 
     openssl(trees["openssl"], work / "openssl", prefix, system, arch, env)
     cmake(trees["libcbor"], work / "libcbor", prefix, static + ["-DWITH_EXAMPLES=OFF", "-DWITH_TESTS=OFF"], system, arch, env)
     cmake(trees["zlib"], work / "zlib", prefix, ["-DZLIB_BUILD_SHARED=OFF", "-DZLIB_BUILD_STATIC=ON", "-DZLIB_BUILD_TESTING=OFF"], system, arch, env)
-    flags = [
-        "-DBUILD_SHARED_LIBS=ON", "-DBUILD_STATIC_LIBS=OFF", "-DBUILD_TESTS=OFF",
-        "-DBUILD_EXAMPLES=OFF", "-DBUILD_TOOLS=OFF", "-DBUILD_MANPAGES=OFF",
-        "-DNFC_LINUX=OFF", "-DCMAKE_SKIP_RPATH=ON", f"-DCMAKE_PREFIX_PATH={prefix}",
-    ]
-    if system == "windows":
-        for dependency in ("CBOR", "CRYPTO", "ZLIB"):
-            flags += [f"-D{dependency}_INCLUDE_DIRS={prefix / 'include'}", f"-D{dependency}_LIBRARY_DIRS={prefix / 'lib'}"]
-        flags += [f"-DCBOR_LIBRARIES={prefix / 'lib' / 'cbor.lib'}", f"-DCRYPTO_LIBRARIES={prefix / 'lib' / 'libcrypto.lib'};ws2_32;crypt32;advapi32;user32;bcrypt", f"-DZLIB_LIBRARIES={prefix / 'lib' / 'zs.lib'}"]
-    cmake(trees["libfido2"], work / "libfido2", prefix, flags, system, arch, env)
+    cmake(trees["libfido2"], work / "libfido2", prefix, fido_options(prefix, system), system, arch, env)
     filename = {"linux": "libfido2.so", "macos": "libfido2.dylib", "windows": "fido2.dll"}[system]
     native = prefix / ("bin" if system == "windows" else "lib") / filename
     # Staging is replaced only after a successful link and load; failed builds cannot

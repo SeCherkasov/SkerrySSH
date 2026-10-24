@@ -124,6 +124,19 @@ class NativeToolchainTest(unittest.TestCase):
         self.assertNotIn("-A", configure)
         self.assertNotIn("--parallel", execute.call_args_list[1].args)
 
+    def test_windows_cmake_supports_portable_crt_calls_without_disabling_warnings(self):
+        with patch.object(PACKAGING, "run", return_value="") as execute:
+            options = PACKAGING.fido_options(Path("install"), "windows")
+            PACKAGING.cmake(Path("source"), Path("build"), Path("install"), options, "windows", "x86_64", {})
+        configure = execute.call_args_list[0].args
+        self.assertIn("-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS", configure)
+        self.assertFalse(any("/WX-" in flag or "/w " in flag for flag in configure))
+        for system in ("linux", "macos"):
+            self.assertFalse(any("_CRT_SECURE_NO_WARNINGS" in flag for flag in PACKAGING.fido_options(Path("install"), system)))
+        with patch.object(PACKAGING, "run", return_value="") as execute:
+            PACKAGING.cmake(Path("source"), Path("build"), Path("install"), [], "windows", "x86_64", {})
+        self.assertFalse(any("_CRT_SECURE_NO_WARNINGS" in flag for flag in execute.call_args_list[0].args))
+
     def test_windows_openssl_keeps_the_selected_native_perl(self):
         native_perl = "C:/Strawberry/perl/bin/perl.exe"
         with tempfile.TemporaryDirectory() as temporary, \
