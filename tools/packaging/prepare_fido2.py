@@ -76,6 +76,14 @@ def extract(archive: Path, source: dict, destination: Path) -> Path:
 
 
 def run(*args: str, env: dict | None = None, cwd: Path | None = None) -> str:
+    # Windows CreateProcess does not use env['PATH'] to locate the executable.
+    # Resolve build tools explicitly in the selected developer environment.
+    if os.name == "nt" and env is not None:
+        search = next((value for name, value in env.items() if name.upper() == "PATH"), "")
+        executable = shutil.which(args[0], path=search)
+        if executable is None:
+            raise FileNotFoundError(f"Build tool not found in the selected environment: {args[0]}")
+        args = (executable, *args[1:])
     print("+", " ".join(map(str, args)), flush=True)
     return subprocess.check_output(args, env=env, cwd=cwd, text=True, stderr=subprocess.STDOUT)
 

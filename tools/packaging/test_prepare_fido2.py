@@ -56,6 +56,25 @@ class SourceVerificationTest(unittest.TestCase):
 
 
 class NativeToolchainTest(unittest.TestCase):
+    def test_windows_tools_resolve_from_the_supplied_developer_path(self):
+        compiler = "C:/Visual Studio/VC/bin/nmake.exe"
+        environment = {"Path": "C:/Visual Studio/VC/bin", "PERL": "C:/Strawberry/perl.exe"}
+        with patch.object(PACKAGING.os, "name", "nt"), \
+                patch.object(PACKAGING.shutil, "which", return_value=compiler) as locate, \
+                patch.object(PACKAGING.subprocess, "check_output", return_value="built") as execute:
+            self.assertEqual("built", PACKAGING.run("nmake", "/NOLOGO", "build_libs", env=environment))
+        locate.assert_called_once_with("nmake", path=environment["Path"])
+        self.assertEqual((compiler, "/NOLOGO", "build_libs"), execute.call_args.args[0])
+        self.assertEqual(environment, execute.call_args.kwargs["env"])
+
+    def test_windows_missing_developer_tool_does_not_fall_back_to_parent_path(self):
+        with patch.object(PACKAGING.os, "name", "nt"), \
+                patch.object(PACKAGING.shutil, "which", return_value=None), \
+                patch.object(PACKAGING.subprocess, "check_output", return_value="unexpected") as execute:
+            with self.assertRaises(FileNotFoundError):
+                PACKAGING.run("nmake", env={"PATH": "C:/empty"})
+        execute.assert_not_called()
+
     def test_linux_system_loaders_are_allowed(self):
         for loader in ("ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1"):
             with self.subTest(loader=loader):
