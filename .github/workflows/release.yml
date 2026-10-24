@@ -171,6 +171,7 @@ jobs:
           $perl = 'C:\Strawberry\perl\bin'
           if (-not (Test-Path "$perl\perl.exe")) { throw 'Strawberry Perl is required for native packaging' }
           $perl | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "SKERRY_FIDO_PERL=$perl\perl.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Test pinned native packaging inputs
         run: python -m unittest discover -s tools/packaging -p "test_*.py"

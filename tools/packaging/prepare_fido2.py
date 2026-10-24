@@ -103,7 +103,14 @@ def openssl(source: Path, build: Path, prefix: Path, system: str, arch: str, env
     flags = ["no-shared", "no-module", "no-dso", "no-autoload-config", "no-engine", "no-pinshared", "no-tests", "no-apps", "no-docs", "no-asm"]
     if system != "windows":
         flags += ["-fPIC"]
-    print(run("perl", str(source / "Configure"), targets[system, arch], *flags,
+    # Git Bash and VsDevCmd can put MSYS Perl first on PATH. Keep the native
+    # interpreter selected by packaging for Configure and its generated Makefile.
+    perl = (env.get("SKERRY_FIDO_PERL") or shutil.which("perl")) if system == "windows" else "perl"
+    if not perl:
+        raise RuntimeError("Native Windows Perl is required for the OpenSSL build")
+    if system == "windows":
+        env = dict(env, PERL=perl)
+    print(run(perl, str(source / "Configure"), targets[system, arch], *flags,
               f"--prefix={prefix}", "--libdir=lib", env=env, cwd=build))
     if system == "windows":
         print(run("nmake", "/NOLOGO", "build_libs", env=env, cwd=build))

@@ -105,6 +105,20 @@ class NativeToolchainTest(unittest.TestCase):
         self.assertNotIn("-A", configure)
         self.assertNotIn("--parallel", execute.call_args_list[1].args)
 
+    def test_windows_openssl_keeps_the_selected_native_perl(self):
+        native_perl = "C:/Strawberry/perl/bin/perl.exe"
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(PACKAGING.shutil, "which", return_value="C:/msys64/usr/bin/perl.exe"), \
+                patch.object(PACKAGING, "run", return_value="") as execute:
+            PACKAGING.openssl(Path("source"), Path(temporary) / "build", Path("install"),
+                              "windows", "x86_64", {"PATH": "C:/msys64/usr/bin",
+                                                     "SKERRY_FIDO_PERL": native_perl, "PERL": "perl"})
+        self.assertEqual(native_perl, execute.call_args_list[0].args[0],
+                         "VsDevCmd must not replace the selected Windows Perl with MSYS Perl")
+        for call in execute.call_args_list:
+            self.assertEqual(native_perl, call.kwargs["env"]["PERL"],
+                             "OpenSSL's generated Makefile must also use the selected native Perl")
+
 
 if __name__ == "__main__":
     unittest.main()
