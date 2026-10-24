@@ -129,7 +129,7 @@ class NativeToolchainTest(unittest.TestCase):
             options = PACKAGING.fido_options(Path("install"), "windows")
             PACKAGING.cmake(Path("source"), Path("build"), Path("install"), options, "windows", "x86_64", {})
         configure = execute.call_args_list[0].args
-        self.assertIn("-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS", configure)
+        self.assertIn("-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS /DOPENSSL_API_COMPAT=0x10100000L", configure)
         self.assertFalse(any("/WX-" in flag or "/w " in flag for flag in configure))
         for system in ("linux", "macos"):
             self.assertFalse(any("_CRT_SECURE_NO_WARNINGS" in flag for flag in PACKAGING.fido_options(Path("install"), system)))

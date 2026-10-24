@@ -246,8 +246,8 @@ def fido_options(prefix: Path, system: str) -> list[str]:
         "-DNFC_LINUX=OFF", "-DCMAKE_SKIP_RPATH=ON", f"-DCMAKE_PREFIX_PATH={prefix}",
     ]
     if system == "windows":
-        # Portable CRT calls are intentional; retain upstream /sdl, /W4 and /WX.
-        flags += ["-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS"]
+        # Match upstream Unix OpenSSL API compatibility and retain /sdl, /W4 and /WX.
+        flags += ["-DCMAKE_C_FLAGS_INIT=/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_WARNINGS /DOPENSSL_API_COMPAT=0x10100000L"]
         for dependency in ("CBOR", "CRYPTO", "ZLIB"):
             flags += [f"-D{dependency}_INCLUDE_DIRS={prefix / 'include'}", f"-D{dependency}_LIBRARY_DIRS={prefix / 'lib'}"]
         flags += [f"-DCBOR_LIBRARIES={prefix / 'lib' / 'cbor.lib'}", f"-DCRYPTO_LIBRARIES={prefix / 'lib' / 'libcrypto.lib'};ws2_32;crypt32;advapi32;user32;bcrypt", f"-DZLIB_LIBRARIES={prefix / 'lib' / 'zs.lib'}"]
