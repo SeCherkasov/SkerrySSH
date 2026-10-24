@@ -1,5 +1,5 @@
 [versions]
-agp = "9.1.1"
+agp = "9.4.1"
 # compileSdk 37 pairs with build-tools 37.0.0; AGP 9.1 is the minimum that compiles against API 37.
 android-buildTools = "37.0.0"
 android-compileSdk = "37"
@@ -12,19 +12,19 @@ androidx-lifecycle = "2.11.0"
 # Android biometrics: BiometricPrompt + CryptoObject (Keystore-fenced key)
 androidx-biometric = "1.1.0"
 # FragmentActivity — an androidx.biometric requirement for the prompt host
-androidx-fragment = "1.8.5"
+androidx-fragment = "1.9.1"
 # Last CMP line with a stable material3 (1.9.0). Newer CMP only pairs with -alpha material3.
 composeMultiplatform = "1.9.3"
-kotlin = "2.4.10"
+kotlin = "2.4.21"
 material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
-kotlinx-serialization = "1.11.0"
-ktor = "3.5.2"
-logback = "1.6.3"
+kotlinx-serialization = "1.12.0"
+ktor = "3.6.0"
+logback = "1.6.5"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (the version pinned on the
 # classpath, see below); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
-slf4j = "2.0.18"
+slf4j = "2.0.20"
 sshj = "0.41.2"
 # jSerialComm: native access to serial ports on desktop (Linux/Windows/macOS).
 # desktopMain only — on Android serial goes over USB-OTG as a separate implementation (later).
@@ -35,12 +35,12 @@ usbSerial = "3.11.0"
 # pty4j: real pseudo-terminal for the local-shell transport (LocalShell desktop actual). Bundles
 # native helpers for Linux/macOS/Windows and depends on JNA (compatible with jna 5.19.1 above).
 # desktopMain only — Android uses a native PTY helper.
-pty4j = "0.13.12"
+pty4j = "0.14.0"
 # full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
 # added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
-bouncycastle = "1.85"
+bouncycastle = "1.86"
 # embedded SSH server for SshjTransport tests only; 3.x is still in milestone
-sshd = "2.19.0"
+sshd = "2.20.0"
 # multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
 ionspin-libsodium = "0.9.5"
 # goterl resource-loader: ionspin's transitive pin (2.0.2) feeds percent-encoded URL paths into
@@ -48,14 +48,14 @@ ionspin-libsodium = "0.9.5"
 # fixed it (URL→URI decoding); ionspin 0.9.5 still pins 2.0.2, so we override here. Desktop only.
 goterl-resource-loader = "2.1.0"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
-okio = "3.18.1"
+okio = "3.18.2"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
 # Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
-exposed = "1.5.0"
+exposed = "1.6.0"
 sqlite-jdbc = "3.53.4.0"
-postgresql = "42.7.13"
+postgresql = "42.7.14"
 hikari = "7.1.0"
 # Nimbus SRP6a — an audited SRP-6a implementation, used by the server and the JVM sync client
 nimbus-srp = "2.1.0"
@@ -89,7 +89,7 @@ camerax = "1.4.1"
 # still at the same pair. Its Linux live run is done — on 1.10.1, on a Zen 3, a generation loads and
 # streams — so on that version the hold waits only on the Windows one. Both halves are owed again per
 # version, which is why 1.10.1 is left out of the dependabot ignore list rather than added to it.
-llamatik = "1.9.0"
+llamatik = "1.10.1"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
@@ -110,8 +110,8 @@ detekt = "1.23.8"
 composeHotReload = "1.1.1"
 
 [libraries]
-yubikit-android = { module = "com.yubico.yubikit:android", version = "2.8.2" }
-yubikit-fido = { module = "com.yubico.yubikit:fido", version = "2.8.2" }
+yubikit-android = { module = "com.yubico.yubikit:android", version = "3.2.1" }
+yubikit-fido = { module = "com.yubico.yubikit:fido", version = "3.2.1" }
 jna-core = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
