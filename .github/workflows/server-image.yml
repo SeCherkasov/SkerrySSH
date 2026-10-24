@@ -2,9 +2,9 @@
 # client releases (tags v*):
 #   • Push to main / PR touching the server: build the image for both architectures and
 #     smoke-test it (the container must report healthy) — nothing is published.
-#   • Tag server-v* (e.g. server-v0.1.2): the same build + smoke test, then both
-#     architectures are pushed by digest and a multi-arch manifest is published to
-#     Docker Hub as <version>, <major.minor> and latest.
+#   • Tag server-v*: build and smoke-test only, so a draft can be reviewed safely.
+#   • Publish a server-v* GitHub Release: build + smoke test its exact tag, then push
+#     both architectures and publish <version>, <major.minor> and latest to Docker Hub.
 # Publishing needs the DOCKERHUB_USERNAME + DOCKERHUB_TOKEN secrets (a Docker Hub access
 # token with Read & Write scope). Multi-arch is built on native runners — no QEMU: a
 # Gradle build under emulation is unreasonably slow.
@@ -35,6 +35,8 @@ on:
       - "settings.gradle.kts"
       - ".dockerignore"
       - ".github/workflows/server-image.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -46,9 +48,11 @@ concurrency:
 
 env:
   IMAGE: secherkasov/skerry-sync
+  SERVER_TAG: ${{ github.event.release.tag_name || github.ref_name }}
 
 jobs:
   build:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'server-v')
     strategy:
       matrix:
         include:
@@ -61,6 +65,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -91,14 +97,14 @@ jobs:
           exit 1
 
       - name: Log in to Docker Hub
-        if: startsWith(github.ref, 'refs/tags/server-v')
+        if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: OCI labels
-        if: startsWith(github.ref, 'refs/tags/server-v')
+        if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
         id: meta
         uses: docker/metadata-action@v6
         with:
@@ -107,7 +113,7 @@ jobs:
           # defaults come from the GitHub repo (SkerrySSH, GPL-3.0) — the image is the
           # AGPL-licensed sync server, not the client.
           tags: |
-            type=match,pattern=server-v(.*),group=1
+            type=match,pattern=server-v(.*),group=1,value=${{ env.SERVER_TAG }}
           labels: |
             org.opencontainers.image.title=Skerry Sync
             org.opencontainers.image.description=Self-hosted zero-knowledge E2E sync server for the Skerry SSH client
@@ -116,7 +122,7 @@ jobs:
       - name: Push by digest
         # Re-runs the build with the buildx cache warm from the smoke build, so this is
         # just a push. Tags are applied to the merged manifest in the publish job.
-        if: startsWith(github.ref, 'refs/tags/server-v')
+        if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
         id: push
         uses: docker/build-push-action@v7
         with:
@@ -127,14 +133,14 @@ jobs:
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
-        if: startsWith(github.ref, 'refs/tags/server-v')
+        if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
         run: |
           mkdir -p "$RUNNER_TEMP/digests"
           digest="${{ steps.push.outputs.digest }}"
           touch "$RUNNER_TEMP/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: startsWith(github.ref, 'refs/tags/server-v')
+        if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
         uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
@@ -142,10 +148,10 @@ jobs:
           if-no-files-found: error
 
   # Merges the per-arch digests into one multi-arch manifest and tags it. Runs only on a
-  # server-v* tag; on PRs/main pushes the workflow is validation-only.
+  # published server-v* release; tag/PR/main pushes are validation-only.
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/server-v')
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'server-v')
     runs-on: ubuntu-latest
     steps:
       - name: Download digests
@@ -164,7 +170,7 @@ jobs:
       - name: Create and push the multi-arch manifest
         # server-v0.1.2 → tags 0.1.2, 0.1, latest
         run: |
-          version="${GITHUB_REF_NAME#server-v}"
+          version="${SERVER_TAG#server-v}"
           minor="${version%.*}"
           cd digests
           docker buildx imagetools create \
@@ -172,4 +178,4 @@ jobs:
             $(printf "$IMAGE@sha256:%s " *)
 
       - name: Inspect the published manifest
-        run: docker buildx imagetools inspect "$IMAGE:${GITHUB_REF_NAME#server-v}"
+        run: docker buildx imagetools inspect "$IMAGE:${SERVER_TAG#server-v}"

@@ -26,6 +26,8 @@ Multi-arch images (amd64 + arm64) are published to Docker Hub as
 [`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — tags:
 exact `<version>`, `<major.minor>`, `latest`. The server is released separately from the clients — its own
 `server-v*` tag and its own workflow. Its version numbers have matched the client release so far.
+Publishing the matching GitHub Release starts the image build, health checks and Docker Hub publication.
+Pushing the tag only validates the build; a draft release leaves registry tags unchanged.
 
 ```bash
 docker run -d --name skerry-sync \
