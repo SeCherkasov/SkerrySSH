@@ -26,8 +26,6 @@ Vaultwarden). Сервер хранит **только шифротекст** �
 [`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — теги:
 точная `<версия>`, `<major.minor>`, `latest`. Сервер релизится отдельно от клиентов — своим тегом
 `server-v*` и своим workflow. Номера версий до сих пор совпадали с клиентским релизом.
-Публикация соответствующего GitHub Release запускает сборку образов, проверку работоспособности
-и публикацию в Docker Hub. Push тега только проверяет сборку; драфт не меняет теги в реестре.
 
 ```bash
 docker run -d --name skerry-sync \
