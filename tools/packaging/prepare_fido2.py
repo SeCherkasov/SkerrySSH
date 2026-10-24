@@ -84,12 +84,14 @@ def windows_environment(arch: str) -> dict:
     installer = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
     installation = run(str(installer), "-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath").strip()
     script = Path(installation) / "Common7/Tools/VsDevCmd.bat"
-    if not script.is_file() or any(char in str(script) for char in '\"&|<>'):
+    if not script.is_file() or any(char in str(script) for char in '\"&|<>^%!\r\n'):
         raise RuntimeError("Trusted Visual Studio development environment not found")
     architecture = "arm64" if arch == "aarch64" else "x64"
     # Only the validated Visual Studio installation path enters cmd.exe syntax.
     command = f'call "{script}" -no_logo -host_arch=x64 -arch={architecture} && set'
-    result = run("cmd.exe", "/d", "/s", "/c", command)
+    # cmd.exe parses shell syntax, not C argv. Passing a sequence would escape
+    # the embedded quotes as \" and break Visual Studio paths containing spaces.
+    result = subprocess.check_output(f'cmd.exe /d /s /c "{command}"', text=True, stderr=subprocess.STDOUT)
     return dict(line.split("=", 1) for line in result.splitlines() if "=" in line and not line.startswith("="))
 
 
@@ -118,14 +120,17 @@ def cmake(source: Path, build: Path, prefix: Path, flags: list[str], system: str
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
     ]
     if system == "windows":
-        generator = ["-G", "Visual Studio 17 2022", "-A", "ARM64" if arch == "aarch64" else "x64"]
+        # VsDevCmd already selected the compiler and target architecture. NMake
+        # uses that environment without requiring a particular Visual Studio IDE.
+        generator = ["-G", "NMake Makefiles"]
         common += ["-DCMAKE_C_FLAGS_RELEASE=/O2 /MT /DNDEBUG"]
     else:
         generator = ["-G", "Unix Makefiles"]
     if system == "macos":
         common += ["-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"]
     print(run("cmake", "-S", str(source), "-B", str(build), *generator, *common, *flags, env=env))
-    print(run("cmake", "--build", str(build), "--config", "Release", "--parallel", "2", env=env))
+    parallel = [] if system == "windows" else ["--parallel", "2"]
+    print(run("cmake", "--build", str(build), "--config", "Release", *parallel, env=env))
     print(run("cmake", "--install", str(build), "--config", "Release", env=env))
 
 
@@ -168,7 +173,8 @@ def audit(library: Path, system: str) -> None:
     if system == "linux":
         dynamic = run("readelf", "-d", str(library))
         dependencies = re.findall(r"Shared library: \[([^]]+)\]", dynamic)
-        allowed = {"libudev.so.1", "libc.so.6", "libm.so.6", "libpthread.so.0", "librt.so.1", "libdl.so.2"}
+        allowed = {"libudev.so.1", "libc.so.6", "libm.so.6", "libpthread.so.0", "librt.so.1", "libdl.so.2",
+                   "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1"}
         if set(dependencies) - allowed:
             raise RuntimeError(f"Unbundled native dependencies: {dependencies}")
         if "(RPATH)" in dynamic or "(RUNPATH)" in dynamic:
