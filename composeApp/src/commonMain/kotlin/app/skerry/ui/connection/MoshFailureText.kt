@@ -27,6 +27,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun connectionErrorText(error: ConnectionUiState.Error): String {
+    error.securityKeyFailure?.let { return stringResource(app.skerry.ui.securitykey.securityKeyFailureText(it)) }
     error.hostKeyRefusal?.let { return hostKeyRefusalLine(it, error.hostKeyRefusalOnHop) }
     error.serialProblem?.let { return serialProblemText(it, error.serialDetail) }
     error.jumpShellRefusal?.let { return stringResource(jumpShellRefusalText(it)) }

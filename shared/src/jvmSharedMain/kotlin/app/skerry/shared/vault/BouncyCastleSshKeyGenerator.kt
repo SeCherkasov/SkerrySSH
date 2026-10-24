@@ -1,6 +1,8 @@
 package app.skerry.shared.vault
 
 import app.skerry.shared.ssh.ensureCryptoProvider
+import app.skerry.shared.securitykey.SecurityKeyMetadata
+import com.hierynomus.sshj.userauth.fido.SecurityKeyPrivateKey
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
@@ -62,19 +64,29 @@ class BouncyCastleSshKeyGenerator(
 
     override fun inspect(privateKeyPem: String, passphrase: String?): SshPublicKeyInfo? = runCatching {
         // sshj runs the key's own bcrypt count unbounded and uninterruptibly: refuse it before parsing.
-        if (!kdfCostAcceptable(privateKeyPem)) return null
+        if (privateKeyPem.length > 262144 || !kdfCostAcceptable(privateKeyPem)) return null
         // sshj loadKeys goes through the JCE "BC" provider, stripped down on Android, which breaks
         // PEM parsing. Register the full provider before parsing (idempotent).
+        app.skerry.shared.securitykey.validateSecurityKeyEnvelope(privateKeyPem)
         ensureCryptoProvider()
         val pwdf = passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
         // SSHClient is Closeable; loadKeys opens no connection but resources are freed via use.
-        val publicKey = SSHClient().use { it.loadKeys(privateKeyPem, null, pwdf).public }
+        val keys = SSHClient().use { it.loadKeys(privateKeyPem, null, pwdf) }
+        val publicKey = keys.public
+        val hardware = keys.private as? SecurityKeyPrivateKey
+        hardware?.let {
+            app.skerry.shared.securitykey.SecurityKeySignRequest(
+                app.skerry.shared.securitykey.SecurityKeyAlgorithm.entries.first { algorithm -> algorithm.wireName == it.keyTypeName },
+                it.application, it.keyHandle, ByteArray(32), it.flags.toInt() and 5,
+            )
+        }
         val publicBlob = Buffer.PlainBuffer().putPublicKey(publicKey).compactData
         SshPublicKeyInfo(
             // The PEM comment isn't recoverable; line has no trailing comment.
             publicKeyOpenSsh = authorizedKeysLine(KeyType.fromKey(publicKey).toString(), publicBlob, comment = ""),
             fingerprintSha256 = fingerprint(publicBlob),
             keyTypeLabel = displayLabel(publicKey),
+            securityKey = hardware?.let { SecurityKeyMetadata(it.application, it.flags.toInt() and 0x20 != 0, it.flags.toInt() and 5) },
         )
     }.getOrNull()
 

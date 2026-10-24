@@ -7,6 +7,7 @@ import app.skerry.ui.generated.resources.conn_container_err_command
 import app.skerry.ui.generated.resources.conn_container_err_connection
 import app.skerry.ui.generated.resources.conn_container_err_host_key
 import app.skerry.ui.generated.resources.conn_container_incomplete
+import app.skerry.ui.securitykey.securityKeyFailureText
 import org.jetbrains.compose.resources.stringResource
 
 /** Localized reason a container listing failed (shown under the container field). */
@@ -16,6 +17,7 @@ fun containerBrowseFailureText(problem: ContainerBrowseProblem): String = when (
     is ContainerBrowseProblem.HostKeyRejected ->
         problem.refusal?.let { hostKeyRefusalLine(it, hop = false) }
             ?: stringResource(Res.string.conn_container_err_host_key)
+    is ContainerBrowseProblem.SecurityKey -> stringResource(securityKeyFailureText(problem.reason))
     ContainerBrowseProblem.ConnectionFailed -> stringResource(Res.string.conn_container_err_connection)
     ContainerBrowseProblem.IncompleteForm -> stringResource(Res.string.conn_container_incomplete)
     ContainerBrowseProblem.CommandFailed -> stringResource(Res.string.conn_container_err_command)

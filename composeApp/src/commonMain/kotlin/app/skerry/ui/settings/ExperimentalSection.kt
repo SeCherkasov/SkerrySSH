@@ -9,6 +9,8 @@ import app.skerry.shared.vault.UnlockFactor
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.design.HLine
+import app.skerry.ui.generated.resources.settings_experimental_security_keys
+import app.skerry.ui.generated.resources.settings_experimental_security_keys_desc
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_experimental_jump_shell
 import app.skerry.ui.generated.resources.settings_experimental_jump_shell_desc
@@ -28,6 +30,13 @@ internal fun ExperimentalSection(state: DesktopDesignState, controller: VaultGat
             stringResource(Res.string.settings_experimental_jump_shell_desc),
             on = state.settings.jumpViaShellOffered,
             onToggle = state.settings::toggleJumpViaShellOffered,
+        )
+        HLine()
+        SettingToggleRow(
+            stringResource(Res.string.settings_experimental_security_keys),
+            stringResource(Res.string.settings_experimental_security_keys_desc),
+            on = state.settings.securityKeysEnabled,
+            onToggle = state.settings::toggleSecurityKeysEnabled,
         )
         // Only where the vault's fast unlock is the OS keyring (desktop); the switch itself turns
         // nothing on — it offers the row in Security. Turning it off drops a trust already given:

@@ -111,6 +111,7 @@ class MainActivity : FragmentActivity() {
     // Prompt controller for keyboard-interactive challenges, created with the dependency graph and
     // read back when the UI is composed.
     private var keyboardInteractive: KeyboardInteractivePromptController? = null
+    private val securityKeysEnabled = java.util.concurrent.atomic.AtomicBoolean(false)
 
     // Prompt controller for host-key/certificate trust, alongside the one above and read back the
     // same way when the UI is composed.
@@ -273,6 +274,11 @@ class MainActivity : FragmentActivity() {
                     onAllowServerClipboardWriteChange = { writeFlag(dir, FLAG_CLIPBOARD_WRITE, it) },
                     initialOfferSudoPassword = FLAG_OFFER_SUDO_PASSWORD.read(dir),
                     onOfferSudoPasswordChange = { writeFlag(dir, FLAG_OFFER_SUDO_PASSWORD, it) },
+                    initialSecurityKeysEnabled = securityKeysEnabled.get(),
+                    onSecurityKeysEnabledChange = {
+                        securityKeysEnabled.set(it)
+                        writeFlag(dir, FLAG_SECURITY_KEYS, it)
+                    },
                     initialJumpViaShellOffered = FLAG_JUMP_VIA_SHELL_OFFERED.read(dir),
                     onJumpViaShellOfferedChange = { writeFlag(dir, FLAG_JUMP_VIA_SHELL_OFFERED, it) },
                     initialReportTeamSessions = FLAG_REPORT_TEAM_SESSIONS.read(dir),
@@ -558,6 +564,9 @@ class MainActivity : FragmentActivity() {
         // Keyboard-interactive challenges (2FA codes) reach the UI through this controller; shared by
         // every transport that authenticates, so a tunnel or container probe prompts like a session.
         val keyboardInteractive = KeyboardInteractivePromptController().also { this.keyboardInteractive = it }
+        securityKeysEnabled.set(FLAG_SECURITY_KEYS.read(dir))
+        val securityKeyPrompts = app.skerry.ui.securitykey.SecurityKeyPromptController()
+        val securityKeys = app.skerry.shared.securitykey.AndroidSecurityKeyService(this)
         // Desktop parity: an unrecorded or changed host key/certificate is put to the user from
         // inside the handshake, so the verifiers take the blocking view of the same controller.
         val hostTrust = app.skerry.ui.trust.HostTrustPromptController().also { this.hostTrust = it }
@@ -587,6 +596,9 @@ class MainActivity : FragmentActivity() {
             ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
+            securityKeys = securityKeys,
+            securityKeyPrompt = securityKeyPrompts,
+            securityKeysEnabled = { securityKeysEnabled.get() && vault.isUnlocked },
         )
         // One login per jump host for every session typed through its shell; the lock closes idle ones.
         val jumpHosts = app.skerry.shared.ssh.SharedConnectionPool(sshTransport)
@@ -634,6 +646,9 @@ class MainActivity : FragmentActivity() {
             ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
+            securityKeys = securityKeys,
+            securityKeyPrompt = securityKeyPrompts,
+            securityKeysEnabled = { securityKeysEnabled.get() && vault.isUnlocked },
         )
         val tunnelTransport = SshjTransport(
             HostCertificateVerifier(
@@ -642,6 +657,9 @@ class MainActivity : FragmentActivity() {
             ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
+            securityKeys = securityKeys,
+            securityKeyPrompt = securityKeyPrompts,
+            securityKeysEnabled = { securityKeysEnabled.get() && vault.isUnlocked },
         )
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
@@ -848,6 +866,8 @@ class MainActivity : FragmentActivity() {
             trustedCas = trustedCas,
             // SSH key inspector/generator (BouncyCastle, shared JVM source set): fingerprints/generation in the Vault tab.
             keyGenerator = BouncyCastleSshKeyGenerator(),
+            securityKeyService = securityKeys,
+            securityKeyPrompts = securityKeyPrompts,
             // SSH certificate inspector (sshj): Vault → Certificates parses *-cert.pub.
             certificateInspector = certificateInspector,
             secretFiles = secretFiles,

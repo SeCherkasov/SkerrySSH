@@ -24,6 +24,7 @@ on:
       - "settings.gradle.kts"
       - "**/build.gradle.kts"
       - "composeApp/appimage/**"
+      - "tools/packaging/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -106,7 +107,10 @@ jobs:
 
       - name: Install jpackage tooling (deb/rpm)
         # jpackage needs the rpm package for .rpm; fakeroot is needed for .deb.
-        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
+        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot build-essential cmake pkg-config libudev-dev binutils perl
+
+      - name: Test pinned native packaging inputs
+        run: python3 -m unittest discover -s tools/packaging -p 'test_*.py'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
@@ -155,6 +159,21 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Select native build Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Select Windows Perl for the static OpenSSL build
+        shell: pwsh
+        run: |
+          $perl = 'C:\Strawberry\perl\bin'
+          if (-not (Test-Path "$perl\perl.exe")) { throw 'Strawberry Perl is required for native packaging' }
+          $perl | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Test pinned native packaging inputs
+        run: python -m unittest discover -s tools/packaging -p "test_*.py"
 
       - name: Install WiX Toolset (jpackage MSI)
         # jpackage needs WiX 3.x (candle.exe/light.exe) for .msi; recent
@@ -215,6 +234,15 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+
+      - name: Install native packaging tools
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+          command -v pkg-config >/dev/null || brew install pkg-config
+          command -v perl >/dev/null
+
+      - name: Test pinned native packaging inputs
+        run: python3 -m unittest discover -s tools/packaging -p 'test_*.py'
 
       - name: Package dmg
         # Unsigned/un-notarized on purpose (no Apple Developer account yet) — Gatekeeper

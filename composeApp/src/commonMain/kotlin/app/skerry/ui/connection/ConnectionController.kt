@@ -82,6 +82,7 @@ sealed interface ConnectionUiState {
         val hostKeyRefusal: HostKeyRefusal? = null,
         val hostKeyRefusalOnHop: Boolean = false,
         val jumpShellRefusal: JumpShellRefusedException.Reason? = null,
+        val securityKeyFailure: app.skerry.shared.securitykey.SecurityKeyFailure? = null,
     ) : ConnectionUiState
 
     /**
@@ -348,6 +349,7 @@ class ConnectionController(
                         hostKeyRefusal = (e as? SshHostKeyRejectedException)?.refusal,
                         hostKeyRefusalOnHop = (e as? SshHostKeyRejectedException)?.hop == true,
                         jumpShellRefusal = (e as? JumpShellRefusedException)?.reason,
+                        securityKeyFailure = securityKeyFailureReason(e),
                     )
                 }
             }
@@ -938,3 +940,8 @@ class ConnectionController(
         }
     }
 }
+
+/** SSH libraries may wrap local hardware errors; never derive a reason from remote message text. */
+internal fun securityKeyFailureReason(error: Throwable): app.skerry.shared.securitykey.SecurityKeyFailure? =
+    generateSequence(error) { it.cause }.take(8)
+        .filterIsInstance<app.skerry.shared.securitykey.SecurityKeyException>().firstOrNull()?.reason

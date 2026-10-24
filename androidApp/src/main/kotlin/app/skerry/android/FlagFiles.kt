@@ -37,6 +37,9 @@ internal val FLAG_OFFER_SUDO_PASSWORD = FlagFile("terminal_sudo_password", defau
 /** Experimental "type ssh on the jump host" choice in the connection form: `experimental_jump_shell`, default off. */
 internal val FLAG_JUMP_VIA_SHELL_OFFERED = FlagFile("experimental_jump_shell", default = false)
 
+/** Hardware-backed SSH authentication is opt-in on each device. */
+internal val FLAG_SECURITY_KEYS = FlagFile("experimental_security_keys", default = false)
+
 /** Reporting sessions on team-shared hosts: `teams_report_sessions`, default on. */
 internal val FLAG_REPORT_TEAM_SESSIONS = FlagFile("teams_report_sessions", default = true)
 

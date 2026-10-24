@@ -59,6 +59,9 @@ data class AppDependencies(
     val trustedCas: TrustedCaController? = null,
     /** SSH key generator/inspector (Vault section); `null` on a platform without key crypto. */
     val keyGenerator: SshKeyGenerator? = null,
+    /** Hardware SSH keys; unavailable backends report a typed error only when invoked. */
+    val securityKeyService: app.skerry.shared.securitykey.SecurityKeyService? = null,
+    val securityKeyPrompts: app.skerry.ui.securitykey.SecurityKeyPromptController? = null,
     /** SSH certificate inspector (Vault → Certificates); `null` on a platform without cert parsing. */
     val certificateInspector: SshCertificateInspector? = null,
     /**

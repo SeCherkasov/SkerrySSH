@@ -8,11 +8,11 @@ import app.skerry.shared.container.ContainerEntry
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.container.containerListCommandLine
 import app.skerry.shared.container.parseContainerList
+import app.skerry.shared.securitykey.SecurityKeyFailure
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
-import app.skerry.shared.ssh.SshConnectionException
 import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
@@ -38,6 +38,9 @@ sealed interface ContainerBrowseProblem {
     data class HostKeyRejected(val refusal: HostKeyRefusal? = null) : ContainerBrowseProblem
 
     data object ConnectionFailed : ContainerBrowseProblem
+
+    /** Local authenticator failure; shown with recovery advice instead of a remote auth error. */
+    data class SecurityKey(val reason: SecurityKeyFailure) : ContainerBrowseProblem
 
     data object IncompleteForm : ContainerBrowseProblem
 
@@ -98,17 +101,18 @@ suspend fun listContainers(
             }
         }
     }
-} catch (e: SshAuthenticationException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.AuthenticationFailed)
-} catch (e: SshHostKeyRejectedException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.HostKeyRejected(e.refusal))
-} catch (e: SshConnectionException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.ConnectionFailed)
 } catch (e: CancellationException) {
     throw e
+} catch (e: SshAuthenticationException) {
+    containerBrowseFailure(e, ContainerBrowseProblem.AuthenticationFailed)
+} catch (e: SshHostKeyRejectedException) {
+    containerBrowseFailure(e, ContainerBrowseProblem.HostKeyRejected(e.refusal))
 } catch (e: Exception) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.ConnectionFailed)
+    containerBrowseFailure(e, ContainerBrowseProblem.ConnectionFailed)
 }
+
+private fun containerBrowseFailure(error: Exception, fallback: ContainerBrowseProblem): ContainerBrowseStatus.Failure =
+    ContainerBrowseStatus.Failure(securityKeyFailureReason(error)?.let { ContainerBrowseProblem.SecurityKey(it) } ?: fallback)
 
 /**
  * Compose wrapper over [listContainers]: holds [status] as state and runs the probe on [scope].

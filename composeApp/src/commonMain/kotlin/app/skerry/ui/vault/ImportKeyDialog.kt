@@ -20,6 +20,8 @@ import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.design.Txt
+import app.skerry.ui.app.LocalSecurityKeysEnabled
+import app.skerry.ui.generated.resources.security_key_disabled
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_cert_key_mismatch
@@ -82,9 +84,15 @@ internal fun ImportKeyDialog(
     val certFor = certInfo?.keyFingerprintSha256
     val certMismatch = keyInfo != null && certFor != null && certFor != keyInfo.fingerprintSha256
     val certOk = if (cert.isEmpty()) mode == ImportKeyMode.KEY else certInfo != null && !certMismatch
-    val valid = name.isNotBlank() && keyInfo != null && certOk
+    val securityKeysEnabled = LocalSecurityKeysEnabled.current
+    val hardwareDisabled = keyInfo?.securityKey != null && !securityKeysEnabled
+    val valid = name.isNotBlank() && hardwareKeyImportAllowed(keyInfo, securityKeysEnabled) && certOk
 
-    val keyError = if (keyUnreadable) stringResource(Res.string.vault_key_read_error) else null
+    val keyError = when {
+        hardwareDisabled -> stringResource(Res.string.security_key_disabled)
+        keyUnreadable -> stringResource(Res.string.vault_key_read_error)
+        else -> null
+    }
     val certError = when {
         certInvalid -> stringResource(Res.string.vault_cert_read_error)
         certMismatch -> stringResource(Res.string.vault_cert_key_mismatch)
@@ -205,3 +213,7 @@ internal fun looksLikeKeyMaterial(ref: String): Boolean {
     val text = ref.trim()
     return "-----BEGIN" in text || PUBLIC_KEY_LINE.containsMatchIn(text)
 }
+
+/** A parsed hardware stub is usable only after this device explicitly opts in. */
+internal fun hardwareKeyImportAllowed(info: SshPublicKeyInfo?, enabled: Boolean): Boolean =
+    info != null && (info.securityKey == null || enabled)

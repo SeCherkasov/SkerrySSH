@@ -51,7 +51,7 @@ class VaultDialogFormTest {
     @Test
     fun `generating a key passes the typed name on`() {
         var created: Pair<String, SshKeyType>? = null
-        runForm({ GenerateKeyDialog(onDismiss = {}, onCreate = { name, type -> created = name to type }) }) {
+        runForm({ GenerateKeyDialog(onDismiss = {}, onCreate = { name, type -> created = name to type }, onHardwareCreate = { _, _ -> error("Software key form invoked hardware generation") }) }) {
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
             onField(Res.string.vault_field_name).performTextInput(NAME)
             onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()

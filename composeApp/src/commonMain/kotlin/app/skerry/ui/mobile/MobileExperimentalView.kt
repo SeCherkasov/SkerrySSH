@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.settings_experimental_security_keys
+import app.skerry.ui.generated.resources.settings_experimental_security_keys_desc
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.more_experimental
 import app.skerry.ui.generated.resources.settings_experimental_jump_shell
@@ -43,6 +45,12 @@ fun MobileExperimentalScreen(state: MobileDesignState) {
                     desc = stringResource(Res.string.settings_experimental_jump_shell_desc),
                     on = state.jumpViaShellOffered,
                     onToggle = state::toggleJumpViaShellOffered,
+                )
+                MobileToggleRow(
+                    title = stringResource(Res.string.settings_experimental_security_keys),
+                    desc = stringResource(Res.string.settings_experimental_security_keys_desc),
+                    on = state.securityKeysEnabled,
+                    onToggle = state::toggleSecurityKeysEnabled,
                 )
                 Spacer(Modifier.height(96.dp))
             }

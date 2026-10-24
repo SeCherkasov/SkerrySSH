@@ -4,10 +4,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.securitykey.SecurityKeyFailure
 import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
-import app.skerry.shared.ssh.SshConnectionException
 import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
@@ -31,6 +31,9 @@ sealed interface ConnectionTestProblem {
 
     /** Anything else on the wire. Deliberately coarse: transport text would leak library/host detail. */
     data object ConnectionFailed : ConnectionTestProblem
+
+    /** Local authenticator failure; shown with recovery advice instead of a remote auth error. */
+    data class SecurityKey(val reason: SecurityKeyFailure) : ConnectionTestProblem
 
     /** The form has no host/username/secret yet, so nothing was dialled. */
     data object IncompleteForm : ConnectionTestProblem
@@ -86,17 +89,18 @@ suspend fun runConnectionTest(
             }
         }
     }
-} catch (e: SshAuthenticationException) {
-    ConnectionTestStatus.Failure(ConnectionTestProblem.AuthenticationFailed)
-} catch (e: SshHostKeyRejectedException) {
-    ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected(e.refusal))
-} catch (e: SshConnectionException) {
-    ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed)
 } catch (e: CancellationException) {
     throw e
+} catch (e: SshAuthenticationException) {
+    connectionTestFailure(e, ConnectionTestProblem.AuthenticationFailed)
+} catch (e: SshHostKeyRejectedException) {
+    connectionTestFailure(e, ConnectionTestProblem.HostKeyRejected(e.refusal))
 } catch (e: Exception) {
-    ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed)
+    connectionTestFailure(e, ConnectionTestProblem.ConnectionFailed)
 }
+
+private fun connectionTestFailure(error: Exception, fallback: ConnectionTestProblem): ConnectionTestStatus.Failure =
+    ConnectionTestStatus.Failure(securityKeyFailureReason(error)?.let { ConnectionTestProblem.SecurityKey(it) } ?: fallback)
 
 /**
  * Compose wrapper over [runConnectionTest]: holds [status] as state and runs the check on [scope].

@@ -166,6 +166,8 @@ fun DesktopDesignApp(
     knownHosts: KnownHostsController? = null,
     trustedCas: TrustedCaController? = null,
     keyGenerator: SshKeyGenerator? = null,
+    securityKeyService: app.skerry.shared.securitykey.SecurityKeyService? = null,
+    securityKeyPrompts: app.skerry.ui.securitykey.SecurityKeyPromptController? = null,
     certificateInspector: SshCertificateInspector? = null,
     secretFiles: SecretFileReader? = null,
     tunnels: TunnelManager? = null,
@@ -339,6 +341,9 @@ fun DesktopDesignApp(
     val effectiveTerminalTheme =
         if (state.settings.customTerminalTheme) state.settings.terminalTheme
         else TerminalThemes.fromId(state.settings.themeMode.terminalThemeId(termSystemDark))
+    androidx.compose.runtime.LaunchedEffect(state.settings.securityKeysEnabled) {
+        if (!state.settings.securityKeysEnabled) securityKeyPrompts?.cancelPending()
+    }
     CompositionLocalProvider(
         app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
         app.skerry.ui.app.LocalHostTrust provides hostTrust,
@@ -347,6 +352,9 @@ fun DesktopDesignApp(
         LocalSessions provides liveSessions,
         LocalKnownHosts provides knownHosts,
         LocalTrustedCas provides trustedCas,
+        app.skerry.ui.app.LocalSecurityKeyService provides securityKeyService,
+        app.skerry.ui.app.LocalSecurityKeyPrompts provides securityKeyPrompts,
+        app.skerry.ui.app.LocalSecurityKeysEnabled provides state.settings.securityKeysEnabled,
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
         LocalSecretFileReader provides secretFiles,
@@ -400,6 +408,7 @@ fun DesktopDesignApp(
                 // lets this composable build one, so the parameter is null in the shipped app and the
                 // reconnect credentials survived every automatic lock.
                 onBeforeLock = {
+                    securityKeyPrompts?.cancelPending()
                     tearDownForLock(
                         tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive, hostTrust,
                         // The modal's own flag lives here, above the gate, so it outlives the lock — the
@@ -424,7 +433,9 @@ fun DesktopDesignApp(
                 // Sync onboarding step (parity with mobile): connect sync and pull data right after
                 // creating the vault. Only if sync was wired into the graph.
                 offerSyncForm = sync?.let { s -> { onDone -> LockWindowChrome(windowChrome) { SyncOnboardingScreen(s, onDone) } } },
-            ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked, customGroupsProvider, windowChrome) }
+            ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked, customGroupsProvider, windowChrome)
+                    securityKeyPrompts?.let { app.skerry.ui.securitykey.SecurityKeyPromptHost(it) }
+                }
         } else {
             DesktopChrome(state, onLock = null, sessions = liveSessions, credentials = credentials, onVaultUnlocked = onVaultUnlocked, customGroupsProvider = customGroupsProvider, windowChrome = windowChrome)
         }

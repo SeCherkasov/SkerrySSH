@@ -57,6 +57,8 @@ class DesktopSettingsState(
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
     initialOfferSudoPassword: Boolean = false,
     private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
+    initialSecurityKeysEnabled: Boolean = false,
+    private val onSecurityKeysEnabledChange: (Boolean) -> Unit = {},
     initialJumpViaShellOffered: Boolean = false,
     private val onJumpViaShellOfferedChange: (Boolean) -> Unit = {},
     initialTrustedDeviceOffered: Boolean = false,
@@ -154,6 +156,13 @@ class DesktopSettingsState(
      * such a profile connect at all — the transport reads the stored value per connect, so a
      * profile synced from elsewhere is refused here until this is on.
      */
+    var securityKeysEnabled: Boolean by mutableStateOf(initialSecurityKeysEnabled); private set
+
+    fun toggleSecurityKeysEnabled() {
+        securityKeysEnabled = !securityKeysEnabled
+        onSecurityKeysEnabledChange(securityKeysEnabled)
+    }
+
     var jumpViaShellOffered: Boolean by mutableStateOf(initialJumpViaShellOffered); private set
 
     /**

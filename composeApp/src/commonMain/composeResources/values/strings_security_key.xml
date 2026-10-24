@@ -1,0 +1,33 @@
+<resources>
+    <string name="settings_experimental_security_keys">FIDO2 hardware SSH keys</string>
+    <string name="settings_experimental_security_keys_desc">Enable importing, creating and using hardware-backed SSH keys on this device. Requires a compatible USB or NFC security key.</string>
+    <string name="security_key_pin_title">Security key PIN</string>
+    <string name="security_key_touch_title">Touch your security key</string>
+    <string name="security_key_local_only">Local authenticator only. Your PIN is never sent to the SSH server.</string>
+    <string name="security_key_pin_retries">PIN attempts remaining: %1$d</string>
+    <string name="security_key_touch_instruction">Connect your security key, then continue and touch it when it flashes.</string>
+    <string name="security_key_continue">Continue</string>
+    <string name="security_key_hardware">Hardware security key</string>
+    <string name="security_key_application">Application</string>
+    <string name="security_key_resident">Resident key</string>
+    <string name="security_key_uv">Require user verification (PIN)</string>
+    <string name="security_key_username">User name (optional)</string>
+    <string name="security_key_disabled">Enable FIDO2 hardware SSH keys in Settings → Experimental.</string>
+    <string name="security_key_metadata">Hardware backed · application: %1$s · resident: %2$s</string>
+    <string name="security_key_yes">Yes</string>
+    <string name="security_key_no">No</string>
+    <string name="security_key_no_device">No security key detected. Connect a compatible key.</string>
+    <string name="security_key_unavailable">Security key unavailable on this device.</string>
+    <string name="security_key_permission">Security key permission was denied.</string>
+    <string name="security_key_detached">Security key disconnected. Reconnect and retry.</string>
+    <string name="security_key_cancelled">Security key operation cancelled.</string>
+    <string name="security_key_timeout">Security key timed out. Retry and touch the key.</string>
+    <string name="security_key_pin_required">Enter the local security key PIN.</string>
+    <string name="security_key_pin_invalid">Incorrect security key PIN.</string>
+    <string name="security_key_pin_blocked">Security key PIN blocked. Unlock the key using its management tool.</string>
+    <string name="security_key_algorithm">This security key does not support the selected algorithm.</string>
+    <string name="security_key_invalid">Invalid hardware SSH key.</string>
+    <string name="security_key_verification">Security key verification failed.</string>
+    <string name="security_key_error">Security key operation failed.</string>
+    <string name="security_key_application_invalid">Application must start with ssh: and contain at most 255 printable characters.</string>
+</resources>

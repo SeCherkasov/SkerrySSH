@@ -360,3 +360,8 @@ val LocalCastPicker: ProvidableCompositionLocal<suspend () -> CastOpenResult> =
  * dropped: there is no Doze and no OEM task killer to configure.
  */
 val LocalKeepAlivePower: ProvidableCompositionLocal<KeepAlivePower?> = staticCompositionLocalOf { null }
+
+/** Per-device experimental opt-in; never synchronized with vault data. */
+val LocalSecurityKeysEnabled = staticCompositionLocalOf { false }
+val LocalSecurityKeyService = staticCompositionLocalOf<app.skerry.shared.securitykey.SecurityKeyService?> { null }
+val LocalSecurityKeyPrompts = staticCompositionLocalOf<app.skerry.ui.securitykey.SecurityKeyPromptController?> { null }
