@@ -23,8 +23,6 @@
 [`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — 标签有：
 精确的 `<version>`、`<major.minor>`、`latest`。服务器与客户端分开发布 — 有自己的
 `server-v*` 标签和自己的工作流。目前为止它的版本号与客户端发布保持一致。
-发布对应的 GitHub Release 后，工作流会构建镜像、执行健康检查并发布到 Docker Hub。
-推送标签只验证构建；草稿版本不会更改镜像仓库中的标签。
 
 ```bash
 docker run -d --name skerry-sync \
