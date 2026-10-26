@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -350,6 +351,28 @@ tasks.withType<JavaExec>().configureEach {
     if (name == "run") {
         dependsOn(prepareFido2Runtime)
         systemProperty("compose.application.resources.dir", fido2Resources.get().dir("common").asFile.absolutePath)
+    }
+}
+
+// JDK 21 Linux launchers accept short initialization-pipe reads. Keep the
+// classpath in a manifest JAR, then reuse that same image for DEB/RPM as well.
+if (System.getProperty("os.name").startsWith("Linux")) {
+    tasks.withType<AbstractJPackageTask>().configureEach {
+        if (targetFormat == TargetFormat.AppImage) {
+            val compactScript = rootProject.file("tools/packaging/linux_classpath.py")
+            inputs.file(compactScript)
+            val config = destinationDir.file("Skerry/lib/app/Skerry.cfg")
+            doLast {
+                val exitCode = ProcessBuilder("python3", compactScript.absolutePath, config.get().asFile.absolutePath)
+                    .inheritIO().start().waitFor()
+                check(exitCode == 0) { "Linux launcher classpath compaction failed: $exitCode" }
+            }
+        } else if (targetFormat == TargetFormat.Deb || targetFormat == TargetFormat.Rpm) {
+            val imageTaskName = if (name.contains("Release")) "createReleaseDistributable" else "createDistributable"
+            val imageTask = tasks.named<AbstractJPackageTask>(imageTaskName)
+            dependsOn(imageTask)
+            appImage.set(imageTask.flatMap { it.destinationDir.dir("Skerry") })
+        }
     }
 }
 
