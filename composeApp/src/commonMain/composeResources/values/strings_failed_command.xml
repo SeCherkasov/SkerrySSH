@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="failed_command_action">Explain failed command</string>
+    <string name="failed_command_preview">Review the complete request below. Only this command and its bounded output tail are included, never other scrollback or chat history. Secret filtering is best effort; check before sending.</string>
+    <string name="failed_command_device">On-device · %1$s</string>
+    <string name="failed_command_system">System instructions</string>
+    <string name="failed_command_user">Command and output sent to the model</string>
+    <string name="failed_command_send">Send request</string>
+    <string name="failed_command_unavailable">This command cannot be explained safely: complete shell-integration boundaries are missing, the command is too large, or the session or AI settings changed. Run a new command with shell integration enabled and try again.</string>
+    <string name="failed_command_gutter_hint">Hold a failed marker to explain its command</string>
+</resources>

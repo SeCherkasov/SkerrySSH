@@ -44,6 +44,9 @@ data class ShellCommandMark(
     val endRow: Int?,
     val endCol: Int?,
     val exitCode: Int?,
+    /** Bounded text frozen at D; null with [failureCaptured] means unavailable, never re-read cells. */
+    val failureSnapshot: FailedCommandSnapshot? = null,
+    val failureCaptured: Boolean = false,
 )
 
 /** One parsed OSC 133 payload. */
@@ -63,6 +66,8 @@ internal class MutableShellMark(val prompt: ReflowAnchor) {
     var output: ReflowAnchor? = null
     var end: ReflowAnchor? = null
     var exitCode: Int? = null
+    var failureSnapshot: FailedCommandSnapshot? = null
+    var failureCaptured: Boolean = false
 
     /** All anchors set so far — the flat list a resize re-maps. */
     fun anchors(): List<ReflowAnchor> = listOfNotNull(prompt, input, output, end)
@@ -91,6 +96,8 @@ internal class MutableShellMark(val prompt: ReflowAnchor) {
         endRow = end?.row,
         endCol = end?.col,
         exitCode = exitCode,
+        failureSnapshot = failureSnapshot,
+        failureCaptured = failureCaptured,
     )
 }
 

@@ -35,6 +35,7 @@ import app.skerry.ui.immersive.ImmersiveScreen
 import androidx.compose.ui.Alignment
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAutoFitControls
+import app.skerry.ui.terminal.lastFailedCommand
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.autoFitFloor
 import app.skerry.ui.terminal.RecordingOutcome
@@ -154,6 +155,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var broadcastOpen by remember { mutableStateOf(false) }
     // Command history palette (desktop ⌘K parity) — same menu, connected only.
     var historyOpen by remember(active?.id) { mutableStateOf(false) }
+    var failedTarget by remember(active?.id) { mutableStateOf<app.skerry.ui.terminal.FailedCommandTarget?>(null) }
+    val explainFailedEnabled = app.skerry.ui.terminal.failedCommandExplanationEnabled(active)
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -245,6 +248,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             Modifier.fillMaxSize(),
                             imeInput = true,
                             imeTransform = imeTransform,
+                            onExplainFailedCommand = if (explainFailedEnabled) ({ mark ->
+                                failedTarget = app.skerry.ui.terminal.failedCommandTarget(active, st.terminal, mark)
+                            }) else null,
                             // Wide output on a phone turns into a wall of wrapped lines; the fit
                             // converges once per session and the controls below nudge it after.
                             // Opt-in (More → Appearance → Terminal): off, the terminal keeps the
@@ -352,7 +358,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 currentKey = active?.controller?.historyKey,
                 onPick = { command -> activeTerminal.applyHistoryCommand(command); historyOpen = false },
                 onDismiss = { historyOpen = false },
+                onExplainFailed = if (active != null && explainFailedEnabled) ({
+                    historyOpen = false
+                    failedTarget = app.skerry.ui.terminal.failedCommandTarget(active, activeTerminal, activeTerminal.lastFailedCommand)
+                }) else null,
             )
+        }
+        failedTarget?.let { target ->
+            app.skerry.ui.terminal.FailedCommandExplanationHost(target) { failedTarget = null }
         }
         if (menuOpen && onDisconnect != null) {
             MobileBottomSheet(

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="failed_command_action">Fehlgeschlagenen Befehl erklären</string>
+    <string name="failed_command_preview">Prüfen Sie die vollständige Anfrage unten. Sie enthält nur diesen Befehl und das begrenzte Ende seiner Ausgabe, keinen anderen Terminalinhalt oder Chatverlauf. Der Geheimnisfilter kann Daten übersehen; prüfen Sie diese vor dem Senden.</string>
+    <string name="failed_command_device">Auf dem Gerät · %1$s</string>
+    <string name="failed_command_system">Systemanweisungen</string>
+    <string name="failed_command_user">Befehl und Ausgabe für das Modell</string>
+    <string name="failed_command_send">Anfrage senden</string>
+    <string name="failed_command_unavailable">Dieser Befehl kann nicht sicher erklärt werden: vollständige Shell-Integrationsgrenzen fehlen, der Befehl ist zu lang oder Sitzung bzw. KI-Einstellungen wurden geändert. Führen Sie mit aktivierter Shell-Integration einen neuen Befehl aus und versuchen Sie es erneut.</string>
+    <string name="failed_command_gutter_hint">Fehlermarkierung gedrückt halten, um den Befehl zu erklären</string>
+</resources>

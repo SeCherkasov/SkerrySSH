@@ -142,6 +142,19 @@ class AiAssistantController(
             localInstalled = localInstalled,
         )
 
+    internal fun failedCommandController(
+        policy: () -> AiPolicy,
+        isCurrent: () -> Boolean,
+    ): FailedCommandExplanationController = FailedCommandExplanationController(
+        policy = policy,
+        settings = { settings },
+        providerFactory = providerFactory,
+        scope = scope,
+        responseLanguage = { uiLanguageProvider() },
+        localInstalled = localInstalled,
+        isCurrent = isCurrent,
+    )
+
     /**
      * The panel conversations, one per open pane. Lives here rather than in the terminal screen's
      * composition: the panel leaves composition whenever the user opens SFTP, the vault or another

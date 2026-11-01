@@ -62,6 +62,7 @@ import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.snippet.maskSecrets
+import app.skerry.ui.terminal.lastFailedCommand
 import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.CastOpenDriver
 import app.skerry.ui.terminal.CastOpenResult
@@ -473,7 +474,14 @@ internal fun DesktopChrome(
                         state.closeCommandPalette()
                     },
                     onDismiss = state::closeCommandPalette,
+                    onExplainFailed = if (palettePane != null && liveTerminal != null && app.skerry.ui.terminal.failedCommandExplanationEnabled(palettePane)) ({
+                        state.closeCommandPalette()
+                        state.failedCommandTarget = app.skerry.ui.terminal.failedCommandTarget(palettePane, liveTerminal, liveTerminal.lastFailedCommand)
+                    }) else null,
                 )
+            }
+            state.failedCommandTarget?.let { target ->
+                app.skerry.ui.terminal.FailedCommandExplanationHost(target) { state.failedCommandTarget = null }
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost, duplicateOf = state.duplicatingHost)
             state.sshImport?.let { SshConfigImportModal(state, it) }

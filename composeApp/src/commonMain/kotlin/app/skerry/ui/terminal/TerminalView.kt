@@ -240,6 +240,7 @@ internal fun LivePaneBody(
 ) {
     val sessions = LocalSessions.current
     val st = pane?.controller?.uiState
+    val explainEnabled = failedCommandExplanationEnabled(pane)
     // Ctrl+click on a path opens it in the file panel — which follows the focused pane, so the pane
     // is focused first and the path is resolved on the host the user clicked in, not on a sibling.
     val openPath: ((String) -> Unit)? = remember(sessions, pane?.id, tabId, state.settings.openFilePathsInSftp, pane?.controller?.supportsSftp) {
@@ -297,6 +298,10 @@ internal fun LivePaneBody(
                 focused = focused,
                 cursorOverlay = rememberTypingHint(pane.id),
                 onOpenPath = openPath,
+                onExplainFailedCommand = if (explainEnabled) ({ mark ->
+                    if (tabId != null) sessions?.focusPane(tabId, pane.id)
+                    state.failedCommandTarget = failedCommandTarget(pane, st.terminal, mark)
+                }) else null,
             )
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),

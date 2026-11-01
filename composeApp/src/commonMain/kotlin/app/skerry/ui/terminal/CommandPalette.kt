@@ -48,6 +48,7 @@ import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.failed_command_action
 import app.skerry.ui.generated.resources.term_palette_empty
 import app.skerry.ui.generated.resources.term_palette_hint
 import app.skerry.ui.generated.resources.term_palette_placeholder
@@ -78,6 +79,7 @@ internal fun CommandPalette(
     currentKey: String?,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
+    onExplainFailed: (() -> Unit)? = null,
 ) {
     val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
@@ -100,19 +102,13 @@ internal fun CommandPalette(
                 .clip(RoundedCornerShape(10.dp))
                 .background(Skerry.colors.surface2)
                 .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(10.dp))
-                .padding(8.dp)
-                // Enter on the first hit: the palette is meant to be driven without the mouse.
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                        suggestions.firstOrNull()?.let { onPick(it.command) }
-                        true
-                    } else {
-                        false
-                    }
-                },
+                .padding(8.dp),
         ) {
             Txt(stringResource(Res.string.term_palette_title), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-            PaletteSearch(query, { query = it }, mono, searchFocus)
+            PaletteSearch(query, { query = it }, mono, searchFocus) { suggestions.firstOrNull()?.let { onPick(it.command) } }
+            if (onExplainFailed != null) {
+                app.skerry.ui.design.GhostButton(stringResource(Res.string.failed_command_action), onClick = onExplainFailed, icon = "auto_awesome")
+            }
             // Lazy, not a scrolling Column: the list runs to [commandSuggestions]'s cap of 200 and
             // is rebuilt on every keystroke, so only the visible rows should be laid out.
             LazyColumn(Modifier.heightIn(max = 360.dp).padding(top = 6.dp)) {
@@ -134,7 +130,7 @@ internal fun CommandPalette(
 }
 
 @Composable
-private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: FontFamily, focus: FocusRequester) {
+private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: FontFamily, focus: FocusRequester, onEnter: () -> Unit) {
     val textColor = Skerry.colors.text
     val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
     Row(
@@ -153,7 +149,9 @@ private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: 
                 textStyle = style,
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 // The placeholder is the only label this field draws (see fieldName).
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldName(placeholder),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldName(placeholder).onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) { onEnter(); true } else false
+                },
             )
         }
     }

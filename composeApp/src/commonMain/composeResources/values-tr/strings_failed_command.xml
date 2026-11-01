@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="failed_command_action">Başarısız komutu açıkla</string>
+    <string name="failed_command_preview">Aşağıdaki isteğin tamamını inceleyin. Yalnızca bu komut ve çıktısının sınırlı son kısmı dahil edilir; diğer terminal içeriği ve sohbet geçmişi gönderilmez. Gizli bilgi filtresi her şeyi yakalayamayabilir; göndermeden önce kontrol edin.</string>
+    <string name="failed_command_device">Cihazda · %1$s</string>
+    <string name="failed_command_system">Sistem talimatları</string>
+    <string name="failed_command_user">Modele gönderilen komut ve çıktı</string>
+    <string name="failed_command_send">İsteği gönder</string>
+    <string name="failed_command_unavailable">Bu komut güvenle açıklanamıyor: kabuk entegrasyonu sınırları eksik, komut çok uzun veya oturum ya da YZ ayarları değişti. Kabuk entegrasyonu açıkken yeni bir komut çalıştırıp tekrar deneyin.</string>
+    <string name="failed_command_gutter_hint">Komutu açıklamak için başarısızlık işaretini basılı tutun</string>
+</resources>

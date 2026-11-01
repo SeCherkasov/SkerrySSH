@@ -22,6 +22,7 @@ import app.skerry.shared.terminal.ShellCommandMark
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.failed_command_gutter_hint
 import app.skerry.ui.generated.resources.term_marks_strip
 import org.jetbrains.compose.resources.stringResource
 
@@ -50,11 +51,12 @@ internal fun CommandMarkGutter(
     width: Dp,
     topInset: Dp,
     modifier: Modifier = Modifier,
+    onExplain: ((ShellCommandMark) -> Unit)? = null,
 ) {
     // The alternate screen shows a TUI's rows, not the marked ones — markers there would sit on
     // foreign text (the anchors live in primary-buffer coordinates).
     if (state.commandMarks.isEmpty() || state.altScreen) return
-    val description = stringResource(Res.string.term_marks_strip)
+    val description = stringResource(Res.string.term_marks_strip) + if (onExplain != null) " · " + stringResource(Res.string.failed_command_gutter_hint) else ""
     Canvas(
         modifier
             .width(width)
@@ -64,8 +66,12 @@ internal fun CommandMarkGutter(
             // not clip by default (the text canvas clips for the same reason).
             .clipToBounds()
             .semantics { contentDescription = description }
-            .pointerInput(state, cellHeightPx) {
-                detectTapGestures { offset ->
+            .pointerInput(state, cellHeightPx, onExplain) {
+                detectTapGestures(onLongPress = if (onExplain != null) ({ offset ->
+                    // Markers are centered inside their row; rounding can select the next failure.
+                    val row = ((offset.y + scrollPx()) / cellHeightPx).toInt()
+                    state.commandMarks.firstOrNull { it.promptRow == row && (it.exitCode ?: 0) > 0 }?.let(onExplain)
+                }) else null, onTap = { offset ->
                     // Rounded to the nearest row, not floored: the strip is narrower than the
                     // 24x24 minimum, and half a row of slop is what keeps a tap on the marker's
                     // edge from missing it without grabbing a neighbouring command.
@@ -75,7 +81,7 @@ internal fun CommandMarkGutter(
                     // Only the marker's own row selects: a tap between commands on a busy screen
                     // must not grab a neighbouring one.
                     state.commandMarks.firstOrNull { it.promptRow == row }?.let(state::selectCommandOutput)
-                }
+                })
             },
     ) {
         val scroll = scrollPx()

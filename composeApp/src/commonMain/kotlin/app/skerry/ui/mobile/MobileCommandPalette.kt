@@ -30,6 +30,7 @@ import app.skerry.shared.terminal.commandSuggestions
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.failed_command_action
 import app.skerry.ui.generated.resources.term_palette_empty
 import app.skerry.ui.generated.resources.term_palette_hint
 import app.skerry.ui.generated.resources.term_palette_placeholder
@@ -54,6 +55,7 @@ internal fun MobileCommandPaletteSheet(
     currentKey: String?,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
+    onExplainFailed: (() -> Unit)? = null,
 ) {
     val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
@@ -75,6 +77,11 @@ internal fun MobileCommandPaletteSheet(
             }
             item {
                 MobileFormInput(query, { query = it }, stringResource(Res.string.term_palette_placeholder))
+            }
+            if (onExplainFailed != null) {
+                item {
+                    MobileSheetButton(stringResource(Res.string.failed_command_action), onClick = onExplainFailed, icon = "auto_awesome", filled = false)
+                }
             }
             if (records != null && suggestions.isEmpty()) {
                 item {

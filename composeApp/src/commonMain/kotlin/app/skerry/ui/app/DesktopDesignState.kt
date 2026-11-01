@@ -208,6 +208,7 @@ class DesktopDesignState(
     var castInvalid: Boolean by mutableStateOf(false); private set
     /** Whether the command palette (⌘K / Ctrl+Shift+K) is open over the active session. */
     var commandPaletteOpen: Boolean by mutableStateOf(false); private set
+    internal var failedCommandTarget: app.skerry.ui.terminal.FailedCommandTarget? by mutableStateOf(null)
 
     /** Whether the broadcast panel (⌘B / Ctrl+Shift+B) is open. */
     var broadcastOpen: Boolean by mutableStateOf(false); private set
@@ -388,7 +389,7 @@ class DesktopDesignState(
         activeTab = a
     }
 
-    fun lock() { locked = true; hostSearchQuery = "" }
+    fun lock() { locked = true; hostSearchQuery = ""; failedCommandTarget = null }
     fun unlock() { locked = false }
     /**
      * Open the connection form for [section]: it offers only that section's protocols and starts on
