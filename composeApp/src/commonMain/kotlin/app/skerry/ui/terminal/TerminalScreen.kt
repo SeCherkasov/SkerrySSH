@@ -121,6 +121,7 @@ import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
 import app.skerry.ui.generated.resources.term_jump_announced
 import app.skerry.ui.generated.resources.term_jump_announced_exit
 import app.skerry.ui.generated.resources.term_jump_none
+import app.skerry.ui.generated.resources.failed_command_action
 import app.skerry.ui.generated.resources.term_select_word_at_cursor
 import app.skerry.ui.generated.resources.term_select_line_at_cursor
 import app.skerry.ui.generated.resources.term_select_last_output_line
@@ -215,6 +216,7 @@ fun TerminalScreen(
     // file panel). `null` — no path affordance at all: the setting is off, or this pane has no file
     // panel of its own (split pane, recording playback, preview).
     onOpenPath: ((String) -> Unit)? = null,
+    onExplainFailedCommand: ((app.skerry.shared.terminal.ShellCommandMark?) -> Unit)? = null,
 ) {
     terminalScreenCompositions++
     DisposableEffect(state) {
@@ -314,6 +316,7 @@ fun TerminalScreen(
     val jumpNoneText = stringResource(Res.string.term_jump_none)
     val selectPrevLabel = stringResource(Res.string.term_mark_select_prev)
     val selectNextLabel = stringResource(Res.string.term_mark_select_next)
+    val explainFailedLabel = stringResource(app.skerry.ui.generated.resources.Res.string.failed_command_action)
     val selectWordLabel = stringResource(Res.string.term_select_word_at_cursor)
     val selectLineLabel = stringResource(Res.string.term_select_line_at_cursor)
     val selectLastOutputLabel = stringResource(Res.string.term_select_last_output_line)
@@ -993,6 +996,9 @@ fun TerminalScreen(
                   contentDescription = terminalOutputLabel
                   if (selectedTextAnnouncement != null) stateDescription = selectedTextAnnouncement
                   customActions = buildList {
+                      if (onExplainFailedCommand != null && !closed && !state.altScreen) {
+                          add(CustomAccessibilityAction(explainFailedLabel) { onExplainFailedCommand(state.lastFailedCommand); true })
+                      }
                       fun selectAndReset(select: () -> Boolean): Boolean {
                           val selected = select()
                           if (selected) { speechOffset = 0; speechPart = 1 }
@@ -1596,6 +1602,7 @@ fun TerminalScreen(
           width = PADDING_DP.dp,
           topInset = PADDING_DP.dp,
           modifier = Modifier.align(Alignment.TopStart),
+          onExplain = onExplainFailedCommand?.let { explain -> { mark -> explain(mark) } },
       )
 
       // Sharing hint under the cursor (see [cursorOverlay]): positioned from the bottom edge, so it

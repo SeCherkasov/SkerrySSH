@@ -935,15 +935,17 @@ class TerminalEmulator(
         // unfolded write would be shifted a second time, off its own text by however many
         // rows scrolled inside this publish window (the steady state of a saturated scrollback).
         applyPendingMarkShift()
+        // The cursor rests on the last printed cell while wrap is pending; marks are exclusive bounds.
+        val markCol = if (pendingWrap) cols else cx
         when (val event = parseShellMark(rest) ?: return) {
             ShellMarkEvent.PromptStart -> {
                 if (altScreen) return
                 // A fresh prompt is also the first primary-buffer position after an abandoned
                 // command or one whose D arrived on the alternate screen. Bound that command here
                 // so selecting its output cannot absorb everything printed by later commands.
-                shellMarks.lastOrNull()?.takeIf { it.end == null }?.end = ReflowAnchor(cursorRow, cx)
+                shellMarks.lastOrNull()?.takeIf { it.end == null }?.end = ReflowAnchor(cursorRow, markCol)
                 openShellMark = null
-                val mark = MutableShellMark(ReflowAnchor(cursorRow, cx))
+                val mark = MutableShellMark(ReflowAnchor(cursorRow, markCol))
                 shellMarks.add(mark)
                 openShellMark = mark
                 trimShellMarks()
@@ -953,12 +955,12 @@ class TerminalEmulator(
                 // version must not bump for a snapshot-identical list.
                 if (altScreen) return
                 val open = openShellMark ?: return
-                open.input = ReflowAnchor(cursorRow, cx)
+                open.input = ReflowAnchor(cursorRow, markCol)
             }
             ShellMarkEvent.OutputStart -> {
                 if (altScreen) return // see InputStart
                 val open = openShellMark ?: return
-                open.output = ReflowAnchor(cursorRow, cx)
+                open.output = ReflowAnchor(cursorRow, markCol)
             }
             is ShellMarkEvent.CommandEnd -> {
                 val open = openShellMark ?: return
@@ -967,10 +969,24 @@ class TerminalEmulator(
                 // A command that ran a TUI usually reports after it exited (back on the primary
                 // buffer); if the D arrives while the TUI still owns the screen, keep the exit code
                 // — the shell did say it — but not the alt cursor as the command's end.
-                if (!altScreen) open.end = ReflowAnchor(cursorRow, cx)
+                if (!altScreen) open.end = ReflowAnchor(cursorRow, markCol)
+                captureFailure(open)
             }
         }
         shellMarksVersion++
+    }
+
+    private fun captureFailure(mark: MutableShellMark) {
+        if (!altScreen && (mark.exitCode ?: 0) > 0) {
+            // Freeze only bounded command/output text, before later cursor-addressed writes.
+            val source = object : AbstractList<List<TermCell>>() {
+                override val size: Int get() = scrollback.size + grid.size
+                override fun get(index: Int): List<TermCell> =
+                    if (index < scrollback.size) scrollback[index] else grid[index - scrollback.size]
+            }
+            mark.failureSnapshot = failedCommandSnapshot(source, mark.snapshot())
+        }
+        mark.failureCaptured = true // failed capture is final too: never retry against newer cells
     }
 
     /** OSC 7: the shell's cwd. A rejected payload leaves the last good directory in place. */

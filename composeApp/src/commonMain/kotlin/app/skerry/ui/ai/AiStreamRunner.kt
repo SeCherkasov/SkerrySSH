@@ -52,6 +52,8 @@ internal fun AiException.toFailure(): AiFailure = when (kind) {
 internal class AiStreamRunner(
     private val providerFactory: (AiEndpoint) -> AiProvider,
     private val scope: CoroutineScope,
+    // Revalidate a confirmation after dispatch, before any provider can see terminal data.
+    private val canStart: () -> Boolean = { true },
 ) {
     fun launch(
         endpoint: AiEndpoint,
@@ -66,6 +68,7 @@ internal class AiStreamRunner(
         var provider: AiProvider? = null
         val sb = StringBuilder()
         try {
+            if (!canStart()) return@launch
             provider = providerFactory(endpoint)
             provider.chat(AiChatRequest(endpoint.requestModel, messages, temperature = temperature)).collect { delta ->
                 sb.append(delta.text)

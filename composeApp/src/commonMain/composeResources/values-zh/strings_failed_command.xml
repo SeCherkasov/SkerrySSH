@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="failed_command_action">解释失败的命令</string>
+    <string name="failed_command_preview">请检查下方的完整请求。仅包含此命令及其有限的输出末尾，不包含其他终端内容或聊天历史。敏感信息过滤可能有遗漏，请在发送前检查。</string>
+    <string name="failed_command_device">设备端 · %1$s</string>
+    <string name="failed_command_system">系统指令</string>
+    <string name="failed_command_user">发送给模型的命令和输出</string>
+    <string name="failed_command_send">发送请求</string>
+    <string name="failed_command_unavailable">无法安全解释此命令：缺少完整的 Shell 集成边界、命令过长，或会话及 AI 设置已更改。请启用 Shell 集成后运行新命令并重试。</string>
+    <string name="failed_command_gutter_hint">长按失败标记以解释命令</string>
+</resources>

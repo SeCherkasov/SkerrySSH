@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="failed_command_action">Объяснить неудачную команду</string>
+    <string name="failed_command_preview">Проверьте полный запрос ниже. Включены только эта команда и ограниченный хвост её вывода, без остального терминала и истории чата. Фильтр секретов может пропустить данные — проверьте их перед отправкой.</string>
+    <string name="failed_command_device">На устройстве · %1$s</string>
+    <string name="failed_command_system">Системные инструкции</string>
+    <string name="failed_command_user">Команда и вывод для модели</string>
+    <string name="failed_command_send">Отправить запрос</string>
+    <string name="failed_command_unavailable">Безопасное объяснение недоступно: отсутствуют полные границы shell-интеграции, команда слишком велика либо сеанс или настройки ИИ изменились. Выполните новую команду с включённой shell-интеграцией и повторите попытку.</string>
+    <string name="failed_command_gutter_hint">Удерживайте маркер ошибки, чтобы объяснить команду</string>
+</resources>
